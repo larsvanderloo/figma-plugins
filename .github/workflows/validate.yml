@@ -149,19 +149,15 @@ jobs:
     #   code-side  dist/code.js  ≤ 60 KB gzipped
     #   ui-side    dist/ui.js    ≤ 250 KB gzipped
     #
-    # ARTIFACT NOTE: ADR-0003, the perf doc, and manifest.json all reference
+    # ARTIFACT NOTE: ADR-0003 and the perf doc originally referenced
     # dist/ui.html as the ui artifact (Vite single-file inline HTML).  The
-    # current Vite multi-entry config produces dist/ui.js (JS bundle) +
-    # dist/ui/index.html (HTML shell, ~255 bytes) instead.  The JS bundle
+    # Vite multi-entry config produces dist/ui.js (JS bundle) +
+    # dist/ui/index.html (HTML shell, ~255 bytes).  The JS bundle
     # dist/ui.js is the correct artifact to gate against the 250 KB budget;
     # dist/ui/index.html is a trivially-small shell that is not the deliverable.
     #
-    # This discrepancy — manifest.json "ui": "dist/ui.html" vs actual output
-    # dist/ui.js + dist/ui/index.html — means Figma cannot currently load the
-    # plugin.  Routed to figma-api-engineer (build config / manifest) and
-    # ui-engineer (Vite output config) for resolution before Sprint 1 RC.
-    # Tracked as a P1 validation finding (manifest "ui" field points to a
-    # non-existent file).
+    # manifest.json was corrected to "ui": "dist/ui/index.html" in PR #22
+    # (BDEV-2893950198).  The path discrepancy is resolved.
     #
     steps:
       - name: Checkout
@@ -190,7 +186,7 @@ jobs:
 
       - name: Bundle-size gate (ui-side)
         # Gates dist/ui.js — the actual JS bundle produced by the Vite multi-
-        # entry build.  Budget is 250 KB per ADR-0003.  See ARTIFACT NOTE above.
+        # entry build.  Budget is 250 KB per ADR-0003.
         run: |
           BYTES=$(gzip -c plugins/welder-editor/dist/ui.js | wc -c)
           BUDGET=$((250 * 1024))
