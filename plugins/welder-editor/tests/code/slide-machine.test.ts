@@ -1,10 +1,14 @@
 // tests/code/slide-machine.test.ts
 //
 // Happy-path and failure-path tests for slide-machine.ts.
-// Uses inline mocks (no shared fixture yet — plugin-tester refactors in Wave 2b).
+// Shared factories from validation/fixtures/figma-mock/ replace the inline
+// makeTextNode / makeInstanceNode helpers (refactored in Sprint 1, task 1.14).
+// Slide fixtures from validation/fixtures/slide-machine/ are used for
+// detection-contract assertions.
 //
 // Test environment: node (environmentMatchGlobs: tests/code/**)
-// No DOM, no figma.* — all figma.* calls are stubbed via globalThis.figma.
+// No DOM, no figma.* — all figma.* calls are stubbed via globalThis.figma
+// or through node factories.
 //
 // Owner: figma-api-engineer
 
@@ -21,42 +25,12 @@ import {
   getPropertyKey,
   setInstanceProperty,
 } from '../../code/slide-machine';
+import { makeTextNode, makeInstanceNode } from '../../../../validation/fixtures/figma-mock';
+import { allWrappersSlide } from '../../../../validation/fixtures/slide-machine/all-wrappers.fixture';
+import { copyWrapOnlySlide } from '../../../../validation/fixtures/slide-machine/copy-wrap-only.fixture';
 
 // ---------------------------------------------------------------------------
-// Minimal figma stub for tests that access figma.currentPage
-// ---------------------------------------------------------------------------
-
-function makeTextNode(overrides: Partial<TextNode> = {}): TextNode {
-  return {
-    type: 'TEXT',
-    id: 'text-1',
-    name: 'Heading',
-    characters: 'Hello',
-    visible: true,
-    parent: null,
-    ...overrides,
-  } as unknown as TextNode;
-}
-
-function makeInstanceNode(overrides: Record<string, unknown> = {}): InstanceNode {
-  return {
-    type: 'INSTANCE',
-    id: 'inst-1',
-    name: 'Slide',
-    width: 1920,
-    height: 1080,
-    visible: true,
-    parent: null,
-    findOne: vi.fn().mockReturnValue(null),
-    findAll: vi.fn().mockReturnValue([]),
-    componentProperties: {},
-    setProperties: vi.fn(),
-    ...overrides,
-  } as unknown as InstanceNode;
-}
-
-// ---------------------------------------------------------------------------
-// isSlide
+// isSlide — detection-contract tests (also exercised via shared fixtures)
 // ---------------------------------------------------------------------------
 
 describe('isSlide', function () {
@@ -88,6 +62,15 @@ describe('isSlide', function () {
       height: 1080,
     } as unknown as SceneNode;
     expect(isSlide(node)).toBe(false);
+  });
+
+  // Detection-contract assertions using shared fixtures (README §2).
+  it('detects allWrappersSlide fixture as a slide', function () {
+    expect(isSlide(allWrappersSlide as unknown as SceneNode)).toBe(true);
+  });
+
+  it('detects copyWrapOnlySlide fixture as a slide', function () {
+    expect(isSlide(copyWrapOnlySlide as unknown as SceneNode)).toBe(true);
   });
 });
 
@@ -237,6 +220,19 @@ describe('findCopyWrap', function () {
     });
     expect(findCopyWrap(slide)).toBe(null);
   });
+
+  it('copyWrapOnlySlide fixture has exactly one CopyWrap child', function () {
+    const children = copyWrapOnlySlide.children ?? [];
+    const copyWraps = children.filter((c) => c.name === 'CopyWrap');
+    expect(copyWraps).toHaveLength(1);
+    // No other wrapper types present.
+    const otherWrappers = children.filter((c) =>
+      ['Badge', 'ImageWrap', 'CardWrap', 'TimelineWrap', 'JourneyWrap', 'TableWrap'].includes(
+        c.name,
+      ),
+    );
+    expect(otherWrappers).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -269,14 +265,16 @@ describe('findBadge', function () {
       visible: false,
       parent: slide as unknown as BaseNode,
     });
-    // findOne finds the badge but visibility guard should reject it.
-    // We need the predicate to be called with the badge — simulate findOne calling pred.
     slide.findOne = vi.fn().mockImplementation(function (pred: (n: SceneNode) => boolean) {
-      // The predicate includes the visibility check; if it returns false, findOne returns null.
       if (pred(badge)) return badge;
       return null;
     });
     expect(findBadge(slide)).toBe(null);
+  });
+
+  it('allWrappersSlide fixture has a Badge child', function () {
+    const children = allWrappersSlide.children ?? [];
+    expect(children.some((c) => c.name === 'Badge')).toBe(true);
   });
 });
 
@@ -317,6 +315,11 @@ describe('findTableWrap', function () {
     });
     expect(findTableWrap(slide)).toBe(null);
   });
+
+  it('allWrappersSlide fixture has a TableWrap child', function () {
+    const children = allWrappersSlide.children ?? [];
+    expect(children.some((c) => c.name === 'TableWrap')).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -344,6 +347,24 @@ describe('findTimelineWrap', function () {
       }),
     });
     expect(findTimelineWrap(slide)).toBe(tw);
+  });
+
+  it('allWrappersSlide fixture has all 7 wrapper children', function () {
+    const children = allWrappersSlide.children ?? [];
+    const expectedWrappers = [
+      'CopyWrap',
+      'Badge',
+      'ImageWrap',
+      'CardWrap',
+      'TimelineWrap',
+      'JourneyWrap',
+      'TableWrap',
+    ];
+    for (const name of expectedWrappers) {
+      expect(children.some((c) => c.name === name)).toBe(true);
+    }
+    // ChartWrap intentionally absent (ADR-0007).
+    expect(children.some((c) => c.name === 'ChartWrap')).toBe(false);
   });
 });
 

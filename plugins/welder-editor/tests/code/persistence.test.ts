@@ -3,22 +3,29 @@
 // Round-trip tests for persistence.ts: getPersistedState, setPersistedState,
 // migrateLegacyState.
 //
-// All figma.* calls are stubbed inline. No shared fixture yet.
+// Shared makeFrameNode factory from validation/fixtures/figma-mock/ provides
+// the base node stub. A local `makePersistedNode` helper wires getPluginData /
+// setPluginData to an in-memory store for round-trip assertions
+// (refactored in Sprint 1, task 1.14).
 //
 // Owner: figma-api-engineer
 
 import { describe, it, expect, vi } from 'vitest';
 import { getPersistedState, setPersistedState, migrateLegacyState } from '../../code/persistence';
+import { makeFrameNode } from '../../../../validation/fixtures/figma-mock';
 
 // ---------------------------------------------------------------------------
-// Mock SceneNode
+// makePersistedNode — local helper for persistence-specific fixture
 // ---------------------------------------------------------------------------
+// Builds on the shared makeFrameNode but wires getPluginData / setPluginData
+// to a real in-memory store so round-trip tests can assert actual stored values.
+// initialData seeds the store; keys follow the welder:<key> namespace convention
+// used by persistence.ts.
 
-function makeNode(initialData: Record<string, string> = {}): SceneNode {
+function makePersistedNode(initialData: Record<string, string> = {}): SceneNode {
   const store: Record<string, string> = { ...initialData };
-  return {
+  return makeFrameNode({
     id: 'node-1',
-    type: 'FRAME',
     getPluginData: vi.fn().mockImplementation(function (key: string) {
       return store[key] ?? '';
     }),
@@ -26,7 +33,7 @@ function makeNode(initialData: Record<string, string> = {}): SceneNode {
       store[key] = value;
     }),
     setRelaunchData: vi.fn(),
-  } as unknown as SceneNode;
+  }) as unknown as SceneNode;
 }
 
 // Simple type guards.
@@ -44,21 +51,21 @@ function isNumber(u: unknown): u is number {
 
 describe('persistence round-trip', function () {
   it('writes and reads a string value correctly', function () {
-    const node = makeNode();
+    const node = makePersistedNode();
     setPersistedState(node, 'myKey', 'hello world');
     const result = getPersistedState<string>(node, 'myKey', isString);
     expect(result).toBe('hello world');
   });
 
   it('writes and reads a number value correctly', function () {
-    const node = makeNode();
+    const node = makePersistedNode();
     setPersistedState(node, 'count', 42);
     const result = getPersistedState<number>(node, 'count', isNumber);
     expect(result).toBe(42);
   });
 
   it('writes and reads an object value correctly', function () {
-    const node = makeNode();
+    const node = makePersistedNode();
     const payload = { width: 'md', hasHeader: true };
     setPersistedState(node, 'tableConfig', payload);
     const result = getPersistedState<typeof payload>(
@@ -76,7 +83,7 @@ describe('persistence round-trip', function () {
   });
 
   it('calls setRelaunchData when writing', function () {
-    const node = makeNode();
+    const node = makePersistedNode();
     setPersistedState(node, 'test', 'value');
     expect(
       (node as unknown as { setRelaunchData: ReturnType<typeof vi.fn> }).setRelaunchData,
@@ -90,17 +97,17 @@ describe('persistence round-trip', function () {
 
 describe('getPersistedState failure cases', function () {
   it('returns null when key is not set', function () {
-    const node = makeNode();
+    const node = makePersistedNode();
     expect(getPersistedState(node, 'missing', isString)).toBe(null);
   });
 
   it('returns null for corrupt JSON', function () {
-    const node = makeNode({ 'welder:corrupt': 'not-valid-json{{{' });
+    const node = makePersistedNode({ 'welder:corrupt': 'not-valid-json{{{' });
     expect(getPersistedState(node, 'corrupt', isString)).toBe(null);
   });
 
   it('returns null when type guard fails', function () {
-    const node = makeNode();
+    const node = makePersistedNode();
     setPersistedState(node, 'numKey', 99);
     // Ask for string but stored number.
     const result = getPersistedState<string>(node, 'numKey', isString);
@@ -109,12 +116,12 @@ describe('getPersistedState failure cases', function () {
 
   it('returns null when stored JSON is not a VersionedState', function () {
     // Store a raw value without the _v wrapper.
-    const node = makeNode({ 'welder:raw': JSON.stringify({ value: 'naked' }) });
+    const node = makePersistedNode({ 'welder:raw': JSON.stringify({ value: 'naked' }) });
     expect(getPersistedState(node, 'raw', isString)).toBe(null);
   });
 
   it('returns null when version does not match', function () {
-    const node = makeNode({
+    const node = makePersistedNode({
       'welder:versioned': JSON.stringify({ _v: 99, data: 'hello' }),
     });
     expect(getPersistedState(node, 'versioned', isString)).toBe(null);
@@ -127,7 +134,7 @@ describe('getPersistedState failure cases', function () {
 
 describe('migrateLegacyState', function () {
   it('migrates data from oldKey to newKey', function () {
-    const node = makeNode({
+    const node = makePersistedNode({
       'welder:old': JSON.stringify({ _v: 1, data: 'legacy-value' }),
     });
     migrateLegacyState<string>(node, 'old', 'new', function (raw): string | null {
@@ -145,7 +152,7 @@ describe('migrateLegacyState', function () {
   });
 
   it('is a no-op when oldKey does not exist', function () {
-    const node = makeNode();
+    const node = makePersistedNode();
     migrateLegacyState(node, 'nonexistent', 'new', function () {
       return 'migrated';
     });
@@ -154,7 +161,7 @@ describe('migrateLegacyState', function () {
   });
 
   it('does not write newKey when transform returns null', function () {
-    const node = makeNode({ 'welder:broken': JSON.stringify({ _v: 1, data: 'x' }) });
+    const node = makePersistedNode({ 'welder:broken': JSON.stringify({ _v: 1, data: 'x' }) });
     migrateLegacyState(node, 'broken', 'target', function () {
       return null;
     });
