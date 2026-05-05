@@ -109,6 +109,27 @@ importers:
       '@figma-plugins/figma-api':
         specifier: workspace:*
         version: link:../../packages/figma-api
+      '@figma-plugins/sections-badge-editor':
+        specifier: workspace:*
+        version: link:../../sections/BadgeEditor
+      '@figma-plugins/sections-icon-picker':
+        specifier: workspace:*
+        version: link:../../sections/IconPicker
+      '@figma-plugins/sections-image-editor':
+        specifier: workspace:*
+        version: link:../../sections/ImageEditor
+      '@figma-plugins/sections-property-panel':
+        specifier: workspace:*
+        version: link:../../sections/PropertyPanel
+      '@figma-plugins/sections-slide-picker':
+        specifier: workspace:*
+        version: link:../../sections/SlidePicker
+      '@figma-plugins/sections-tab-strip':
+        specifier: workspace:*
+        version: link:../../sections/TabStrip
+      '@figma-plugins/sections-title-description-editor':
+        specifier: workspace:*
+        version: link:../../sections/TitleDescriptionEditor
       '@nuxt/ui':
         specifier: ^4.0.0
         version: 4.7.1(@internationalized/date@3.12.1)(@internationalized/number@3.6.6)(@tiptap/extensions@3.22.5(@tiptap/core@3.22.5(@tiptap/pm@3.22.5))(@tiptap/pm@3.22.5))(@tiptap/y-tiptap@3.0.3(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.8)(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30))(embla-carousel@8.6.0)(tailwindcss@4.2.4)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.39)(lightningcss@1.32.0))(vue@3.5.33(typescript@5.9.3))(yjs@13.6.30)(zod@3.25.76)

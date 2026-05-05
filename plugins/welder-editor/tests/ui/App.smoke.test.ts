@@ -3,8 +3,8 @@
 // Owner: ui-engineer
 //
 // Purpose: prove the @testing-library/vue harness is wired and working.
-// This is NOT a coverage test — it is a harness-validation test. Sprint 2+
-// section tests follow the same import pattern established here.
+// Updated in Sprint 2 Task 2.9 to match the assembled App.vue contract.
+// The stub assertions are replaced with assertions against the real UI.
 //
 // Why @testing-library/vue instead of @vue/test-utils directly:
 //   - @testing-library/vue wraps @vue/test-utils and enforces role-based,
@@ -19,52 +19,43 @@
 // Import path convention used by Sprint 2+ section tests:
 //   import { render, screen, fireEvent } from '@testing-library/vue'
 //   import ComponentUnderTest from '../../ui/<path>/ComponentUnderTest.vue'
-//   // or from sections: import SectionName from '../../../sections/SectionName/SectionName.vue'
 
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/vue';
 
 // App.vue is the stable entry point. It always lives at ui/App.vue regardless
-// of sprint. Sprint 2 replaces the stub with the assembled plugin; this test
-// re-runs unchanged and the assertions remain valid as long as the plugin
-// renders a heading and a close control.
+// of sprint. This test reflects the Sprint 2 assembled plugin UI.
 import App from '../../ui/App.vue';
 
 // Cleanup and Pinia bootstrap are handled globally by tests/setup.ts
 // (registered via setupFiles in vitest.config.ts). No per-file afterEach
-// needed here — Sprint 2+ section tests follow the same pattern.
+// needed here.
 
 describe('App.vue — @testing-library/vue harness smoke test', () => {
-  it('renders the plugin heading', () => {
-    // render() mounts the component into a real jsdom DOM node and returns
-    // query utilities bound to that container. Cleanup is handled globally by
-    // tests/setup.ts — no per-file afterEach needed.
+  it('renders the slide picker combobox', () => {
+    // render() mounts the component into a real jsdom DOM node.
+    // Cleanup is handled globally by tests/setup.ts.
     render(App);
 
-    // Query by role + accessible name. This is the correct pattern for
-    // Sprint 2+ section tests: never query by class name or test-id.
-    // The stub App.vue renders <h1 class="text-base font-semibold">Welder Editor</h1>.
-    const heading = screen.getByRole('heading', { name: /welder editor/i });
-    expect(heading).toBeDefined();
+    // SlidePicker renders a native <select> (role="combobox").
+    // With an empty store this is the first interactive element in the plugin.
+    const picker = screen.getByRole('combobox');
+    expect(picker).toBeDefined();
   });
 
-  it('renders the loading state before the init message arrives', () => {
+  it('renders the empty-state message before a slide is selected', () => {
     render(App);
 
-    // The stub App.vue sets ready = false initially, which renders:
-    //   <p v-if="!ready" class="text-sm text-gray-500">Loading…</p>
-    // Query by visible text content. getByText returns the element or throws.
-    const loadingText = screen.getByText(/loading/i);
-    expect(loadingText).toBeDefined();
+    // When no slide is selected, App.vue shows the "pick a slide above" prompt.
+    const emptyState = screen.getByText(/pick a slide above/i);
+    expect(emptyState).toBeDefined();
   });
 
-  it('does not render the close button before ready', () => {
+  it('does not render any editor section before a slide is selected', () => {
     render(App);
 
-    // The close button is inside v-else (renders only when ready === true).
-    // queryByRole returns null when the element is absent (vs getByRole which throws).
-    // Sprint 2+ tests use queryBy for "should not exist" assertions.
-    const closeButton = screen.queryByRole('button', { name: /close plugin/i });
-    expect(closeButton).toBeNull();
+    // No heading input should be present in the empty state.
+    const headingInput = screen.queryByRole('textbox', { name: /heading/i });
+    expect(headingInput).toBeNull();
   });
 });
