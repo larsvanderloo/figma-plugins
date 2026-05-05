@@ -49,6 +49,10 @@ import { BadgeEditor } from '@figma-plugins/sections-badge-editor';
 import { IconPicker } from '@figma-plugins/sections-icon-picker';
 import { ImageEditor } from '@figma-plugins/sections-image-editor';
 import type { Transform } from '@figma-plugins/sections-image-editor';
+import { CardList } from '@figma-plugins/sections-card-list';
+import { CardEditor } from '@figma-plugins/sections-card-editor/CardEditor';
+import type { CardItem } from '@figma-plugins/sections-card-editor/CardEditor';
+import { TimelineEditor } from '@figma-plugins/sections-timeline-editor/TimelineEditor';
 
 // ---- Shared message types ----
 import type { Message } from '@shared/messages.js';
@@ -241,6 +245,109 @@ function handleCropTransformUpdate(_transform: Transform): void {
   // apply-crop is a v0.2.0 action — not wired in Sprint 2.
   // The emit is accepted and silently dropped so ImageEditor renders without error.
 }
+
+// ---------------------------------------------------------------------------
+// Content tab — ephemeral state
+//
+// selectedCardNodeId tracks which card row is active in CardList.
+// It is section-local ephemeral state (per Sprint 2 task 2.2 review note):
+// lives in App.vue, not in the store, because it has no message-bus relevance.
+//
+// It resets to null whenever the content slice changes (new slide loaded).
+// ---------------------------------------------------------------------------
+
+const selectedCardNodeId = ref<string | null>(null);
+
+/**
+ * The CardItem currently selected in CardList.
+ * null when no card is selected or content is null.
+ * Drives whether CardEditor is shown and which card it edits.
+ */
+const selectedCard = computed<CardItem | null>(() => {
+  if (content.value === null || selectedCardNodeId.value === null) return null;
+  return content.value.cards.find((c) => c.cardNodeId === selectedCardNodeId.value) ?? null;
+});
+
+/**
+ * True when cards block should be shown: content is loaded AND has cards.
+ */
+const hasCards = computed<boolean>(() => content.value !== null && content.value.cards.length > 0);
+
+/**
+ * True when timeline block should be shown: content is loaded AND has items.
+ */
+const hasTimeline = computed<boolean>(
+  () => content.value !== null && content.value.timelineItems.length > 0,
+);
+
+/**
+ * True when content is loaded but both cards AND timeline are empty.
+ * Drives the "No cards or timeline items on this slide" status message.
+ */
+const contentLoadedButEmpty = computed<boolean>(
+  () => content.value !== null && !hasCards.value && !hasTimeline.value,
+);
+
+// ---------------------------------------------------------------------------
+// Content tab — CardList event handler
+// ---------------------------------------------------------------------------
+
+function handleCardSelect(cardNodeId: string): void {
+  selectedCardNodeId.value = cardNodeId;
+}
+
+// ---------------------------------------------------------------------------
+// Content tab — CardEditor event handlers
+//
+// Each emit mirrors one optional field in the apply-card message payload.
+// App.vue dispatches; CardEditor/CardList are dumb renderers.
+// ---------------------------------------------------------------------------
+
+function handleCardHeadingUpdate(payload: { cardNodeId: string; heading: string }): void {
+  void actions.applyCard({
+    cardNodeId: payload.cardNodeId,
+    heading: payload.heading,
+  });
+}
+
+function handleCardParagraphUpdate(payload: { cardNodeId: string; paragraph: string }): void {
+  void actions.applyCard({
+    cardNodeId: payload.cardNodeId,
+    paragraph: payload.paragraph,
+  });
+}
+
+function handleCardIconUpdate(payload: { cardNodeId: string; iconName: string }): void {
+  void actions.applyCard({
+    cardNodeId: payload.cardNodeId,
+    icon: payload.iconName,
+  });
+}
+
+function handleCardVisualUpdate(payload: { cardNodeId: string; bytes: Uint8Array }): void {
+  // Visual updates for cards are future-wired (requires card imageWrapId from the
+  // code side — not yet in the message contract). Accept and drop for now so
+  // CardEditor renders without error; the ImageEditor button is non-destructive.
+  void payload;
+}
+
+// ---------------------------------------------------------------------------
+// Content tab — TimelineEditor event handlers
+// ---------------------------------------------------------------------------
+
+function handleTimelineItemHeadingUpdate(payload: { itemId: string; value: string }): void {
+  void actions.applyTimeline({
+    copyWrapNodeId: payload.itemId,
+    heading: payload.value,
+  });
+}
+
+function handleTimelineItemParagraphUpdate(payload: { itemId: string; value: string }): void {
+  void actions.applyTimeline({
+    copyWrapNodeId: payload.itemId,
+    paragraph: payload.value,
+  });
+}
 </script>
 
 <template>
@@ -363,11 +470,59 @@ function handleCropTransformUpdate(_transform: Transform): void {
         </template>
 
         <!-- ---------------------------------------------------------------- -->
-        <!-- Content tab — Sprint 3 placeholder                               -->
+        <!-- Content tab                                                        -->
         <!-- ---------------------------------------------------------------- -->
         <template #content>
-          <div class="welder-editor__panel-stack welder-editor__panel-stack--placeholder">
-            <StatusMessage message="Content editing — coming in Sprint 3" variant="status" />
+          <div class="welder-editor__panel-stack">
+            <!--
+              Cards block — shown when content is loaded AND cards exist.
+              PropertyPanel is collapsible; label provides accessible name.
+
+              CardList (selection list) + CardEditor (per-card form) follow the
+              section discipline: sections emit, App.vue dispatches.
+            -->
+            <PropertyPanel v-if="hasCards" title="Cards">
+              <div class="welder-editor__content-cards">
+                <CardList
+                  :model="content"
+                  :active-card-node-id="selectedCardNodeId"
+                  :disabled="sectionsDisabled"
+                  @select="handleCardSelect"
+                />
+                <CardEditor
+                  v-if="selectedCard !== null"
+                  :card="selectedCard"
+                  :label="`Card ${content!.cards.findIndex((c) => c.cardNodeId === selectedCardNodeId) + 1} of ${content!.cards.length}`"
+                  :disabled="sectionsDisabled"
+                  @update:heading="handleCardHeadingUpdate"
+                  @update:paragraph="handleCardParagraphUpdate"
+                  @update:icon="handleCardIconUpdate"
+                  @update:visual="handleCardVisualUpdate"
+                />
+              </div>
+            </PropertyPanel>
+
+            <!--
+              Timeline block — shown when content is loaded AND timeline items exist.
+            -->
+            <PropertyPanel v-if="hasTimeline" title="Timeline">
+              <TimelineEditor
+                :items="content!.timelineItems"
+                :disabled="sectionsDisabled"
+                @update:item-heading="handleTimelineItemHeadingUpdate"
+                @update:item-paragraph="handleTimelineItemParagraphUpdate"
+              />
+            </PropertyPanel>
+
+            <!--
+              Empty state: content is loaded but slide has no cards AND no timeline.
+              TabStrip's hide-empty promotion handles the case where content is
+              null entirely (no CardWrap / TimelineWrap) — that state never reaches
+              this slot.
+            -->
+            <div v-if="contentLoadedButEmpty" class="welder-editor__section-empty">
+              <StatusMessage message="No cards or timeline items on this slide" variant="status" />
+            </div>
           </div>
         </template>
 

@@ -618,9 +618,11 @@ describe('6. Tab switch → active tab content visible, inactive hidden', () => 
     const contentTab = q.getByRole('tab', { name: /^content$/i });
     await fireEvent.click(contentTab);
 
-    // Content placeholder is now visible.
+    // Content tab is now active. General section editors are gone.
+    // (Content tab shows the real content panel, not the old placeholder.)
     await waitFor(() => {
-      expect(q.getByText(/content editing.*sprint 3/i)).toBeDefined();
+      // contentTab aria-selected=true confirms the switch landed.
+      expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
     });
 
     // General section editors are no longer visible.
