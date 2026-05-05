@@ -24,10 +24,15 @@ export default mergeConfig(
       // Node 25 compatibility: tests/setup.ts installs a localStorage shim before
       // Pinia is dynamically imported. See tests/setup.ts for the full explanation.
       setupFiles: ['./tests/setup.ts'],
-      // ui-side tests need a DOM; code-side tests run in node. The split is
-      // by directory: tests/ui/* uses jsdom, tests/code/* uses node.
+      // ui-side tests need a DOM; code-side and tools tests run in node.
+      // tests/ui/**   → jsdom  (default)
+      // tests/code/** → node
+      // tests/tools/** → node (ESLint RuleTester; no DOM needed)
       environment: 'jsdom',
-      environmentMatchGlobs: [['tests/code/**', 'node']],
+      environmentMatchGlobs: [
+        ['tests/code/**', 'node'],
+        ['tests/tools/**', 'node'],
+      ],
     },
   }),
 );
