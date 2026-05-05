@@ -17,7 +17,7 @@ slug = "welder-editor"
 name = "Welder Editor"
 class_prefix = "WelderEditor"
 version = "0.1.0"
-editor_types = ["figma", "figjam", "slides"]
+editor_types = ["figma", "slides"]  # narrowed per ADR-0002 (FigJam cannot host Slide Machine instances)
 
 # Owner agent — which subagent has primary responsibility per the
 # ownership map in CLAUDE.md. One of:
