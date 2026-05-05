@@ -162,6 +162,46 @@ importers:
         specifier: ^2.0.0
         version: 2.2.12(typescript@5.9.3)
 
+  sections/TabStrip:
+    dependencies:
+      '@figma-plugins/components':
+        specifier: workspace:*
+        version: link:../../components
+      '@nuxt/ui':
+        specifier: ^4.0.0
+        version: 4.7.1(@internationalized/date@3.12.1)(@internationalized/number@3.6.6)(@tiptap/extensions@3.22.5(@tiptap/core@3.22.5(@tiptap/pm@3.22.5))(@tiptap/pm@3.22.5))(@tiptap/y-tiptap@3.0.3(prosemirror-model@1.25.4)(prosemirror-state@1.4.4)(prosemirror-view@1.41.8)(y-protocols@1.0.7(yjs@13.6.30))(yjs@13.6.30))(embla-carousel@8.6.0)(tailwindcss@4.2.4)(typescript@5.9.3)(vite@5.4.21(@types/node@20.19.39)(lightningcss@1.32.0))(vue@3.5.33(typescript@5.9.3))(yjs@13.6.30)(zod@3.25.76)
+      vue:
+        specifier: ^3.4.0
+        version: 3.5.33(typescript@5.9.3)
+    devDependencies:
+      '@testing-library/vue':
+        specifier: ^8.0.0
+        version: 8.1.0(@vue/compiler-dom@3.5.33)(@vue/compiler-sfc@3.5.33)(@vue/server-renderer@3.5.33(vue@3.5.33(typescript@5.9.3)))(vue@3.5.33(typescript@5.9.3))
+      '@vitejs/plugin-vue':
+        specifier: ^5.0.0
+        version: 5.2.4(vite@5.4.21(@types/node@20.19.39)(lightningcss@1.32.0))(vue@3.5.33(typescript@5.9.3))
+      '@vue/test-utils':
+        specifier: ^2.4.0
+        version: 2.4.10(@vue/compiler-dom@3.5.33)(@vue/server-renderer@3.5.33(vue@3.5.33(typescript@5.9.3)))(vue@3.5.33(typescript@5.9.3))
+      '@vue/tsconfig':
+        specifier: ^0.5.1
+        version: 0.5.1
+      axe-core:
+        specifier: ^4.10.0
+        version: 4.11.4
+      jsdom:
+        specifier: ^24.0.0
+        version: 24.1.3
+      typescript:
+        specifier: ^5.4.0
+        version: 5.9.3
+      vitest:
+        specifier: ^1.5.0
+        version: 1.6.1(@types/node@20.19.39)(jsdom@24.1.3)(lightningcss@1.32.0)
+      vue-tsc:
+        specifier: ^2.0.0
+        version: 2.2.12(typescript@5.9.3)
+
 packages:
 
   '@alloc/quick-lru@5.2.0':
