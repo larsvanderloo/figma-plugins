@@ -33,8 +33,16 @@
 // Severity: error (blocks CI). Do not downgrade to warn.
 
 import type { Rule } from 'eslint';
-import type { Node, MemberExpression, CallExpression, AssignmentExpression } from 'estree';
+import type { TSESTree } from '@typescript-eslint/utils';
 import * as path from 'node:path';
+
+// Local aliases — TSESTree extends estree with TS-specific node variants and
+// is the canonical way to type ESLint rules in a TypeScript-first codebase.
+// Avoids requiring @types/estree as a separate dep (per Sprint 1 Wave 2a CI fix).
+type Node = TSESTree.Node;
+type MemberExpression = TSESTree.MemberExpression;
+type CallExpression = TSESTree.CallExpression;
+type AssignmentExpression = TSESTree.AssignmentExpression;
 
 // ---------------------------------------------------------------------------
 // Allowed file paths (relative, normalised with posix separators)
