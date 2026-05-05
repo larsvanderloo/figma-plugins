@@ -1,0 +1,25 @@
+{
+  "name": "@figma-plugins/sections-table-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "TableEditor section — CSV import schema + parser, plus (4.1) the TableEditor.vue composite view.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . && prettier --check ."
+  },
+  "dependencies": {
+    "zod": "^3.22.0",
+    "vue": "^3.4.0",
+    "@figma-plugins/components": "workspace:*"
+  },
+  "devDependencies": {
+    "@vue/tsconfig": "^0.5.1",
+    "typescript": "^5.4.0",
+    "vitest": "^1.5.0"
+  }
+}
