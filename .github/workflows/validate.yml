@@ -88,6 +88,52 @@ jobs:
       - name: Build all plugins
         run: pnpm build
 
+  axe:
+    name: Accessibility — axe-core WCAG 2.1 AA (welder-editor)
+    runs-on: [self-hosted, macOS, ARM64]
+    # Run after the main node job so the lock-file install is cached.
+    needs: node
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    env:
+      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
+    #
+    # Gating policy (matches plugins/welder-editor/tests/ui/axe.test.ts):
+    #
+    #   BLOCKING NOW   — axe violations at impact "serious" or "critical".
+    #                    These fail the test and therefore fail this job.
+    #
+    #   WARN ONLY NOW  — axe violations at impact "moderate" or "minor".
+    #                    Logged as console.warn; test passes; job passes.
+    #                    Promoted to BLOCKING at Sprint 2 RC, when ui-engineer
+    #                    has had a full sprint to address them.
+    #
+    # Why jsdom instead of headless Chromium:
+    #   jsdom is already in the lockfile (jsdom@24.1.3 via vitest).
+    #   Adding Playwright/Chromium would add ~300 MB to the runner and require
+    #   a separate browser-install step. axe-core's WCAG 2.1 AA rule coverage
+    #   is equivalent in jsdom for the rules that matter at this stage: ARIA
+    #   labels, role semantics, focus management. Color-contrast (which needs
+    #   real CSS layout) is supplemented by the manual VoiceOver pass at RC.
+    #   Revisit this decision if a component needs real CSS layout for a11y
+    #   evaluation (file an ADR at that point).
+    #
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Versions
+        run: |
+          node --version
+          pnpm --version
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Run axe scan (welder-editor)
+        # Runs tests/ui/axe.test.ts via vitest. The test file enforces the
+        # blocking/advisory policy documented above and in the test source.
+        run: pnpm --filter @figma-plugins/welder-editor exec vitest run tests/ui/axe.test.ts
+
   python:
     name: Python — ruff + mypy + pytest
     runs-on: [self-hosted, macOS, ARM64]

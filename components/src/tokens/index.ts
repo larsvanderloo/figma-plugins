@@ -3,6 +3,13 @@
 // kept here so a token change re-themes every consumer.
 //
 // Owned by ui-engineer.
+//
+// SCOPE: iframe chrome only (panel backgrounds, button states, focus rings,
+// spacing, typography scale). Canvas content tokens — Welder brand colors,
+// slide fill colors, text-dimmer variable, journey pill fills — are NOT
+// defined here. They live as Figma library variables in the published Slide
+// Machine library and are applied by packages/figma-api/src/variables.ts.
+// See ADR-0005 for the boundary definition.
 
 export const tokens = {
   // Figma's brand-blue analog. Override per-plugin only with an ADR.
