@@ -8,6 +8,7 @@ export default mergeConfig(
     plugins: [vue()],
     test: {
       environment: 'jsdom',
+      setupFiles: ['./tests/setup.ts'],
     },
   }),
 );
