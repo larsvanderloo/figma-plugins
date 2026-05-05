@@ -30,7 +30,7 @@ None of these factors authorize the crossing. CLAUDE.md's cross-domain protocol 
 **Why this matters beyond ceremony:**
 
 - `ui/App.vue` is the ui-engineer's primary composition surface. Sprint 2–4 build directly on whatever pattern is set in the stub. An undiscussed pattern choice (even a minimal one) creates an unreviewed baseline that the next wave inherits without a formal acceptance step.
-- If the change had introduced a structural pattern the ui-engineer would have rejected (e.g., a message-listener pattern that conflicts with the eventual ui-state architecture — Pinia vs composables, decided in ADR-0009), the error would not surface until Sprint 2 when the cost of reverting is higher.
+- If the change had introduced a structural pattern the ui-engineer would have rejected (e.g., a message-listener pattern that conflicts with the eventual ui-state architecture — Pinia vs composables, decided in ADR-0009 → superseded by ADR-0010), the error would not surface until Sprint 2 when the cost of reverting is higher.
 - The audit trail breaks: there is now a commit touching `ui/` whose authorship attribution is `figma-api-engineer`, not `ui-engineer`. If a bug later traces to a pattern in that file, the ownership chain is ambiguous.
 
 **Correct protocol for this scenario:**

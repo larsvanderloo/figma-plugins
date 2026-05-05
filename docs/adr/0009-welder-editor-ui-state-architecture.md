@@ -1,6 +1,8 @@
 # ADR 0009 — welder-editor: ui-state architecture (v0.1.0)
 
-**Status:** Accepted
+> **Superseded by [ADR-0010](./0010-welder-editor-ui-state-architecture-hybrid.md)** (2026-05-05). After user-led revisit, the ui-state architecture changed to hybrid (Pinia for cached cross-section state + composables for section-local state) to capture the warm-open loading-state speedup that `pinia-plugin-persistedstate` enables. The drift concern that drove the original composables-only choice is mitigated via three engineering disciplines documented in ADR-0010 §3. The original analysis below remains valid as the rationale for _not_ using Pinia naively; ADR-0010 is the engineered version.
+
+**Status:** Superseded by ADR-0010
 **Date:** 2026-05-05
 **Decision-maker:** ui-engineer
 **References:** ADR-0001 (monorepo structure); approved rebuild plan §"Plugin-thread rules"; Risk register R8 (library-first sequencing); `learnings/anti-patterns/0001-figma-api-engineer-app-vue-cross-domain.md` line 33
@@ -41,15 +43,15 @@ Pinia for cross-section state (slide list, active tab, per-tab payloads). Sectio
 
 ## Trade-offs
 
-| Criterion | A. Composables only | B. Pinia store | C. Hybrid |
-|---|---|---|---|
-| **Bundle cost** | ~0 KB added | ~5–10 KB gzipped (Pinia runtime + @pinia/nuxt glue) | ~5–10 KB gzipped (same Pinia runtime) |
-| **Alignment with plan** | Explicit match: "ui is a render of message-bus-derived state, not a parallel store" | Introduces a parallel store layer the plan explicitly disavows | Partial match; the plan's language does not distinguish store shape |
-| **Existing-build proof** | Full feature scope runs on this pattern today | Untested at this scope | Untested |
-| **Test ergonomics** | Composable returns a plain object; stub by replacing the module or passing a factory; no setup boilerplate | `setActivePinia(createPinia())` in every test file; Pinia devtools noise in Vitest output | Split: Pinia tests need setup; composable tests do not |
-| **DevTools visibility** | None in Vue DevTools (state in module scope, not component tree) | Full Pinia DevTools timeline | Mixed |
-| **Reversibility** | High: if composables become unwieldy the composable boundary maps 1-to-1 to a Pinia store | Low: removing Pinia requires rewriting all `storeToRefs` consumers | Medium |
-| **`package.json` change** | None | Adds `pinia` + `@pinia/nuxt` to plugin deps | Same as B |
+| Criterion                 | A. Composables only                                                                                        | B. Pinia store                                                                            | C. Hybrid                                                           |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **Bundle cost**           | ~0 KB added                                                                                                | ~5–10 KB gzipped (Pinia runtime + @pinia/nuxt glue)                                       | ~5–10 KB gzipped (same Pinia runtime)                               |
+| **Alignment with plan**   | Explicit match: "ui is a render of message-bus-derived state, not a parallel store"                        | Introduces a parallel store layer the plan explicitly disavows                            | Partial match; the plan's language does not distinguish store shape |
+| **Existing-build proof**  | Full feature scope runs on this pattern today                                                              | Untested at this scope                                                                    | Untested                                                            |
+| **Test ergonomics**       | Composable returns a plain object; stub by replacing the module or passing a factory; no setup boilerplate | `setActivePinia(createPinia())` in every test file; Pinia devtools noise in Vitest output | Split: Pinia tests need setup; composable tests do not              |
+| **DevTools visibility**   | None in Vue DevTools (state in module scope, not component tree)                                           | Full Pinia DevTools timeline                                                              | Mixed                                                               |
+| **Reversibility**         | High: if composables become unwieldy the composable boundary maps 1-to-1 to a Pinia store                  | Low: removing Pinia requires rewriting all `storeToRefs` consumers                        | Medium                                                              |
+| **`package.json` change** | None                                                                                                       | Adds `pinia` + `@pinia/nuxt` to plugin deps                                               | Same as B                                                           |
 
 **Bundle note:** ADR-0003 sets the ui-side budget at ≤ 250 KB gzipped with a stretch target of ≤ 200 KB. The external build baseline is already 331 KB — there is active budget pressure from Sprint 2 onward. Adding 5–10 KB for a state-management runtime before any feature work begins consumes budget that the icon-manifest and lazy-split strategies are working to recover.
 
@@ -83,12 +85,12 @@ The plan is explicit that the ui is a render of message-bus-derived state. A Pin
 
 ## Action items
 
-| Sprint | Owner | Action |
-|---|---|---|
-| Sprint 1 | figma-api-engineer | Establish message-bus router in `code/`. No ui-state work. |
-| Sprint 2 | ui-engineer | Scaffold `plugins/welder-editor/ui/composables/` with `usePluginBridge.ts` (lifted + adapted), `useEditorState.ts`, `useSlideList.ts`. Wire `App.vue` to these composables. Each section in Sprint 2 ships with its own `use<Section>.ts` beside its SFC. |
-| Sprint 2+ | ui-engineer | Every new section follows the authoring template: SFC + co-located composable + test that imports the composable directly. |
-| Ongoing | ui-engineer | Every PR touching `plugins/welder-editor/package.json` is checked against this ADR; any addition of `pinia` triggers the revisit condition below. |
+| Sprint    | Owner              | Action                                                                                                                                                                                                                                                    |
+| --------- | ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Sprint 1  | figma-api-engineer | Establish message-bus router in `code/`. No ui-state work.                                                                                                                                                                                                |
+| Sprint 2  | ui-engineer        | Scaffold `plugins/welder-editor/ui/composables/` with `usePluginBridge.ts` (lifted + adapted), `useEditorState.ts`, `useSlideList.ts`. Wire `App.vue` to these composables. Each section in Sprint 2 ships with its own `use<Section>.ts` beside its SFC. |
+| Sprint 2+ | ui-engineer        | Every new section follows the authoring template: SFC + co-located composable + test that imports the composable directly.                                                                                                                                |
+| Ongoing   | ui-engineer        | Every PR touching `plugins/welder-editor/package.json` is checked against this ADR; any addition of `pinia` triggers the revisit condition below.                                                                                                         |
 
 No changes are needed to `package.json`, `vite.config.ts`, or any build tooling.
 
