@@ -3,7 +3,7 @@
   "id": "REPLACE_WITH_FIGMA_PLUGIN_ID",
   "api": "1.0.0",
   "main": "dist/code.js",
-  "ui": "dist/ui.html",
+  "ui": "dist/ui/index.html",
   "editorType": ["figma", "slides"],
   "documentAccess": "dynamic-page",
   "permissions": ["teamlibrary"],
