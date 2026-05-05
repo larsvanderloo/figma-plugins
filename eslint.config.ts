@@ -11,6 +11,7 @@
 
 import tseslint from '@typescript-eslint/eslint-plugin';
 import tsparser from '@typescript-eslint/parser';
+import welderPiniaDisciplineRule from './tools/eslint-rules/welder-pinia-discipline.js';
 
 export default [
   {
@@ -39,6 +40,33 @@ export default [
       eqeqeq: ['error', 'always'],
       'prefer-const': 'error',
       'no-var': 'error',
+    },
+  },
+
+  // ---------------------------------------------------------------------------
+  // welder/pinia-mutation-discipline (ADR-0010 §3.1)
+  //
+  // Flags direct Pinia store mutation outside the two allowed mutation files:
+  //   plugins/welder-editor/ui/stores/useEditorStore.ts
+  //   plugins/welder-editor/ui/composables/useEditorActions.ts
+  //
+  // The rule is path-gated: it fast-paths past any file that does not contain
+  // 'welder-editor' in its path, so it has zero cost on the rest of the repo.
+  //
+  // Severity: error — violations are blocking (not warnings). Do not override.
+  // See tools/eslint-rules/welder-pinia-discipline.ts for implementation.
+  // ---------------------------------------------------------------------------
+  {
+    files: ['plugins/welder-editor/**/*.{ts,tsx}'],
+    plugins: {
+      welder: {
+        rules: {
+          'pinia-mutation-discipline': welderPiniaDisciplineRule,
+        },
+      },
+    },
+    rules: {
+      'welder/pinia-mutation-discipline': 'error',
     },
   },
 ];
