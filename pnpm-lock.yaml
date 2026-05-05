@@ -112,6 +112,12 @@ importers:
       '@figma-plugins/sections-badge-editor':
         specifier: workspace:*
         version: link:../../sections/BadgeEditor
+      '@figma-plugins/sections-card-editor':
+        specifier: workspace:*
+        version: link:../../sections/CardEditor
+      '@figma-plugins/sections-card-list':
+        specifier: workspace:*
+        version: link:../../sections/CardList
       '@figma-plugins/sections-icon-picker':
         specifier: workspace:*
         version: link:../../sections/IconPicker
@@ -127,6 +133,9 @@ importers:
       '@figma-plugins/sections-tab-strip':
         specifier: workspace:*
         version: link:../../sections/TabStrip
+      '@figma-plugins/sections-timeline-editor':
+        specifier: workspace:*
+        version: link:../../sections/TimelineEditor
       '@figma-plugins/sections-title-description-editor':
         specifier: workspace:*
         version: link:../../sections/TitleDescriptionEditor

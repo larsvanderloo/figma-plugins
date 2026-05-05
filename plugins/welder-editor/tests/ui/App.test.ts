@@ -325,9 +325,10 @@ describe('App.vue — assembly smoke tests', () => {
   // ---- 4. Active tab switch ------------------------------------------------
 
   describe('4. active tab switch', () => {
-    it('switching to Content tab shows the Sprint 3 placeholder text', async () => {
+    it('switching to Content tab shows the content panel (empty-state message when no cards or timeline)', async () => {
       const { pinia, store } = setupPinia();
       // Content is populated so the tab is visible (contentNull = false).
+      // CONTENT_FIXTURE has empty cards + timelineItems → shows the empty-state StatusMessage.
       populateStoreWithSlide(store, SLIDE_A.id, GENERAL_ALL, CONTENT_FIXTURE);
       const { container } = render(App, { global: { plugins: [pinia] } });
       const q = within(container as HTMLElement);
@@ -335,9 +336,11 @@ describe('App.vue — assembly smoke tests', () => {
       const contentTab = q.getByRole('tab', { name: /content/i });
       await fireEvent.click(contentTab);
 
-      // The placeholder message from the content slot is now visible.
-      const placeholder = q.getByText(/content editing.*sprint 3/i);
-      expect(placeholder).toBeDefined();
+      // Content tab is now selected.
+      expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
+      // Empty-state message is visible (no cards or timeline items in fixture).
+      const emptyMsg = q.getByText(/no cards or timeline items on this slide/i);
+      expect(emptyMsg).toBeDefined();
     });
 
     it('switching to Graphs tab shows the Sprint 4 placeholder text', async () => {
