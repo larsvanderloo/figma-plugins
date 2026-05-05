@@ -45,9 +45,7 @@ FigJam is excluded by ADR-0002. The plugin is narrowed from the scaffold default
   "documentAccess": "dynamic-page",
   "networkAccess": { "allowedDomains": ["none"] },
   "permissions": ["teamlibrary"],
-  "relaunchButtons": [
-    { "command": "open", "name": "Edit with Slide Editor" }
-  ]
+  "relaunchButtons": [{ "command": "open", "name": "Edit with Slide Editor" }]
 }
 ```
 
@@ -64,57 +62,57 @@ FigJam is excluded by ADR-0002. The plugin is narrowed from the scaffold default
 
 ### READ
 
-| API | Purpose | Notes |
-|---|---|---|
-| `figma.currentPage` | Anchor for slide scanning and event listeners | Scope is current page only per spec §2 |
-| `figma.currentPage.findAll(predicate)` | Scan page for Slide instances | `isSlide` predicate: `type === 'INSTANCE' && name === 'Slide' && width === 1920 && height === 1080`. O(n) over page — see Risk flags. |
-| `figma.currentPage.selection` | Detect initial slide focus on plugin open | Used in `init` to pre-select the focused slide if one is in the selection |
-| `figma.editorType` | Branch behavior between `"figma"` and `"slides"` | `SlideNode`-parent path for `isSkipped` is only available in `"slides"` editor |
-| `figma.viewport` | Scroll + zoom to selected slide | `figma.viewport.scrollAndZoomIntoView([slideNode])` |
-| `instance.findOne(predicate)` | Locate wrapper instances inside a slide | Used by all `find*Wrap` selectors in `slide-machine.ts` |
-| `instance.componentProperties` | Read variant property keys (hash-suffixed) | Used by `getPropertyKey` + `setInstanceProperty` for badge icon-swap |
-| `node.getStyledTextSegments(['fontName'])` | Read mixed-font ranges before write | Required by `loadAllFontsForNode` (FIG-FONT-01) |
-| `node.characters` | Read existing text content | Heading + Paragraph text extraction from CopyWrap, Badge, Card |
-| `node.fills` | Read image fills (ImageWrap, card visual) | `ImagePaint.imageHash` for existing image detection |
-| `figma.getImageByHash(hash)` | Read image bytes for preview | Used by image-preview flow |
-| `node.getPluginData(key)` | Read per-node persisted state | Keys: `kind`, `v`, `model` — see Persistence model |
-| `figma.variables.importVariableByKeyAsync(key)` | Import Text / Text Dimmer library variables | Keys from `accent-vars.ts` lines 19-20; requires `teamlibrary` permission |
-| `variable.resolveForConsumer(node)` | Resolve variable to current-mode RGB | Avoids stale color from cache; node is the TextNode/SlotNode target |
-| `slot.children` | Read slot contents (Table/Journey) | SlotNode within TableWrap/JourneyWrap instances |
-| `node.absoluteBoundingBox` | Read node dimensions for slot sizing | Used by table and journey renderers |
-| `SlideNode.isSkippedSlide` | Read slide skip-state (Slides editor only) | `parent.type === 'SLIDE'` guard required before access |
+| API                                             | Purpose                                          | Notes                                                                                                                                 |
+| ----------------------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `figma.currentPage`                             | Anchor for slide scanning and event listeners    | Scope is current page only per spec §2                                                                                                |
+| `figma.currentPage.findAll(predicate)`          | Scan page for Slide instances                    | `isSlide` predicate: `type === 'INSTANCE' && name === 'Slide' && width === 1920 && height === 1080`. O(n) over page — see Risk flags. |
+| `figma.currentPage.selection`                   | Detect initial slide focus on plugin open        | Used in `init` to pre-select the focused slide if one is in the selection                                                             |
+| `figma.editorType`                              | Branch behavior between `"figma"` and `"slides"` | `SlideNode`-parent path for `isSkipped` is only available in `"slides"` editor                                                        |
+| `figma.viewport`                                | Scroll + zoom to selected slide                  | `figma.viewport.scrollAndZoomIntoView([slideNode])`                                                                                   |
+| `instance.findOne(predicate)`                   | Locate wrapper instances inside a slide          | Used by all `find*Wrap` selectors in `slide-machine.ts`                                                                               |
+| `instance.componentProperties`                  | Read variant property keys (hash-suffixed)       | Used by `getPropertyKey` + `setInstanceProperty` for badge icon-swap                                                                  |
+| `node.getStyledTextSegments(['fontName'])`      | Read mixed-font ranges before write              | Required by `loadAllFontsForNode` (FIG-FONT-01)                                                                                       |
+| `node.characters`                               | Read existing text content                       | Heading + Paragraph text extraction from CopyWrap, Badge, Card                                                                        |
+| `node.fills`                                    | Read image fills (ImageWrap, card visual)        | `ImagePaint.imageHash` for existing image detection                                                                                   |
+| `figma.getImageByHash(hash)`                    | Read image bytes for preview                     | Used by image-preview flow                                                                                                            |
+| `node.getPluginData(key)`                       | Read per-node persisted state                    | Keys: `kind`, `v`, `model` — see Persistence model                                                                                    |
+| `figma.variables.importVariableByKeyAsync(key)` | Import Text / Text Dimmer library variables      | Keys from `accent-vars.ts` lines 19-20; requires `teamlibrary` permission                                                             |
+| `variable.resolveForConsumer(node)`             | Resolve variable to current-mode RGB             | Avoids stale color from cache; node is the TextNode/SlotNode target                                                                   |
+| `slot.children`                                 | Read slot contents (Table/Journey)               | SlotNode within TableWrap/JourneyWrap instances                                                                                       |
+| `node.absoluteBoundingBox`                      | Read node dimensions for slot sizing             | Used by table and journey renderers                                                                                                   |
+| `SlideNode.isSkippedSlide`                      | Read slide skip-state (Slides editor only)       | `parent.type === 'SLIDE'` guard required before access                                                                                |
 
 ### MUTATE
 
 All mutations that modify user-visible canvas content are described below. Each `setCharacters` or node-property write is a separate native Figma undo step per ADR-0004.
 
-| API | Purpose | Undo behavior |
-|---|---|---|
-| `node.characters = value` | Write heading / paragraph / badge label / cell text | Single undo step per write. Must be preceded by `loadAllFontsForNode` (FIG-FONT-01). |
-| `node.setRangeFills(start, end, fills)` | Write accent (Text Dimmer) ranges on heading | Deferred — accent ranges are out of scope in v0.1.0 (ADR-0008). API documented here for completeness. |
-| `node.fills = [paint]` | Replace image fill on ImageWrap slot or card visual slot | Single undo step. |
-| `figma.createImage(bytes).hash` | Create Figma image from uploaded bytes | Precedes `node.fills` write for image upload path. |
-| `instance.setProperties({ [key]: value })` | Swap badge icon (INSTANCE_SWAP component property) | Single undo step. Key must be resolved via `getPropertyKey` due to hash suffix. |
-| `node.setPluginData(key, value)` | Persist wrapper model and kind/version | Three keys: `kind` (wrapper type), `v` (schema version), `model` (JSON-stringified data). |
-| `node.setRelaunchData({ open: '...' })` | Register relaunch button per wrapper | Called after every successful save. |
-| `frame.appendChild(child)` | Build table rows/cells and journey items inside SlotNode | Used by table and journey renderers. |
-| `figma.createFrame()` | Create row/cell frames inside table SlotNode | Table renderer builds FRAME nodes imperatively. |
-| `figma.createText()` | Create text nodes inside table cells | Table renderer. `loadFontAsync` required before `characters` write. |
-| `frame.resize(width, height)` | Resize slot container and row/cell frames | Table renderer layout math. |
-| `figma.loadFontAsync(fontName)` | Pre-warm font cache before text write | Called in parallel at plugin init for all required fonts (FIG-FONT-01). |
-| `figma.commitUndo()` | Explicit undo-group boundary (optional, per ADR-0004) | Used only when helper API in `packages/figma-api/src/mutate.ts` is called with `atomic: true`. Default is granular per-mutation undo. |
-| `SlideNode.isSkippedSlide = boolean` | Toggle slide skip state (Slides editor only) | Guarded by `figma.editorType === 'slides'` check. |
+| API                                        | Purpose                                                  | Undo behavior                                                                                                                         |
+| ------------------------------------------ | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `node.characters = value`                  | Write heading / paragraph / badge label / cell text      | Single undo step per write. Must be preceded by `loadAllFontsForNode` (FIG-FONT-01).                                                  |
+| `node.setRangeFills(start, end, fills)`    | Write accent (Text Dimmer) ranges on heading             | Deferred — accent ranges are out of scope in v0.1.0 (ADR-0008). API documented here for completeness.                                 |
+| `node.fills = [paint]`                     | Replace image fill on ImageWrap slot or card visual slot | Single undo step.                                                                                                                     |
+| `figma.createImage(bytes).hash`            | Create Figma image from uploaded bytes                   | Precedes `node.fills` write for image upload path.                                                                                    |
+| `instance.setProperties({ [key]: value })` | Swap badge icon (INSTANCE_SWAP component property)       | Single undo step. Key must be resolved via `getPropertyKey` due to hash suffix.                                                       |
+| `node.setPluginData(key, value)`           | Persist wrapper model and kind/version                   | Three keys: `kind` (wrapper type), `v` (schema version), `model` (JSON-stringified data).                                             |
+| `node.setRelaunchData({ open: '...' })`    | Register relaunch button per wrapper                     | Called after every successful save.                                                                                                   |
+| `frame.appendChild(child)`                 | Build table rows/cells and journey items inside SlotNode | Used by table and journey renderers.                                                                                                  |
+| `figma.createFrame()`                      | Create row/cell frames inside table SlotNode             | Table renderer builds FRAME nodes imperatively.                                                                                       |
+| `figma.createText()`                       | Create text nodes inside table cells                     | Table renderer. `loadFontAsync` required before `characters` write.                                                                   |
+| `frame.resize(width, height)`              | Resize slot container and row/cell frames                | Table renderer layout math.                                                                                                           |
+| `figma.loadFontAsync(fontName)`            | Pre-warm font cache before text write                    | Called in parallel at plugin init for all required fonts (FIG-FONT-01).                                                               |
+| `figma.commitUndo()`                       | Explicit undo-group boundary (optional, per ADR-0004)    | Used only when helper API in `packages/figma-api/src/mutate.ts` is called with `atomic: true`. Default is granular per-mutation undo. |
+| `SlideNode.isSkippedSlide = boolean`       | Toggle slide skip state (Slides editor only)             | Guarded by `figma.editorType === 'slides'` check.                                                                                     |
 
 ### UI bridge
 
-| API | Purpose |
-|---|---|
-| `figma.showUI(__html__, { width: 520, height: 760, themeColors: true })` | Open the plugin iframe |
-| `figma.ui.postMessage(msg)` | Send typed messages to ui (init, slide-loaded, target-updated, page-changed, slide-focused, image-preview, progress, error) |
-| `figma.ui.on('message', handler)` | Receive typed messages from ui (slide-list:request, slide-load:request, apply-*, image-upload:request, persisted-state:*, close) |
-| `figma.on('selectionchange', handler)` | Detect canvas selection change for slide focus-follow | Debounced 200 ms before slide-load |
-| `figma.on('currentpagechange', handler)` | Re-scan slides when user navigates to a different page | Posts `page-changed` (slide list refresh) |
-| `figma.on('documentchange', handler)` | Optional — invalidate cached node references | Consider for Sprint 2+ if stale node refs become a bug pattern |
+| API                                                                      | Purpose                                                                                                                          |
+| ------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `figma.showUI(__html__, { width: 520, height: 760, themeColors: true })` | Open the plugin iframe                                                                                                           |
+| `figma.ui.postMessage(msg)`                                              | Send typed messages to ui (init, slide-loaded, target-updated, page-changed, slide-focused, image-preview, progress, error)      |
+| `figma.ui.on('message', handler)`                                        | Receive typed messages from ui (slide-list:request, slide-load:request, apply-_, image-upload:request, persisted-state:_, close) |
+| `figma.on('selectionchange', handler)`                                   | Detect canvas selection change for slide focus-follow                                                                            | Debounced 200 ms before slide-load                             |
+| `figma.on('currentpagechange', handler)`                                 | Re-scan slides when user navigates to a different page                                                                           | Posts `page-changed` (slide list refresh)                      |
+| `figma.on('documentchange', handler)`                                    | Optional — invalidate cached node references                                                                                     | Consider for Sprint 2+ if stale node refs become a bug pattern |
 
 The ui is **fixed-size** at 520 × 760. No `figma.ui.resize` calls in v0.1.0. Tab panels scroll internally.
 
@@ -124,13 +122,13 @@ None. `networkAccess: { "allowedDomains": ["none"] }`. CSV import is parsed in t
 
 ### STORAGE
 
-| Storage type | Keys / namespace | Scope | Contents |
-|---|---|---|---|
-| `node.setPluginData('kind', value)` | `kind` | Per-node (wrapper instance) | Wrapper type string: `'welder-copywrap'`, `'welder-badge'`, `'welder-imagewrap'`, `'welder-card'`, `'welder-tablewrap'`, `'welder-journeywrap'` |
-| `node.setPluginData('v', value)` | `v` | Per-node | Schema version string: `'1'` for new instances, `'2'` for legacy table compat |
-| `node.setPluginData('model', value)` | `model` | Per-node | `JSON.stringify(section-specific-data)`, max ~100 KB per Figma limit |
-| `node.setRelaunchData({ open: '...' })` | `open` | Per-node | Relaunch button label string |
-| `figma.clientStorage` | None in v0.1.0 | Per-user, cross-file | Reserved for future user preferences (last-active tab, icon cache). Not used in v0.1.0. |
+| Storage type                            | Keys / namespace | Scope                       | Contents                                                                                                                                        |
+| --------------------------------------- | ---------------- | --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `node.setPluginData('kind', value)`     | `kind`           | Per-node (wrapper instance) | Wrapper type string: `'welder-copywrap'`, `'welder-badge'`, `'welder-imagewrap'`, `'welder-card'`, `'welder-tablewrap'`, `'welder-journeywrap'` |
+| `node.setPluginData('v', value)`        | `v`              | Per-node                    | Schema version string: `'1'` for new instances, `'2'` for legacy table compat                                                                   |
+| `node.setPluginData('model', value)`    | `model`          | Per-node                    | `JSON.stringify(section-specific-data)`, max ~100 KB per Figma limit                                                                            |
+| `node.setRelaunchData({ open: '...' })` | `open`           | Per-node                    | Relaunch button label string                                                                                                                    |
+| `figma.clientStorage`                   | None in v0.1.0   | Per-user, cross-file        | Reserved for future user preferences (last-active tab, icon cache). Not used in v0.1.0.                                                         |
 
 **No `setSharedPluginData` in v0.1.0** — all state is private to this plugin's namespace.
 
@@ -140,16 +138,16 @@ None. `networkAccess: { "allowedDomains": ["none"] }`. CSV import is parsed in t
 
 Detection uses `slide-machine.ts` (to be ported from `widget-src/slide-machine.ts`). All detectors are synchronous. Each returns `InstanceNode | null`.
 
-| Wrapper | Detection rule | Structural check | Source lines |
-|---|---|---|---|
-| `CopyWrap` | `instance.name === 'CopyWrap'` | First INSTANCE descendant; must contain a TEXT node named `'Heading'` to be useful | `slide-machine.ts:140` |
-| `Badge` | `instance.name.indexOf('Badge') === 0` AND `isEffectivelyVisible(n, slide) === true` | First visible INSTANCE starting with `'Badge'`. Visibility check: `instance.visible` + ancestors up to slide (bounded 10 hops). | `slide-machine.ts:181-187` |
-| `ImageWrap` | `instance.name === 'ImageWrap'` | First INSTANCE; child node with non-null `ImagePaint` fill is the slot target | `slide-machine.ts:189` |
-| `CardWrap` | `instance.name === 'CardWrap'` | First INSTANCE; children named `'Card'` are iterated for per-card editing | `slide-machine.ts:193` |
-| `TimelineWrap` | `instance.name === 'TimelineWrap'` OR `instance.name.indexOf('Timeline') >= 0` | First INSTANCE. Children are CopyWrap instances (Heading + Paragraph); `Stepper Item` children are skipped | `slide-machine.ts:277-280` |
-| `JourneyWrap` | `instance.name === 'JourneyWrap'` | First INSTANCE; contains a SLOT node accessed via `findJourneySlot` | `slide-machine.ts:350` |
-| `TableWrap` | `instance.name === 'TableWrap'` OR `instance.name.indexOf('Tabel=') === 0 && no 'Timeline'` OR `instance.name.indexOf('Table=') === 0 && no 'Timeline'` OR `instance.name.indexOf('Property 1=') === 0 && no 'Timeline' && no 'Chart'` | First matching INSTANCE; contains a SLOT node accessed via `findTableSlot` | `slide-machine.ts:225-238` |
-| `ChartWrap` | **Intentionally absent in v0.1.0** | No detector, no stub file. See ADR-0007. | — |
+| Wrapper        | Detection rule                                                                                                                                                                                                                         | Structural check                                                                                                                | Source lines               |
+| -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------- |
+| `CopyWrap`     | `instance.name === 'CopyWrap'`                                                                                                                                                                                                         | First INSTANCE descendant; must contain a TEXT node named `'Heading'` to be useful                                              | `slide-machine.ts:140`     |
+| `Badge`        | `instance.name.indexOf('Badge') === 0` AND `isEffectivelyVisible(n, slide) === true`                                                                                                                                                   | First visible INSTANCE starting with `'Badge'`. Visibility check: `instance.visible` + ancestors up to slide (bounded 10 hops). | `slide-machine.ts:181-187` |
+| `ImageWrap`    | `instance.name === 'ImageWrap'`                                                                                                                                                                                                        | First INSTANCE; child node with non-null `ImagePaint` fill is the slot target                                                   | `slide-machine.ts:189`     |
+| `CardWrap`     | `instance.name === 'CardWrap'`                                                                                                                                                                                                         | First INSTANCE; children named `'Card'` are iterated for per-card editing                                                       | `slide-machine.ts:193`     |
+| `TimelineWrap` | `instance.name === 'TimelineWrap'` OR `instance.name.indexOf('Timeline') >= 0`                                                                                                                                                         | First INSTANCE. Children are CopyWrap instances (Heading + Paragraph); `Stepper Item` children are skipped                      | `slide-machine.ts:277-280` |
+| `JourneyWrap`  | `instance.name === 'JourneyWrap'`                                                                                                                                                                                                      | First INSTANCE; contains a SLOT node accessed via `findJourneySlot`                                                             | `slide-machine.ts:350`     |
+| `TableWrap`    | `instance.name === 'TableWrap'` OR `instance.name.indexOf('Tabel=') === 0 && no 'Timeline'` OR `instance.name.indexOf('Table=') === 0 && no 'Timeline'` OR `instance.name.indexOf('Property 1=') === 0 && no 'Timeline' && no 'Chart'` | First matching INSTANCE; contains a SLOT node accessed via `findTableSlot`                                                      | `slide-machine.ts:225-238` |
+| `ChartWrap`    | **Intentionally absent in v0.1.0**                                                                                                                                                                                                     | No detector, no stub file. See ADR-0007.                                                                                        | —                          |
 
 **Variant-naming note (from `spec.md` §7.2, T31.1):** Slide Machine uses component-variant syntax as the on-canvas instance name (e.g., `Tabel=Alt Timeline`, `Tabel=Table Default`). The detection rules above handle this. Detection is by name-match, not by file-ID, making it revision-independent against both the published library (`kAZqxj4nxpafYjB5FhfOru`) and any future library revision.
 
@@ -181,9 +179,11 @@ The code-side typed wrapper in `code/persistence.ts` (Sprint 1) handles this mig
 ### setRelaunchData per-wrapper
 
 After every successful save, the plugin calls:
+
 ```ts
 node.setRelaunchData({ open: 'Edit with Slide Editor' });
 ```
+
 This registers the relaunch button on the wrapper node, matching `manifest.relaunchButtons[0].command === 'open'`. (The external build uses the Dutch label "Bewerk met Slide Editor" — the rebuild uses English per monorepo conventions.)
 
 ---
@@ -192,10 +192,10 @@ This registers the relaunch button on the wrapper node, matching `manifest.relau
 
 Two Figma files are relevant:
 
-| File | File key | Role |
-|---|---|---|
+| File                              | File key                 | Role                                                                                                                                                                                                                         |
+| --------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Slide Machine (published library) | `kAZqxj4nxpafYjB5FhfOru` | **Authority for production users.** This is the library user files in production reference. Variable keys `TEXT_KEY` and `TEXT_DIMMER_KEY` (from `accent-vars.ts` lines 19-20) belong to this library's variable collection. |
-| Templates-Welder (work copy) | `RgTXIrUpihBauydjMZbUGX` | Design reference for the rebuild. Not the authority for runtime detection. URL: https://www.figma.com/design/RgTXIrUpihBauydjMZbUGX/Templates-Welder?node-id=26-1797&m=dev |
+| Templates-Welder (work copy)      | `RgTXIrUpihBauydjMZbUGX` | Design reference for the rebuild. Not the authority for runtime detection. URL: https://www.figma.com/design/RgTXIrUpihBauydjMZbUGX/Templates-Welder?node-id=26-1797&m=dev                                                   |
 
 **Detection is name-based, not file-ID-based.** The `isSlide` predicate and all `find*Wrap` selectors match against `instance.name`, not against the component's origin file ID. This means detection is library-revision-independent: it works against the published library, the work copy, and any future library revision with the same component names.
 
@@ -245,14 +245,14 @@ Figma enforces a per-key limit of approximately 100 KB for `setPluginData`. Larg
 
 The following `packages/figma-api/` wrappers should be used by this plugin rather than calling `figma.*` directly:
 
-| Wrapper to create (Sprint 1) | Source file to lift from | Purpose |
-|---|---|---|
+| Wrapper to create (Sprint 1)          | Source file to lift from                    | Purpose                                                                                                           |
+| ------------------------------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
 | `packages/figma-api/src/variables.ts` | `widget-src/editors/_shared/accent-vars.ts` | `loadAccentVars()`, `resolveColor()`, `TEXT_KEY`, `TEXT_DIMMER_KEY`, `TEXT_DIMMER_RGB` — lifted to shared package |
-| `packages/figma-api/src/fonts.ts` | `widget-src/editors/_shared/fonts.ts` | `loadAllFontsForNode()`, `setTextCharactersSafe()` — FIG-FONT-01 canonical pattern |
-| `packages/figma-api/src/mutate.ts` | New | `commitUndo()` discipline helper per ADR-0004 |
-| `packages/figma-api/src/progress.ts` | New | `withTimeout()`, `withProgress()` — resolves R3 silent fire-and-forget |
-| `packages/figma-api/src/selection.ts` | New | `getSelectedSlide()`, `getSelectedWrapper()` helpers |
-| `packages/figma-api/src/router.ts` | Already exists | Versioned typed router with correlationId — use directly |
+| `packages/figma-api/src/fonts.ts`     | `widget-src/editors/_shared/fonts.ts`       | `loadAllFontsForNode()`, `setTextCharactersSafe()` — FIG-FONT-01 canonical pattern                                |
+| `packages/figma-api/src/mutate.ts`    | New                                         | `commitUndo()` discipline helper per ADR-0004                                                                     |
+| `packages/figma-api/src/progress.ts`  | New                                         | `withTimeout()`, `withProgress()` — resolves R3 silent fire-and-forget                                            |
+| `packages/figma-api/src/selection.ts` | New                                         | `getSelectedSlide()`, `getSelectedWrapper()` helpers                                                              |
+| `packages/figma-api/src/router.ts`    | Already exists                              | Versioned typed router with correlationId — use directly                                                          |
 
 The slide scanner and wrapper detectors belong in `plugins/welder-editor/code/slide-machine.ts` (plugin-specific), not in `packages/figma-api/` — detection rules are Slide Machine-specific and not reusable across plugins.
 

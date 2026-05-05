@@ -36,10 +36,7 @@ import App from '../../ui/App.vue';
 // Helper: run axe against a mounted component root.
 // Returns only violations at the specified impact levels.
 // ---------------------------------------------------------------------------
-async function runAxe(
-  el: Element,
-  impactFilter: axe.ImpactValue[],
-): Promise<axe.Result[]> {
+async function runAxe(el: Element, impactFilter: axe.ImpactValue[]): Promise<axe.Result[]> {
   const results = await axe.run(el, {
     runOnly: {
       type: 'tag',
@@ -87,10 +84,9 @@ describe('App.vue — axe WCAG 2.1 AA scan', () => {
 
   it('has zero serious or critical WCAG 2.1 AA violations (blocking gate)', async () => {
     const blocking = await runAxe(el, ['serious', 'critical']);
-    expect(
-      blocking,
-      `BLOCKING axe violations found:\n${formatViolations(blocking)}`,
-    ).toHaveLength(0);
+    expect(blocking, `BLOCKING axe violations found:\n${formatViolations(blocking)}`).toHaveLength(
+      0,
+    );
   });
 
   it('reports moderate and minor violations as warnings (non-blocking until Sprint 2 RC)', async () => {

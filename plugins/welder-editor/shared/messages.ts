@@ -307,13 +307,13 @@ export interface WelderError {
 }
 
 export type WelderErrorCode =
-  | 'NOT_FOUND'            // target node no longer exists on canvas
-  | 'INVALID_INPUT'        // payload failed Zod validation at code-side boundary
-  | 'LIBRARY_VAR_MISSING'  // importVariableByKeyAsync failed (free plan / library unlinked)
-  | 'NODE_TYPE_MISMATCH'   // found node is not the expected type
-  | 'MUTATION_FAILED'      // figma.* call threw (read-only file, collaborative conflict)
-  | 'TIMEOUT'              // withTimeout guard expired
-  | 'UNEXPECTED';          // unhandled exception caught by top-level handler
+  | 'NOT_FOUND' // target node no longer exists on canvas
+  | 'INVALID_INPUT' // payload failed Zod validation at code-side boundary
+  | 'LIBRARY_VAR_MISSING' // importVariableByKeyAsync failed (free plan / library unlinked)
+  | 'NODE_TYPE_MISMATCH' // found node is not the expected type
+  | 'MUTATION_FAILED' // figma.* call threw (read-only file, collaborative conflict)
+  | 'TIMEOUT' // withTimeout guard expired
+  | 'UNEXPECTED'; // unhandled exception caught by top-level handler
 
 // ---------------------------------------------------------------------------
 // Message union
@@ -576,14 +576,12 @@ export type Message =
   // ------------------------------------------------------------------
   // Request-response: code → ui (results)
   // ------------------------------------------------------------------
-
   | {
       type: 'slide-list:result';
       version: typeof MESSAGE_BUS_VERSION;
       payload: Result<{ slides: SlideSummary[] }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'slide-load:result';
       version: typeof MESSAGE_BUS_VERSION;
@@ -595,56 +593,48 @@ export type Message =
       }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'apply-title-description:result';
       version: typeof MESSAGE_BUS_VERSION;
       payload: Result<{ copyWrapId: NodeId }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'apply-badge:result';
       version: typeof MESSAGE_BUS_VERSION;
       payload: Result<{ badgeNodeId: NodeId }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'apply-image:result';
       version: typeof MESSAGE_BUS_VERSION;
       payload: Result<{ imageWrapId: NodeId; imageHash: ImageHash }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'apply-card:result';
       version: typeof MESSAGE_BUS_VERSION;
       payload: Result<{ cardNodeId: NodeId }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'apply-timeline:result';
       version: typeof MESSAGE_BUS_VERSION;
       payload: Result<{ copyWrapNodeId: NodeId }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'apply-table:result';
       version: typeof MESSAGE_BUS_VERSION;
       payload: Result<{ slotId: NodeId }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'apply-journey:result';
       version: typeof MESSAGE_BUS_VERSION;
       payload: Result<{ slotId: NodeId }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'image-upload:result';
       version: typeof MESSAGE_BUS_VERSION;
@@ -659,14 +649,12 @@ export type Message =
       }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'persisted-state:get:result';
       version: typeof MESSAGE_BUS_VERSION;
       payload: Result<{ key: string; value: unknown }>;
       correlationId: CorrelationId;
     }
-
   | {
       type: 'persisted-state:set:result';
       version: typeof MESSAGE_BUS_VERSION;
@@ -679,11 +667,12 @@ export type Message =
 // ---------------------------------------------------------------------------
 
 /** Extract the payload type of a message by its type discriminator. */
-export type MessagePayload<T extends Message['type']> = Extract<Message, { type: T }> extends {
-  payload: infer P;
-}
-  ? P
-  : never;
+export type MessagePayload<T extends Message['type']> =
+  Extract<Message, { type: T }> extends {
+    payload: infer P;
+  }
+    ? P
+    : never;
 
 /** All message type discriminator strings. */
 export type MessageType = Message['type'];

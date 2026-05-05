@@ -39,10 +39,10 @@ This is the v0.1.0 product spec for the rebuild that lives in this monorepo at `
 
 The slide content lives inside instances of the **Slide Machine** Figma library. Two file IDs are involved:
 
-| Role | File ID | Notes |
-|------|---------|-------|
-| **Published library** (runtime detection target) | `kAZqxj4nxpafYjB5FhfOru` | This is the file user-facing slides reference. Wrapper-name matching runs against instances of components from this library. |
-| **Work copy** (design reference) | `RgTXIrUpihBauydjMZbUGX` ([Templates-Welder](https://www.figma.com/design/RgTXIrUpihBauydjMZbUGX/Templates-Welder?node-id=26-1797&m=dev)) | A work copy of the same library used for design iteration and review. Useful as a design reference during the rebuild but not the authority for runtime detection. |
+| Role                                             | File ID                                                                                                                                   | Notes                                                                                                                                                              |
+| ------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Published library** (runtime detection target) | `kAZqxj4nxpafYjB5FhfOru`                                                                                                                  | This is the file user-facing slides reference. Wrapper-name matching runs against instances of components from this library.                                       |
+| **Work copy** (design reference)                 | `RgTXIrUpihBauydjMZbUGX` ([Templates-Welder](https://www.figma.com/design/RgTXIrUpihBauydjMZbUGX/Templates-Welder?node-id=26-1797&m=dev)) | A work copy of the same library used for design iteration and review. Useful as a design reference during the rebuild but not the authority for runtime detection. |
 
 > **Project-pm review:** the published library file ID was confirmed by user 2026-05-05. Tests must assert detection by component-name match (not file-ID), so detection stays library-revision-independent. Reconciling these two file IDs is also tracked in the api-spec brief (Sprint 0 deliverable 0.2).
 
@@ -68,7 +68,7 @@ The plugin is **edit-only**. It never creates new content. Concretely, v0.1.0 wi
 - Add or remove timeline items — only existing items inside a TimelineWrap are edited.
 - Add or remove journey items — only existing pills inside a JourneyWrap are edited (rows can be added/removed but not the wrapper itself).
 - Add or remove badges — only existing Badge instances are edited.
-- Add or remove tables — only existing TableWrap instances are edited (rows and columns inside a TableWrap *can* be added/removed via the table editor; the wrapper itself cannot).
+- Add or remove tables — only existing TableWrap instances are edited (rows and columns inside a TableWrap _can_ be added/removed via the table editor; the wrapper itself cannot).
 - Navigate slides cross-page — only `figma.currentPage` slides are listed. Switching pages in Figma triggers a re-scan; the plugin does not navigate the user.
 - Manage its own undo/redo — the plugin relies entirely on Figma's native undo. (See ADR-0004.)
 - Drag-reorder content within a slide.
@@ -154,7 +154,7 @@ export interface PluginView {
   slides: SlideSummary[];
   currentSlideId: string | null;
   activeTab: TabId;
-  general: GeneralSections | null;   // null until a slide is selected
+  general: GeneralSections | null; // null until a slide is selected
   content: ContentItems | null;
   graphs: GraphItems | null;
 }
@@ -386,16 +386,16 @@ Constraints:
 
 A "slide" is detected on `figma.currentPage` as `INSTANCE` with `name === 'Slide'` and dimensions 1920×1080. Within each slide, the plugin scans for the wrappers below.
 
-| Tab + section | Wrappers (name match) | Status (v0.1.0) |
-|---|---|---|
-| General → Title & Description | `CopyWrap` | In scope |
-| General → Badge | `INSTANCE` whose name starts with `Badge` (e.g. `Badge`, `Badge/Placeholder`) | In scope |
-| General → Image | `ImageWrap` | In scope |
-| Content → Cards | `CardWrap` → `Card` children | In scope |
-| Content → Timeline | `TimelineWrap`, `Tabel=Alt Timeline`, or any instance whose name contains `Timeline` (Slide Machine variant-syntax) | In scope |
-| Graphs → Table | `TableWrap`, or instances whose name starts with `Tabel=` / `Table=` / `Property 1=` and does **not** contain `Timeline` | In scope (slot-based, T34 architecture) |
-| Graphs → Journey | `JourneyWrap` | In scope (slot-based, T45+T46 architecture) |
-| Graphs → Chart | `ChartWrap` | **Out of scope for v0.1.0 — see ADR-0007.** |
+| Tab + section                 | Wrappers (name match)                                                                                                    | Status (v0.1.0)                             |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------- |
+| General → Title & Description | `CopyWrap`                                                                                                               | In scope                                    |
+| General → Badge               | `INSTANCE` whose name starts with `Badge` (e.g. `Badge`, `Badge/Placeholder`)                                            | In scope                                    |
+| General → Image               | `ImageWrap`                                                                                                              | In scope                                    |
+| Content → Cards               | `CardWrap` → `Card` children                                                                                             | In scope                                    |
+| Content → Timeline            | `TimelineWrap`, `Tabel=Alt Timeline`, or any instance whose name contains `Timeline` (Slide Machine variant-syntax)      | In scope                                    |
+| Graphs → Table                | `TableWrap`, or instances whose name starts with `Tabel=` / `Table=` / `Property 1=` and does **not** contain `Timeline` | In scope (slot-based, T34 architecture)     |
+| Graphs → Journey              | `JourneyWrap`                                                                                                            | In scope (slot-based, T45+T46 architecture) |
+| Graphs → Chart                | `ChartWrap`                                                                                                              | **Out of scope for v0.1.0 — see ADR-0007.** |
 
 ### Detection rules
 
@@ -427,7 +427,7 @@ findJourneyWrap(slide)  = first INSTANCE with name === 'JourneyWrap'
                           OR name starts with the JourneyWrap variant prefix
 ```
 
-> **Project-pm review:** the slot-based architectures for tables (T34) and journey maps (T45) detect a `SlotNode` *inside* the wrapper instance, not the wrapper itself. The wrapper-name match locates the host instance; the slot is then resolved via `wrapInstance.findOne(n => n.type === 'SLOT' && n.name === <slot-name>)`. Engineering details belong in the api-spec brief (Sprint 0 deliverable 0.2), not here.
+> **Project-pm review:** the slot-based architectures for tables (T34) and journey maps (T45) detect a `SlotNode` _inside_ the wrapper instance, not the wrapper itself. The wrapper-name match locates the host instance; the slot is then resolved via `wrapInstance.findOne(n => n.type === 'SLOT' && n.name === <slot-name>)`. Engineering details belong in the api-spec brief (Sprint 0 deliverable 0.2), not here.
 
 > **ChartWrap is intentionally absent.** Per ADR-0007, `code/wrappers/ChartWrap.ts` does not exist in v0.1.0. There is no detector, no type, no message handler. The absence is documented in ADR-0007 and the api-spec brief.
 
@@ -483,7 +483,7 @@ Two sub-sections. Empty state when the slide has neither a CardWrap nor a Timeli
 #### 7.2.2 Timeline (TimelineWrap)
 
 - One TimelineItemEditor per timeline-item. Per-item fields: heading (UInput), paragraph (UTextarea).
-- TimelineWrap is polymorphic — children can be `Card` instances *or* `CopyWrap` instances nested in intermediate `Frame` nodes. The scan extracts both via `slide.findAll(n => n.type === 'INSTANCE' && (n.name === 'Card' || n.name === 'CopyWrap'))` bounded to the wrapper subtree (T31.2 architecture).
+- TimelineWrap is polymorphic — children can be `Card` instances _or_ `CopyWrap` instances nested in intermediate `Frame` nodes. The scan extracts both via `slide.findAll(n => n.type === 'INSTANCE' && (n.name === 'Card' || n.name === 'CopyWrap'))` bounded to the wrapper subtree (T31.2 architecture).
 - No icon-swap, no visual-slot for plain CopyWrap timeline items. Card-shaped timeline items reuse the card icon/visual pipeline.
 
 ### 7.3 Graphs tab
@@ -505,6 +505,7 @@ UI controls:
 Mutation path: `update-table` is a full-state PUT — the UI sends the complete desired `TableWrapModel`; the main thread clears the slot and rebuilds rows + cells from scratch. Allowed because TableWrap is a `SlotNode` and Slot children are mutable (T34 architecture).
 
 **T42.21 perf fix is in-scope (Sprint 4).** The external build had a regression where toggling the table-editor open/close jankily exceeded 16 ms per frame. The two fixes from `.reviews/perf-investigation-2026-04-26.md` are applied:
+
 - **Finding 1**: replace `bodyRows.slice()` with offset-based render so the array reference stays stable through Reka measurement.
 - **Finding 3**: memoize `estimateRowTruncation` via a computed `truncationFlags`.
 
@@ -535,20 +536,20 @@ The Graphs tab does not render any chart controls in v0.1.0. ADR-0007 records th
 
 This is what the rebuild adds vs the v0.2.1 external build. Each item has an owner agent and a Sprint when it lands.
 
-| # | Quality | External build (v0.2.1) | Rebuild (v0.1.0) | Owner | Sprint |
-|---|---|---|---|---|---|
-| 1 | **Tests** | None | Comprehensive vitest + @testing-library/vue + axe + golden-snapshot parity tests for renderers | `plugin-tester` (harness), `figma-api-engineer` (renderer tests), `ui-engineer` (component tests) | 0 (harness), 1+ (suite) |
-| 2 | **Accessibility** | None | axe-clean WCAG 2.1 AA gate on every reachable UI state; manual keyboard-nav per section | `ui-engineer`, `plugin-tester` | 0 (gate), 2+ (compliance) |
-| 3 | **Bundle budget** | 3.2 MB total (ad hoc) | ADR-0003 revised numbers; per-layer reduction targets; named lazy-load boundaries (icon manifest on demand, journey renderer split) | `figma-api-engineer` (code-side), `ui-engineer` (ui-side) | 0 (ADR), measured per-sprint |
-| 4 | **Async boundary discipline** | Silent fire-and-forget (image fetch, icon cache prime, CSV import) | `withTimeout` / `withProgress` primitives in `packages/figma-api/`; UI surfaces toast on failure | `figma-api-engineer` | 1 |
-| 5 | **CSV import schema validation** | Silent empty-array on bad input | Validated at the boundary in the TableEditor; user-facing toast on bad input | `ui-engineer` | 4 |
-| 6 | **Per-renderer golden-snapshot parity** | None — renderer changes were spot-checked manually | Byte-equivalent output to v0.2.1 on identical input fixtures, per Table and Journey renderer | `figma-api-engineer` (per-renderer tests), `plugin-tester` (harness) | 1 (harness), 4 (Journey + Table) |
-| 7 | **Frame-trace perf gate (Table toggle)** | Regressed in v0.2.1 | < 16 ms toggle open/close blocks merge | `ui-engineer` (impl), `plugin-tester` (gate) | 4 |
-| 8 | **Manifest narrowed** | `["figma", "slides"]` (ad hoc) | `["figma", "slides"]` per ADR-0002, with `documentAccess: "dynamic-page"` justified explicitly | `figma-api-engineer` | 0 |
-| 9 | **Library variable strategy** | Ad hoc — duplicate canvas-token files alongside iframe tokens | ADR-0005: canvas tokens via Figma library variables (`setBoundVariableForPaint` after `Variable.resolveForConsumer(node)` per T28.2 lesson); iframe tokens via Nuxt UI v4 only | `figma-api-engineer` + `ui-engineer` | 0 |
-| 10 | **Undo discipline** | Implicit Figma-native | Explicit ADR-0004 with helper API in `packages/figma-api/`; mutations grouped under single user-visible undo step | `figma-api-engineer` | 0 |
-| 11 | **Cross-domain action protocol** | None | `CLAUDE.md` cross-domain action protocol applies — agent halts on out-of-scope mutation requests | `project-pm` | enforced from 0 |
-| 12 | **Library-first sequencing** | Plugin-first (sections built ad hoc inside the plugin) | Sections shipped as standalone modules with props contract, vitest tests, axe-clean, Storybook before plugin assembles them | `ui-engineer` | 2+ |
+| #   | Quality                                  | External build (v0.2.1)                                            | Rebuild (v0.1.0)                                                                                                                                                               | Owner                                                                                             | Sprint                           |
+| --- | ---------------------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------- | -------------------------------- |
+| 1   | **Tests**                                | None                                                               | Comprehensive vitest + @testing-library/vue + axe + golden-snapshot parity tests for renderers                                                                                 | `plugin-tester` (harness), `figma-api-engineer` (renderer tests), `ui-engineer` (component tests) | 0 (harness), 1+ (suite)          |
+| 2   | **Accessibility**                        | None                                                               | axe-clean WCAG 2.1 AA gate on every reachable UI state; manual keyboard-nav per section                                                                                        | `ui-engineer`, `plugin-tester`                                                                    | 0 (gate), 2+ (compliance)        |
+| 3   | **Bundle budget**                        | 3.2 MB total (ad hoc)                                              | ADR-0003 revised numbers; per-layer reduction targets; named lazy-load boundaries (icon manifest on demand, journey renderer split)                                            | `figma-api-engineer` (code-side), `ui-engineer` (ui-side)                                         | 0 (ADR), measured per-sprint     |
+| 4   | **Async boundary discipline**            | Silent fire-and-forget (image fetch, icon cache prime, CSV import) | `withTimeout` / `withProgress` primitives in `packages/figma-api/`; UI surfaces toast on failure                                                                               | `figma-api-engineer`                                                                              | 1                                |
+| 5   | **CSV import schema validation**         | Silent empty-array on bad input                                    | Validated at the boundary in the TableEditor; user-facing toast on bad input                                                                                                   | `ui-engineer`                                                                                     | 4                                |
+| 6   | **Per-renderer golden-snapshot parity**  | None — renderer changes were spot-checked manually                 | Byte-equivalent output to v0.2.1 on identical input fixtures, per Table and Journey renderer                                                                                   | `figma-api-engineer` (per-renderer tests), `plugin-tester` (harness)                              | 1 (harness), 4 (Journey + Table) |
+| 7   | **Frame-trace perf gate (Table toggle)** | Regressed in v0.2.1                                                | < 16 ms toggle open/close blocks merge                                                                                                                                         | `ui-engineer` (impl), `plugin-tester` (gate)                                                      | 4                                |
+| 8   | **Manifest narrowed**                    | `["figma", "slides"]` (ad hoc)                                     | `["figma", "slides"]` per ADR-0002, with `documentAccess: "dynamic-page"` justified explicitly                                                                                 | `figma-api-engineer`                                                                              | 0                                |
+| 9   | **Library variable strategy**            | Ad hoc — duplicate canvas-token files alongside iframe tokens      | ADR-0005: canvas tokens via Figma library variables (`setBoundVariableForPaint` after `Variable.resolveForConsumer(node)` per T28.2 lesson); iframe tokens via Nuxt UI v4 only | `figma-api-engineer` + `ui-engineer`                                                              | 0                                |
+| 10  | **Undo discipline**                      | Implicit Figma-native                                              | Explicit ADR-0004 with helper API in `packages/figma-api/`; mutations grouped under single user-visible undo step                                                              | `figma-api-engineer`                                                                              | 0                                |
+| 11  | **Cross-domain action protocol**         | None                                                               | `CLAUDE.md` cross-domain action protocol applies — agent halts on out-of-scope mutation requests                                                                               | `project-pm`                                                                                      | enforced from 0                  |
+| 12  | **Library-first sequencing**             | Plugin-first (sections built ad hoc inside the plugin)             | Sections shipped as standalone modules with props contract, vitest tests, axe-clean, Storybook before plugin assembles them                                                    | `ui-engineer`                                                                                     | 2+                               |
 
 ### Validation gate per release PR (per `runbooks/e2e-gauntlet.md` and the approved plan)
 
@@ -573,19 +574,19 @@ This is what the rebuild adds vs the v0.2.1 external build. Each item has an own
 
 The list is exhaustive — every item from the external build's status inventory is either resolved in v0.1.0 (in-scope) or named here (deferred or N/A).
 
-| # | Item (external build) | Status in v0.1.0 | Notes |
-|---|---|---|---|
-| 1 | T10 — image editor UI panel (dormant in `GeneralPanel.vue`) | **Resolved in Sprint 2** (in-scope) | Becomes `sections/ImageEditor/`. ADR-0006 decides cropper choice. |
-| 2 | T42.21 — table toggle jank (`bodyRows.slice()` Reka measurement) | **Resolved in Sprint 4** (in-scope) | Apply Finding 1 + Finding 3 from `.reviews/perf-investigation-2026-04-26.md`. Frame-trace gate < 16 ms. |
-| 3 | JourneyItem bootstrap key (`JOURNEYITEM_KEY_FALLBACK = ''`) | **Resolved in Sprint 4** (in-scope) | Sprint 4 kickoff seeds the constant from a known canvas instance. |
-| 4 | CSV non-numeric row handling (chart parser Phase 3 TODO) | **N/A** | Chart parser is out of scope; the CSV gap only affected charts. |
-| 5 | Charts (T35) — `ChartWrap` detector + chart renderer + chart UI | **Deferred** | ADR-0007 records the deferral to a follow-up epic on this plugin. `code/wrappers/ChartWrap.ts` is intentionally absent. |
-| 6 | Accent ranges (T28 / T30) — heading dim word-chips | **Deferred** | ADR-0008 records the deferral to backlog (no scheduled sprint). Route A (inline always-visible badges) pre-approved. |
-| 7 | Silent fire-and-forget async (image fetch, icon cache prime, CSV import) | **Resolved in Sprint 1** (in-scope) | `withTimeout` / `withProgress` primitives in `packages/figma-api/`. UI surfaces toast on failure. |
-| 8 | Migration from `welder-table` v0.2.0 / `chart-builder` v0.3.0 instances | **N/A** | Predecessor plugins are archived. No migration is offered. |
-| 9 | Heading-only character truncation on mixed-font nodes (T29) | **Resolved at Sprint 1 onboarding** | The shared `loadAllFontsForNode` / `setTextCharactersSafe` helpers are lifted into `packages/figma-api/src/fonts.ts` (Sprint 1). |
-| 10 | Real-time multi-user editing / conflict resolution | **N/A — out of non-goals scope** | Last-save-wins; no real-time sync planned. |
-| 11 | Cross-page slide navigation | **N/A — out of non-goals scope** | Only `figma.currentPage`; user navigates between pages in Figma. |
+| #   | Item (external build)                                                    | Status in v0.1.0                    | Notes                                                                                                                            |
+| --- | ------------------------------------------------------------------------ | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | T10 — image editor UI panel (dormant in `GeneralPanel.vue`)              | **Resolved in Sprint 2** (in-scope) | Becomes `sections/ImageEditor/`. ADR-0006 decides cropper choice.                                                                |
+| 2   | T42.21 — table toggle jank (`bodyRows.slice()` Reka measurement)         | **Resolved in Sprint 4** (in-scope) | Apply Finding 1 + Finding 3 from `.reviews/perf-investigation-2026-04-26.md`. Frame-trace gate < 16 ms.                          |
+| 3   | JourneyItem bootstrap key (`JOURNEYITEM_KEY_FALLBACK = ''`)              | **Resolved in Sprint 4** (in-scope) | Sprint 4 kickoff seeds the constant from a known canvas instance.                                                                |
+| 4   | CSV non-numeric row handling (chart parser Phase 3 TODO)                 | **N/A**                             | Chart parser is out of scope; the CSV gap only affected charts.                                                                  |
+| 5   | Charts (T35) — `ChartWrap` detector + chart renderer + chart UI          | **Deferred**                        | ADR-0007 records the deferral to a follow-up epic on this plugin. `code/wrappers/ChartWrap.ts` is intentionally absent.          |
+| 6   | Accent ranges (T28 / T30) — heading dim word-chips                       | **Deferred**                        | ADR-0008 records the deferral to backlog (no scheduled sprint). Route A (inline always-visible badges) pre-approved.             |
+| 7   | Silent fire-and-forget async (image fetch, icon cache prime, CSV import) | **Resolved in Sprint 1** (in-scope) | `withTimeout` / `withProgress` primitives in `packages/figma-api/`. UI surfaces toast on failure.                                |
+| 8   | Migration from `welder-table` v0.2.0 / `chart-builder` v0.3.0 instances  | **N/A**                             | Predecessor plugins are archived. No migration is offered.                                                                       |
+| 9   | Heading-only character truncation on mixed-font nodes (T29)              | **Resolved at Sprint 1 onboarding** | The shared `loadAllFontsForNode` / `setTextCharactersSafe` helpers are lifted into `packages/figma-api/src/fonts.ts` (Sprint 1). |
+| 10  | Real-time multi-user editing / conflict resolution                       | **N/A — out of non-goals scope**    | Last-save-wins; no real-time sync planned.                                                                                       |
+| 11  | Cross-page slide navigation                                              | **N/A — out of non-goals scope**    | Only `figma.currentPage`; user navigates between pages in Figma.                                                                 |
 
 > **Project-pm review:** items 1, 2, 3, 7, and 9 are the rebuild's "fix during port" set. Items 4, 5, 6, 8, 10, and 11 are explicit "out of scope" items per ADRs and non-goals.
 

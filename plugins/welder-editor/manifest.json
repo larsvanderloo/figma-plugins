@@ -10,7 +10,5 @@
   "networkAccess": {
     "allowedDomains": ["none"]
   },
-  "relaunchButtons": [
-    { "command": "open", "name": "Edit with Slide Editor" }
-  ]
+  "relaunchButtons": [{ "command": "open", "name": "Edit with Slide Editor" }]
 }

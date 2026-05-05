@@ -130,18 +130,18 @@ The router in `packages/figma-api/src/router.ts` maintains a `Map<correlationId,
 
 ## State map
 
-| State | Canonical owner | Reactivity model | Lifetime | Sync strategy |
-|---|---|---|---|---|
-| Slide list (`SlideSummary[]`) | `code/` scans `figma.currentPage` | Recomputed on request or `currentpagechange` event | Per-session; invalidated on page change | `slide-list:result` message → ui ref |
-| Current slide ID | `ui/` (user selection) | Vue ref | Per-session | No sync needed — ui sends `slide-load:request` on change |
-| Active tab (`general`/`content`/`graphs`) | `ui/` | Vue ref | Per-session | No sync needed — ui-only state |
-| General sections (`GeneralSections | null`) | `code/` reads canvas nodes | Recomputed on `slide-load:request` | Per slide-load | `slide-load:result` → ui reactive state |
-| Content items (`ContentItems | null`) | `code/` reads canvas nodes | Recomputed on `slide-load:request` | Per slide-load | `slide-load:result` → ui reactive state |
-| Graph items (`GraphItems | null`) | `code/` reads canvas nodes | Recomputed on `slide-load:request` | Per slide-load | `slide-load:result` → ui reactive state |
-| Wrapper persisted model | `figma.setPluginData` on wrapper node | Written on every successful `apply-*` | Per-file (Figma document) | Explicit round-trip: read on slide-load, write on apply |
-| Relaunch data | `figma.setRelaunchData` on wrapper node | Written after every successful `apply-*` | Per-file | One-way write from `code/` |
-| Image preview bytes | transient, `code/` side only | Computed on `image-upload:request` | Per request | `image-upload:result` → ui local state, not stored |
-| User preferences (icon picker history, etc.) | `figma.clientStorage` | Async read at plugin init | Per-user, cross-file | `persisted-state:get/result`, `persisted-state:set/result` |
+| State                                        | Canonical owner                         | Reactivity model                                   | Lifetime                                | Sync strategy                                              |
+| -------------------------------------------- | --------------------------------------- | -------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------- | --------------------------------------- |
+| Slide list (`SlideSummary[]`)                | `code/` scans `figma.currentPage`       | Recomputed on request or `currentpagechange` event | Per-session; invalidated on page change | `slide-list:result` message → ui ref                       |
+| Current slide ID                             | `ui/` (user selection)                  | Vue ref                                            | Per-session                             | No sync needed — ui sends `slide-load:request` on change   |
+| Active tab (`general`/`content`/`graphs`)    | `ui/`                                   | Vue ref                                            | Per-session                             | No sync needed — ui-only state                             |
+| General sections (`GeneralSections           | null`)                                  | `code/` reads canvas nodes                         | Recomputed on `slide-load:request`      | Per slide-load                                             | `slide-load:result` → ui reactive state |
+| Content items (`ContentItems                 | null`)                                  | `code/` reads canvas nodes                         | Recomputed on `slide-load:request`      | Per slide-load                                             | `slide-load:result` → ui reactive state |
+| Graph items (`GraphItems                     | null`)                                  | `code/` reads canvas nodes                         | Recomputed on `slide-load:request`      | Per slide-load                                             | `slide-load:result` → ui reactive state |
+| Wrapper persisted model                      | `figma.setPluginData` on wrapper node   | Written on every successful `apply-*`              | Per-file (Figma document)               | Explicit round-trip: read on slide-load, write on apply    |
+| Relaunch data                                | `figma.setRelaunchData` on wrapper node | Written after every successful `apply-*`           | Per-file                                | One-way write from `code/`                                 |
+| Image preview bytes                          | transient, `code/` side only            | Computed on `image-upload:request`                 | Per request                             | `image-upload:result` → ui local state, not stored         |
+| User preferences (icon picker history, etc.) | `figma.clientStorage`                   | Async read at plugin init                          | Per-user, cross-file                    | `persisted-state:get/result`, `persisted-state:set/result` |
 
 **Canvas-of-truth invariant:** The Figma canvas nodes (and their `pluginData`) are the canonical data store. The ui holds a mirror of what the code side last reported. The ui does NOT maintain a parallel writable store that diverges from what is on canvas. Edits flow: ui input → debounced `apply-*` message → code mutates canvas → `apply-*:result` → ui updates mirror. There is no optimistic update without confirmation.
 
@@ -149,17 +149,17 @@ The router in `packages/figma-api/src/router.ts` maintains a `Map<correlationId,
 
 ## Latency budgets
 
-| Operation | Budget | Notes |
-|---|---|---|
-| Plugin open → first paint (`init` → ui renders slide list) | ≤ 200 ms | Font pre-warm and variable import run in parallel at init; they must not block first paint |
-| `selectionchange` → `slide-load:request` sent | ≤ 200 ms | Debounce in ui before triggering load |
-| `slide-load:request` → `slide-load:result` received | ≤ 500 ms | Covers `findSlidesOnPage` + wrapper detection + pluginData read + variable resolution |
-| Atomic text edit (`apply-title-description`) → `apply-*:result` | ≤ 100 ms p95 | One `setTextCharactersSafe` call (font load cached) |
-| Table render (`apply-table`) — small (4×4) | ≤ 500 ms | 16 cells + frame operations |
-| Table render (`apply-table`) — large (10×6) | ≤ 2 s | 60 cells; send `progress` messages at row boundaries |
-| Journey render (`apply-journey`) — 10 items | ≤ 500 ms | ~30 frame/text operations |
-| Image upload → `apply-image:result` | ≤ 1 s | `figma.createImage(bytes)` + fill write |
-| Image preview → `image-upload:result` bytes | ≤ 200 ms | `figma.getImageByHash` + byte transfer |
+| Operation                                                       | Budget       | Notes                                                                                      |
+| --------------------------------------------------------------- | ------------ | ------------------------------------------------------------------------------------------ |
+| Plugin open → first paint (`init` → ui renders slide list)      | ≤ 200 ms     | Font pre-warm and variable import run in parallel at init; they must not block first paint |
+| `selectionchange` → `slide-load:request` sent                   | ≤ 200 ms     | Debounce in ui before triggering load                                                      |
+| `slide-load:request` → `slide-load:result` received             | ≤ 500 ms     | Covers `findSlidesOnPage` + wrapper detection + pluginData read + variable resolution      |
+| Atomic text edit (`apply-title-description`) → `apply-*:result` | ≤ 100 ms p95 | One `setTextCharactersSafe` call (font load cached)                                        |
+| Table render (`apply-table`) — small (4×4)                      | ≤ 500 ms     | 16 cells + frame operations                                                                |
+| Table render (`apply-table`) — large (10×6)                     | ≤ 2 s        | 60 cells; send `progress` messages at row boundaries                                       |
+| Journey render (`apply-journey`) — 10 items                     | ≤ 500 ms     | ~30 frame/text operations                                                                  |
+| Image upload → `apply-image:result`                             | ≤ 1 s        | `figma.createImage(bytes)` + fill write                                                    |
+| Image preview → `image-upload:result` bytes                     | ≤ 200 ms     | `figma.getImageByHash` + byte transfer                                                     |
 
 **Large-doc threshold:** Pages with > 5000 nodes. On such pages, `figma.currentPage.findAll(isSlide)` may exceed 100 ms. The code side must set `figma.skipInvisibleInstanceChildren = true` before the scan (Sprint 1) and report progress if the result takes > 200 ms. The ui shows a "Scanning..." state until `slide-list:result` arrives.
 
@@ -171,28 +171,33 @@ Every `apply-*:result` message carries a `Result<T, WelderError>` envelope where
 
 ```ts
 type WelderErrorCode =
-  | 'NOT_FOUND'           // node no longer exists on canvas (deleted while plugin was open)
-  | 'INVALID_INPUT'       // payload failed Zod validation at code-side boundary
+  | 'NOT_FOUND' // node no longer exists on canvas (deleted while plugin was open)
+  | 'INVALID_INPUT' // payload failed Zod validation at code-side boundary
   | 'LIBRARY_VAR_MISSING' // importVariableByKeyAsync failed (free plan, library unlinked)
-  | 'NODE_TYPE_MISMATCH'  // found node is not the expected type (e.g., TEXT expected, FRAME found)
-  | 'MUTATION_FAILED'     // figma.* call threw unexpectedly (read-only file, collaborative conflict)
-  | 'TIMEOUT';            // withTimeout guard expired (Sprint 1 primitive)
+  | 'NODE_TYPE_MISMATCH' // found node is not the expected type (e.g., TEXT expected, FRAME found)
+  | 'MUTATION_FAILED' // figma.* call threw unexpectedly (read-only file, collaborative conflict)
+  | 'TIMEOUT'; // withTimeout guard expired (Sprint 1 primitive)
 ```
 
 Error categories:
 
-| Category | Examples | ui response |
-|---|---|---|
-| User-correctable | `INVALID_INPUT` (empty required field), `NOT_FOUND` (deleted node) | Inline validation error or toast with actionable copy |
-| Plugin-internal | `INVALID_INPUT` from code-side Zod (schema mismatch after VERSION bump) | Toast + console.error; user should not see this in normal operation |
-| Figma-side | `MUTATION_FAILED` (read-only community file), `LIBRARY_VAR_MISSING` | Toast with explanation; degrade gracefully (apply text without variable binding) |
-| Unexpected | Any thrown error caught by the top-level handler in `code/main.ts` | `error` fire-and-forget message to ui; toast "Something went wrong; please retry" |
+| Category         | Examples                                                                | ui response                                                                       |
+| ---------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| User-correctable | `INVALID_INPUT` (empty required field), `NOT_FOUND` (deleted node)      | Inline validation error or toast with actionable copy                             |
+| Plugin-internal  | `INVALID_INPUT` from code-side Zod (schema mismatch after VERSION bump) | Toast + console.error; user should not see this in normal operation               |
+| Figma-side       | `MUTATION_FAILED` (read-only community file), `LIBRARY_VAR_MISSING`     | Toast with explanation; degrade gracefully (apply text without variable binding)  |
+| Unexpected       | Any thrown error caught by the top-level handler in `code/main.ts`      | `error` fire-and-forget message to ui; toast "Something went wrong; please retry" |
 
 The top-level handler in `code/main.ts` catches all unhandled exceptions and sends:
+
 ```ts
-figma.ui.postMessage({ type: 'error', version: MESSAGE_BUS_VERSION,
-  payload: { message: err.message, code: 'UNEXPECTED' } });
+figma.ui.postMessage({
+  type: 'error',
+  version: MESSAGE_BUS_VERSION,
+  payload: { message: err.message, code: 'UNEXPECTED' },
+});
 ```
+
 It does NOT call `figma.closePlugin()` — the user should be able to retry without reopening the plugin.
 
 ---
@@ -261,8 +266,8 @@ The following async calls are fired in parallel at plugin init (before waiting f
 ```ts
 // code/main.ts initialization block
 const [fonts, accentVars] = await Promise.all([
-  preloadRequiredFonts(),      // figma.loadFontAsync for all REQUIRED_FONTS
-  loadAccentVars(),             // figma.variables.importVariableByKeyAsync(TEXT_KEY, TEXT_DIMMER_KEY)
+  preloadRequiredFonts(), // figma.loadFontAsync for all REQUIRED_FONTS
+  loadAccentVars(), // figma.variables.importVariableByKeyAsync(TEXT_KEY, TEXT_DIMMER_KEY)
 ]);
 ```
 
