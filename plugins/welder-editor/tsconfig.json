@@ -9,6 +9,13 @@
     },
     "types": ["@figma/plugin-typings", "vite/client"]
   },
-  "include": ["code/**/*", "ui/**/*", "shared/**/*", "tests/**/*", "vite.config.ts"],
+  "include": [
+    "code/**/*",
+    "ui/**/*",
+    "shared/**/*",
+    "tests/**/*",
+    "vite.config.ts",
+    "../../validation/fixtures/**/*"
+  ],
   "exclude": ["node_modules", "dist"]
 }

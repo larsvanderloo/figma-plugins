@@ -23,7 +23,12 @@ export default mergeConfig(
       // setActivePinia(createPinia()) pattern. See tests/setup.ts for details.
       // Node 25 compatibility: tests/setup.ts installs a localStorage shim before
       // Pinia is dynamically imported. See tests/setup.ts for the full explanation.
-      setupFiles: ['./tests/setup.ts'],
+      //
+      // setup.code.ts installs the global figma stub (figma.mixed sentinel) for
+      // code-side tests (node environment). It uses an `if undefined` guard so it
+      // is harmless in jsdom — ui-side tests never import figma.* code. Inline
+      // figma stubs in wrappers.test.ts have been removed in favour of this file.
+      setupFiles: ['./tests/setup.ts', './tests/setup.code.ts'],
       // ui-side tests need a DOM; code-side and tools tests run in node.
       // tests/ui/**   → jsdom  (default)
       // tests/code/** → node

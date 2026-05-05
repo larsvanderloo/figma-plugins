@@ -4,25 +4,18 @@
 // Covers: CopyWrap, Badge, ImageWrap, CardWrap, TimelineWrap, TableWrap, JourneyWrap.
 // No ChartWrap — ADR-0007.
 //
-// Uses inline mocks. plugin-tester refactors to shared fixtures in Wave 2b.
+// Shared fixtures from validation/fixtures/figma-mock/ replace the inline
+// helpers that previously lived in this file (refactored in Sprint 1, task 1.14).
+// figma.mixed is installed by tests/setup.code.ts before any import runs.
 //
 // Owner: figma-api-engineer
 
 import { describe, it, expect, vi } from 'vitest';
-
-// Stub globalThis.figma for code-side tests (node environment has no figma global).
-// Only stub what is actually needed by the modules under test.
-const _globalAny = globalThis as unknown as Record<string, unknown>;
-if (typeof _globalAny['figma'] === 'undefined') {
-  Object.defineProperty(globalThis, 'figma', {
-    value: {
-      // figma.mixed is a sentinel used in fill checks.
-      mixed: Symbol('figma.mixed'),
-    },
-    writable: true,
-    configurable: true,
-  });
-}
+import {
+  makeTextNode,
+  makeInstanceNode,
+  makeFrameNode,
+} from '../../../../validation/fixtures/figma-mock';
 
 import { extractCopyWrap } from '../../code/wrappers/CopyWrap';
 import { extractBadge } from '../../code/wrappers/Badge';
@@ -31,57 +24,6 @@ import { extractCardsFromScope } from '../../code/wrappers/CardWrap';
 import { extractCopyWrapItems } from '../../code/wrappers/TimelineWrap';
 import { scanTableSlotNode } from '../../code/wrappers/TableWrap';
 import { scanJourneySlotNode } from '../../code/wrappers/JourneyWrap';
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function makeTextNode(overrides: Record<string, unknown> = {}): TextNode {
-  return {
-    type: 'TEXT',
-    id: 'text-' + Math.random().toFixed(6),
-    name: 'Text',
-    characters: '',
-    visible: true,
-    parent: null,
-    ...overrides,
-  } as unknown as TextNode;
-}
-
-function makeInstanceNode(overrides: Record<string, unknown> = {}): InstanceNode {
-  return {
-    type: 'INSTANCE',
-    id: 'inst-' + Math.random().toFixed(6),
-    name: 'Instance',
-    visible: true,
-    parent: null,
-    componentProperties: {} as unknown as InstanceNode['componentProperties'],
-    findOne: vi.fn().mockReturnValue(null),
-    findAll: vi.fn().mockReturnValue([]),
-    findChild: vi.fn().mockReturnValue(null),
-    getPluginData: vi.fn().mockReturnValue(''),
-    setPluginData: vi.fn(),
-    setProperties: vi.fn(),
-    setRelaunchData: vi.fn(),
-    ...overrides,
-  } as unknown as InstanceNode;
-}
-
-function makeFrameNode(overrides: Record<string, unknown> = {}): FrameNode {
-  return {
-    type: 'FRAME',
-    id: 'frame-' + Math.random().toFixed(6),
-    name: 'Frame',
-    visible: true,
-    parent: null,
-    children: [],
-    findOne: vi.fn().mockReturnValue(null),
-    findAll: vi.fn().mockReturnValue([]),
-    getPluginData: vi.fn().mockReturnValue(''),
-    setPluginData: vi.fn(),
-    ...overrides,
-  } as unknown as FrameNode;
-}
 
 // ---------------------------------------------------------------------------
 // CopyWrap extractor
@@ -131,7 +73,7 @@ describe('extractCopyWrap', function () {
       name: 'Heading',
       characters: 'Title',
       visible: true,
-      parent: slide,
+      parent: slide as unknown as Record<string, unknown>,
     });
 
     const copyWrap = makeInstanceNode({
@@ -184,7 +126,6 @@ describe('extractBadge', function () {
 
 describe('extractImageWrap', function () {
   it('returns imageHash from IMAGE fill on named slot', function () {
-    // Stub figma.mixed for fill check
     const imageNode = {
       type: 'FRAME',
       id: 'img-slot',
