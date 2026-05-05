@@ -1,11 +1,10 @@
 // sections/TableEditor/src/index.ts — barrel export.
 //
-// TableEditor section — CSV import schema + parser foundation.
-// TableEditor.vue is 4.1's job and is NOT exported here yet.
+// TableEditor section — CSV import schema + parser + TableEditor.vue composite view.
 //
 // Consumer usage (from a plugin):
-//   import { parseCsv, DEFAULT_CSV_PARSE_CONFIG } from '@figma-plugins/sections-table-editor';
-//   import type { TableData, TableRow, TableCell, CsvParseError, CsvParseConfig } from '@figma-plugins/sections-table-editor';
+//   import { TableEditor, parseCsv, DEFAULT_CSV_PARSE_CONFIG } from '@figma-plugins/sections-table-editor';
+//   import type { TableData, TableRow, TableCell, CsvParseError, CsvParseConfig, TableWrapModel } from '@figma-plugins/sections-table-editor';
 //
 // Owner: ui-engineer.
 
@@ -26,3 +25,13 @@ export type {
   CsvParseConfig,
   CsvParseError,
 } from './csv-schema.js';
+
+export { default as TableEditor } from './TableEditor.vue';
+
+export type {
+  TableEditorProps,
+  TableEditorEmits,
+  TableWrapModel,
+  TableRowModel,
+  TableCellModel,
+} from './TableEditor.vue';
