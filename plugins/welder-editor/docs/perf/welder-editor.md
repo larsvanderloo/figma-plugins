@@ -1,6 +1,6 @@
 # welder-editor — performance budget
 
-**Status:** Active (Sprint 0, v0.1.0)
+**Status:** Active (Sprint 2 close)
 **Date:** 2026-05-05
 **Authority:** ADR-0003 (`docs/adr/0003-welder-editor-bundle-budget.md`)
 **Owners:** figma-api-engineer (code-side), ui-engineer (ui-side)
@@ -16,14 +16,14 @@ All sizes are **minified + gzipped**. Numbers come from ADR-0003 (Accepted, 2026
 | Artifact       | Budget               | Baseline (ext. build v0.2.1)  | Notes                     |
 | -------------- | -------------------- | ----------------------------- | ------------------------- |
 | `dist/code.js` | **≤ 60 KB gzipped**  | ~24 KB gzip (code logic only) | See structural note below |
-| `dist/ui.html` | **≤ 250 KB gzipped** | 339 KB gzip                   | Stretch target: ≤ 200 KB  |
+| `dist/ui.js`   | **≤ 250 KB gzipped** | 339 KB gzip                   | Stretch target: ≤ 200 KB  |
 
 **Stretch targets** (achievable with the reduction levers in ADR-0003):
 
 | Artifact       | Stretch target   |
 | -------------- | ---------------- |
 | `dist/code.js` | ≤ 40 KB gzipped  |
-| `dist/ui.html` | ≤ 200 KB gzipped |
+| `dist/ui.js`   | ≤ 200 KB gzipped |
 
 ### Structural note on the code-side baseline
 
@@ -37,8 +37,8 @@ The monorepo uses `figma.showUI(__html__, ...)` where `__html__` is Figma's buil
 pnpm build
 # code-side
 gzip -c dist/code.js | wc -c
-# ui-side
-gzip -c dist/ui.html | wc -c
+# ui-side (JS bundle; dist/ui/index.html is the trivial HTML shell, not gated)
+gzip -c dist/ui.js | wc -c
 ```
 
 ---
@@ -139,3 +139,109 @@ See ADR-0003 §Per-layer reduction targets — ui-side for the full detail. Summ
 1. **Ratchet downward each release.** v0.2.0 must not exceed v0.1.0's actual measured gzipped size at release (not the budget).
 2. **Budget delta requires its own ADR.** Any dependency adding > 50 KB gzip to either bundle requires an ADR before the PR merges.
 3. **Per-sprint gate.** Every sprint RC posts gzip measurements in the PR description. PRs exceeding budget are blocked.
+
+---
+
+## Sprint 2 measurement (post-assembly)
+
+**Measured:** 2026-05-05 — commit 2ca82e9 (PR #23, App.vue assembly, all 7 sections wired)
+**Built with:** `pnpm --filter @figma-plugins/welder-editor build` (Vite 5.4.21, production)
+**Measurement command:** `gzip -c dist/<artifact> | wc -c`
+
+### Total measured sizes (gzipped)
+
+| Artifact                | Measured (bytes) | Measured (KB) | Budget        | % of budget | Status |
+| ----------------------- | ---------------- | ------------- | ------------- | ----------- | ------ |
+| `dist/code.js`          | 10,807           | 10.55 KB      | 60 KB         | 17.6%       | PASS   |
+| `dist/ui.js`            | 45,901           | 44.83 KB      | 250 KB        | 17.9%       | PASS   |
+| `dist/ui.css`           | 2,442            | 2.38 KB       | (informative) | —           | —      |
+| `dist/ui/index.html`    | 270              | 0.26 KB       | (informative) | —           | —      |
+| `dist/lucide-subset.js` | 1,661            | 1.62 KB       | (informative) | —           | —      |
+| `dist/messages.js`      | 58               | 0.06 KB       | (informative) | —           | —      |
+
+`dist/ui.js` is the budgeted artifact. `dist/lucide-subset.js` is loaded on demand (dynamic import from IconPicker); it does not contribute to initial-load cost.
+
+### Per-section breakdown (from rollup-plugin-visualizer, `dist/bundle-stats.html`)
+
+These are per-module gzip estimates as reported by the visualizer. Individual-module estimates sum to ~82 KB; the actual combined bundle is 44.83 KB gzip because gzip compresses cross-module repeated patterns across the whole file. Use the actual measured total as the authoritative number; use this breakdown only to track proportional contributors.
+
+**Runtime infrastructure (ui.js)**
+
+| Module group                                                          | Gzip estimate |
+| --------------------------------------------------------------------- | ------------- |
+| Vue 3 runtime (@vue/shared + reactivity + runtime-core + runtime-dom) | ~44.3 KB      |
+| @iconify/vue runtime                                                  | ~11.6 KB      |
+| Pinia + pinia-plugin-persistedstate                                   | ~4.5 KB       |
+| Vite module-preload + preload helpers                                 | ~1.3 KB       |
+
+Note: the Vue 3 runtime per-module estimates (~44 KB) are larger than the entire measured ui.js bundle (44.83 KB) because gzip achieves significant cross-file savings at the full-bundle level. The runtime accounts for the dominant share of raw bytes; section code is proportionally small.
+
+**Sections (ui.js)**
+
+| Section                                                           | Gzip estimate |
+| ----------------------------------------------------------------- | ------------- |
+| SlidePicker                                                       | ~1.5 KB       |
+| TabStrip                                                          | ~1.5 KB       |
+| PropertyPanel                                                     | ~1.2 KB       |
+| TitleDescriptionEditor                                            | ~1.3 KB       |
+| BadgeEditor                                                       | ~1.1 KB       |
+| IconPicker (icons.ts + Vue component; excl. @iconify/vue runtime) | ~2.2 KB       |
+| ImageEditor (ImageEditor.vue + CropperCanvas.vue + cropMath.ts)   | ~5.5 KB       |
+
+**Components + App assembly (ui.js)**
+
+| Module group                                        | Gzip estimate |
+| --------------------------------------------------- | ------------- |
+| Components (FormGroup + InputField + StatusMessage) | ~0.8 KB       |
+| App.vue + main.ts + useEditorStore + composables    | ~5.5 KB       |
+
+**Code-side (code.js) — full bundle 10.55 KB gzip**
+
+| Module group                                                                    | Gzip estimate |
+| ------------------------------------------------------------------------------- | ------------- |
+| packages/figma-api (router + selection + fonts + mutate + progress + variables) | ~1.8 KB       |
+| code/ logic (slide-machine + 7 wrappers + icon-swap + persistence + main)       | ~17.1 KB      |
+
+The combined file compresses to 10.55 KB; cross-module repetition (shared type-guard patterns across wrappers, shared imports from slide-machine) drives substantial savings.
+
+### Comparison vs ADR-0003 budgets and stretch targets
+
+| Artifact       | Measured | Hard budget | Stretch target | vs hard budget | vs stretch     |
+| -------------- | -------- | ----------- | -------------- | -------------- | -------------- |
+| `dist/code.js` | 10.55 KB | 60 KB       | 40 KB          | 82.4% headroom | 73.6% headroom |
+| `dist/ui.js`   | 44.83 KB | 250 KB      | 200 KB         | 82.1% headroom | 77.6% headroom |
+
+Both artifacts beat the stretch targets by a wide margin at Sprint 2 close.
+
+### Headroom remaining for Sprint 3+ sections
+
+Sprint 3 and 4 will add: CardList, CardEditor, TimelineEditor, TableEditor, JourneyEditor.
+
+ADR-0003 estimated these at:
+
+- TableEditor (async component, Sprint 4): ~10–15 KB gzip savings when split-loaded; before split, adds ~8 KB raw render/slot code
+- JourneyEditor (async component, Sprint 4): ~15–20 KB gzip savings when split-loaded; before split, adds ~13 KB raw
+- CardList + CardEditor + TimelineEditor (Sprint 3): no split planned; estimated ~6–10 KB gzip total addition to ui.js
+
+Worst-case estimate for Sprint 4 close (before lazy-loading TableEditor and JourneyEditor): ui.js may reach ~65–75 KB gzip. This remains well under the 200 KB stretch target and under 30% of the 250 KB hard budget. If lazy-loading is applied per ADR-0003 §lever 5 and 6, Sprint 4 initial-load ui.js should stay below ~55 KB gzip.
+
+### Reduction levers exercised in Sprint 1 and Sprint 2
+
+These decisions are already locked in and reducing bundle size relative to the external baseline:
+
+- **Hand-rolled type guards instead of Zod on code-side** (lever A): Zod runtime (~13–21 KB gzip) is absent from code.js. Confirmed by visualizer — no Zod entry.
+- **Dynamic-import icon manifest** (lever 1): `lucide-subset.js` is 1.62 KB gzip and loaded on demand. Not part of the initial-load budget.
+- **Native HTML in sections instead of Nuxt UI** (Sprint 2 retro item): sections use native `<input>`, `<select>`, `<button>` — no Nuxt UI component imports appear in the visualizer. This is the primary reason ui.js is 44.83 KB rather than the ADR-estimated 60–80 KB for a Nuxt UI-heavy bundle. The tradeoff: sections need manual accessibility wiring (labels, ARIA, focus management), which is a Sprint 2 retro audit item for ui-engineer.
+- **cropperjs not present** (lever 4): cropperjs is absent from ui.js. ImageEditor uses a custom canvas-based CropperCanvas.vue (3.3 KB gzip). This differs from the ADR-0003 assumption of using the cropperjs library (~25 KB gzip); actual cost is ~13x lower.
+- **Vue 3 production build** (lever 7): NODE_ENV=production confirmed; devtools-api is tree-shaken out of the production bundle.
+
+### Levers NOT yet exercised (reserved for later sprints)
+
+- **Nuxt UI v4 tree-shaking** (lever 2): Nuxt UI is not currently imported into sections. If added for a future section, tree-shaking must be verified via visualizer before merge.
+- **Tailwind CSS v4 content purge** (lever 3): Tailwind purge is handled by Vite automatically; `dist/ui.css` is 2.38 KB gzip — confirmed minimal.
+- **JourneyEditor split-loading** (lever 5): async component; apply in Sprint 4 when JourneyEditor is introduced.
+- **TableEditor split-loading** (lever 6): async component; apply in Sprint 4 when TableEditor is introduced.
+
+### Next update
+
+Re-measure after Sprint 4 close. Sprint 4 adds the heaviest editors (TableEditor + JourneyEditor). The frame-trace gate for TableEditor toggle (< 16 ms per T42.21) is a hard merge gate for the Sprint 4 TableEditor RC; document results in this section at that time.
