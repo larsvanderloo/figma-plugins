@@ -1,12 +1,23 @@
-// Vite config for a Figma plugin. Two entries:
-//   - code/main.ts → dist/code.js (IIFE — Figma sandbox doesn't support ES modules)
-//   - ui/index.html → dist/ui/index.html (standard Vite app, loaded in iframe)
+// Vite config for the Figma plugin UI entry (iframe side only).
+//
+//   ui/index.html → dist/ui/index.html (standard Vite app, loaded in iframe)
+//
+// The code-side entry (code/main.ts → dist/code.js) is built by a separate
+// config — vite.code.config.ts — because Figma's plugin runtime requires a
+// single-file IIFE with no ES import/export statements.  Merging both entries
+// into one config caused Rollup to split shared/messages.ts into a separate
+// dist/messages.js chunk, which the sandbox rejected with "Syntax error on
+// line 1: Unexpected token".
+//
+// Build script (package.json): `vite build && vite build --config vite.code.config.ts`
+//   1. This config clears dist/ (emptyOutDir: true) and writes ui artifacts.
+//   2. vite.code.config.ts appends dist/code.js without clearing.
 //
 // Rollup places HTML entries in a subdirectory named after the entry key, so
 // the named entry `ui` produces dist/ui/index.html, not dist/ui.html.
 // manifest.json references dist/code.js and dist/ui/index.html accordingly.
-// During `vite build --watch` (dev), Vite serves the ui from a localhost URL;
-// in dev, manually re-import the manifest in Figma after big changes to refresh.
+// During `vite build --watch` (dev), run both watch processes or use the
+// dedicated dev scripts; manually re-import the manifest in Figma after changes.
 //
 // Bundle visualizer: active only during production builds (`pnpm build`).
 // Outputs dist/bundle-stats.html — use it to check against the ADR-0003 budget.
@@ -52,7 +63,6 @@ export default defineConfig(({ command, mode }) => ({
     emptyOutDir: true,
     rollupOptions: {
       input: {
-        code: resolve(root, 'code/main.ts'),
         ui: resolve(root, 'ui/index.html'),
       },
       output: {
