@@ -15,14 +15,26 @@
  *
  * @iconify/vue is already a transitive dep via @nuxt/ui — zero new bundle cost.
  *
+ * ## Primitives used (Sprint 3 migration — MON-2893969759)
+ *
+ * InputField replaces the inline <label sr-only> + <input type="search">
+ * pattern. InputField with hideLabel=true keeps the label in the a11y tree
+ * while hiding it visually — matching the original sr-only label. The
+ * type="search" prop is forwarded to the native input so that the browser
+ * renders the correct searchbox role and the native clear button.
+ *
+ * StatusMessage replaces the inline <p role="status" aria-live="polite"
+ * aria-atomic="true"> pattern. It is always rendered (never v-if'd away)
+ * so the live region is registered before announcements are needed.
+ *
  * ## Accessibility
  *
  * Search field:
- *   - `<input type="search">` — browser-native clear button + semantics.
- *   - Explicit `<label>` associated via `for`/`id` (visually hidden, always
- *     announced by screen readers).
- *   - `aria-controls` points to the grid so screen readers can navigate to
- *     results.
+ *   - InputField with type="search" and hideLabel=true — browser-native
+ *     searchbox role, sr-only label "Search icons", visible focus ring.
+ *   - aria-controls dropped: not required by WCAG 2.1 AA and not forwarded
+ *     by InputField. Can be re-added via InputField prop expansion in a
+ *     follow-up if roving focus / grid navigation is added.
  *
  * Grid:
  *   - `role="listbox"` with `aria-label` for independent landmark.
@@ -33,21 +45,17 @@
  *     standard grid navigation). Arrow-key roving focus within the grid is
  *     NOT implemented at this stage — each button is independently tabbable,
  *     which keeps the keyboard contract simple and WCAG 2.1 AA compliant.
- *     Arrow-key roving can be added in a follow-up sprint if the grid grows
- *     large enough to warrant it.
  *
  * Loading state:
- *   - `aria-busy="true"` on the grid while the manifest loads.
- *   - A visually visible + screen-reader-announced "Loading icons…" message.
+ *   - StatusMessage variant="status" announces "Loading icons…" while the
+ *     manifest loads. The element is always in the DOM (StatusMessage's
+ *     invariant) so the live region is registered before the announcement.
+ *   - `aria-busy="true"` on the empty grid placeholder.
  *
  * Disabled state:
- *   - Search input and all icon buttons receive `disabled`.
- *   - `aria-disabled="true"` on the grid container.
- *
- * Color contrast:
- *   - Selected icon: ring-blue-500 (tokens.primary.500) — 3:1 UI contrast met.
- *   - Text labels: not shown (icon-only grid); aria-label handles screen readers.
- *   - Icon stroke is currentColor — adapts to light/dark context color.
+ *   - InputField disabled prop disables the search input.
+ *   - All icon buttons receive `disabled`.
+ *   - `aria-disabled="true"` on the listbox container.
  *
  * No host shortcuts are shadowed (Cmd-Z, Cmd-D, Cmd-A, etc.).
  *
@@ -77,6 +85,7 @@
 
 import { ref, computed, onMounted, useId } from 'vue';
 import { Icon } from '@iconify/vue';
+import { InputField, StatusMessage } from '@figma-plugins/components';
 import { ICON_KEYS, loadIconManifest } from './icons.js';
 
 // ---------------------------------------------------------------------------
@@ -112,8 +121,6 @@ const emit = defineEmits<IconPickerEmits>();
 // Stable IDs for ARIA associations
 // ---------------------------------------------------------------------------
 
-const searchInputId = useId();
-const searchLabelId = useId();
 const gridId = useId();
 
 // ---------------------------------------------------------------------------
@@ -142,6 +149,20 @@ const filteredIcons = computed<readonly string[]>(() => {
 });
 
 // ---------------------------------------------------------------------------
+// Status message for live region
+// ---------------------------------------------------------------------------
+
+/**
+ * Message shown in the status live region.
+ * Empty string when the grid is populated — StatusMessage renders nothing.
+ */
+const statusMessage = computed<string>(() => {
+  if (!manifestReady.value) return 'Loading icons…';
+  if (filteredIcons.value.length === 0) return `No icons match "${searchQuery.value}"`;
+  return '';
+});
+
+// ---------------------------------------------------------------------------
 // Selection
 // ---------------------------------------------------------------------------
 
@@ -161,39 +182,27 @@ function iconName(key: string): string {
 
 <template>
   <div class="icon-picker flex flex-col gap-2">
-    <!-- Search -->
-    <div class="flex flex-col gap-1">
-      <!--
-        Visually-hidden label: present for screen readers but not cluttering
-        the compact plugin UI. The search input type also provides native
-        search semantics.
-      -->
-      <label :id="searchLabelId" :for="searchInputId" class="sr-only"> Search icons </label>
-
-      <input
-        :id="searchInputId"
-        v-model="searchQuery"
-        type="search"
-        :placeholder="placeholder"
-        :disabled="disabled"
-        :aria-labelledby="searchLabelId"
-        :aria-controls="manifestReady && filteredIcons.length > 0 ? gridId : undefined"
-        autocomplete="off"
-        spellcheck="false"
-        class="w-full rounded border border-gray-200 bg-white px-2.5 py-1.5 text-sm leading-tight text-gray-800 placeholder:text-gray-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-0 disabled:cursor-not-allowed disabled:opacity-50"
-        @search="searchQuery = ''"
-      />
-    </div>
+    <!-- Search — InputField with type="search" gives <input type="search"> -->
+    <!-- hideLabel=true renders the label as sr-only for AT, hidden visually. -->
+    <InputField
+      label="Search icons"
+      type="search"
+      :hide-label="true"
+      :model-value="searchQuery"
+      :placeholder="placeholder ?? 'Search icons...'"
+      :disabled="disabled ?? false"
+      :autocomplete="'off'"
+      @update:model-value="searchQuery = $event"
+    />
 
     <!--
-      Status region: announced by screen readers when content changes.
+      Status live region: always in the DOM so the live region is registered
+      before the first announcement (StatusMessage's invariant).
+      Announced by screen readers when content changes.
       Lives OUTSIDE the listbox so it does not violate aria-required-children
       (role="listbox" must only contain role="option" children).
     -->
-    <p role="status" aria-live="polite" aria-atomic="true" class="icon-picker__status">
-      <template v-if="!manifestReady">Loading icons…</template>
-      <template v-else-if="filteredIcons.length === 0">No icons match "{{ searchQuery }}"</template>
-    </p>
+    <StatusMessage :message="statusMessage" variant="status" />
 
     <!--
       Grid wrapper: provides the scrollable container.
@@ -248,18 +257,6 @@ function iconName(key: string): string {
 </template>
 
 <style scoped>
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
-
 /* Grid layout: compact, fixed-width cells, wrapping. */
 .icon-picker__grid {
   display: grid;

@@ -10,11 +10,22 @@
  * This section does NOT fetch data. It does NOT write to any Pinia store.
  * Data flows in via props; user actions flow out via emits.
  *
+ * ## Primitives used (Sprint 3 migration — MON-2893969759)
+ *
+ * StatusMessage (variant="alert") replaces the inline <p v-if="error"
+ * role="alert"> pattern. Mounted only when error is truthy so that
+ * queryByRole('alert') correctly returns null in non-error states — matching
+ * the behavioral contract the existing tests verify. This is acceptable
+ * because the error state is a discrete mode transition (not a frequent
+ * loading→loaded cycle), so mounting the live region at the moment of the
+ * error is fine from an AT announcement standpoint.
+ *
  * Accessibility:
  *   - Native <select> provides browser-native combobox + listbox + option semantics.
  *   - Explicit <label> associated via `for`/`id`. Screen readers announce the label.
  *   - Loading state announced via aria-busy on the wrapper.
- *   - Error state announced via role="alert" (live region, immediate).
+ *   - Error state announced via StatusMessage variant="alert" (role="alert",
+ *     aria-live="assertive"). Immediate announcement for error conditions.
  *   - Active slide distinguished with a text prefix ("✓") for screen readers
  *     that do not announce <option selected> reliably.
  *
@@ -24,6 +35,7 @@
  */
 
 import { computed, useId } from 'vue';
+import { StatusMessage } from '@figma-plugins/components';
 import type { SlideSummary } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -45,7 +57,7 @@ export interface SlidePickerProps {
   loading?: boolean;
   /**
    * Error message to display when the slide-list request failed.
-   * Rendered in a role="alert" live region for screen readers.
+   * Rendered in a StatusMessage variant="alert" live region for screen readers.
    */
   error?: string | null;
 }
@@ -180,9 +192,11 @@ function handleChange(event: Event): void {
       </span>
     </div>
 
-    <!-- Error message -->
-    <p v-if="error" role="alert" class="mt-0.5 text-xs text-red-600">
-      {{ error }}
-    </p>
+    <!--
+      Error message — mounted only when error is truthy so that
+      queryByRole('alert') returns null in non-error states (test contract).
+      StatusMessage with variant="alert" renders role="alert" aria-live="assertive".
+    -->
+    <StatusMessage v-if="error" variant="alert" :message="error" />
   </div>
 </template>
