@@ -4,7 +4,14 @@
 // plugin iframe context. Add component re-exports here as they land.
 //
 // Usage from a plugin:
-//   import { Button } from "@figma-plugins/components";
+//   import { InputField, FormGroup, StatusMessage } from "@figma-plugins/components";
 
-export {};
-// e.g. export { default as Button } from "./Button/Button.vue";
+// Sprint 2 — extracted from 6 merged sections (Task 2.13).
+export { FormGroup } from './FormGroup/index.js';
+export type { FormGroupProps } from './FormGroup/index.js';
+
+export { InputField } from './InputField/index.js';
+export type { InputFieldProps, InputFieldEmits } from './InputField/index.js';
+
+export { StatusMessage } from './StatusMessage/index.js';
+export type { StatusMessageProps, StatusMessageVariant } from './StatusMessage/index.js';
