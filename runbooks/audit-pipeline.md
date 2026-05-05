@@ -8,17 +8,17 @@ This runbook describes how external signals enter the team's workflow, get route
 
 ## 1. Intake sources and cadence
 
-| Channel | Cadence | Where it lands |
-|---|---|---|
-| Figma Community plugin reviews | Daily check | External Feedback board (Monday) |
-| Figma Community comments on listings | Daily check | External Feedback board |
-| Beta program feedback portal | Daily | External Feedback board, tagged `source:beta-<phase>` |
-| Support email (`support@<domain>`) | Daily | External Feedback board |
-| Friends of Figma (Slack / Discord) | Weekly | External Feedback board, tagged `source:friends-of-figma` |
-| Twitter mentions | Weekly | External Feedback board, tagged `source:twitter` |
-| Reddit r/FigmaDesign | Weekly | External Feedback board, tagged `source:reddit` |
-| Plugin telemetry (opt-in) | Daily | Aggregated dashboard, plus item per anomaly |
-| Figma plugin team correspondence | On contact | External Feedback board, marked Critical priority |
+| Channel                              | Cadence     | Where it lands                                            |
+| ------------------------------------ | ----------- | --------------------------------------------------------- |
+| Figma Community plugin reviews       | Daily check | External Feedback board (Monday)                          |
+| Figma Community comments on listings | Daily check | External Feedback board                                   |
+| Beta program feedback portal         | Daily       | External Feedback board, tagged `source:beta-<phase>`     |
+| Support email (`support@<domain>`)   | Daily       | External Feedback board                                   |
+| Friends of Figma (Slack / Discord)   | Weekly      | External Feedback board, tagged `source:friends-of-figma` |
+| Twitter mentions                     | Weekly      | External Feedback board, tagged `source:twitter`          |
+| Reddit r/FigmaDesign                 | Weekly      | External Feedback board, tagged `source:reddit`           |
+| Plugin telemetry (opt-in)            | Daily       | Aggregated dashboard, plus item per anomaly               |
+| Figma plugin team correspondence     | On contact  | External Feedback board, marked Critical priority         |
 
 Every item is logged within 24h of detection. Source attribution is required: URL or screenshot, author handle (or "anonymous user" with timestamp), context.
 
@@ -44,12 +44,12 @@ When a report is subjective, the curator's job is to either:
 
 ## 4. SLA targets
 
-| Severity | Acknowledge | Initial response | Resolution |
-|---|---|---|---|
-| P0 (crash, data loss, listing-blocking) | 4h | 4h | hotfix tagged within 24h |
-| P1 (blocking bug, accessibility violation) | 1 business day | 1 business day | next sprint |
-| P2 (regression, unconfirmed perceptual) | 2 business days | 2 business days | within 2 sprints |
-| P3 (cosmetic, feature request, docs) | 5 business days | 5 business days | sprint backlog |
+| Severity                                   | Acknowledge     | Initial response | Resolution               |
+| ------------------------------------------ | --------------- | ---------------- | ------------------------ |
+| P0 (crash, data loss, listing-blocking)    | 4h              | 4h               | hotfix tagged within 24h |
+| P1 (blocking bug, accessibility violation) | 1 business day  | 1 business day   | next sprint              |
+| P2 (regression, unconfirmed perceptual)    | 2 business days | 2 business days  | within 2 sprints         |
+| P3 (cosmetic, feature request, docs)       | 5 business days | 5 business days  | sprint backlog           |
 
 Acknowledgments are templated (`runbooks/response-templates.md`) and personalized.
 

@@ -33,13 +33,13 @@ Most plugin work follows this loop:
 
 Run across all workspace packages from the repo root:
 
-| Command | Purpose |
-|---|---|
-| `pnpm install` | Install dependencies for every package |
-| `pnpm -r typecheck` | `vue-tsc --noEmit` across every package |
-| `pnpm -r test` | `vitest run` across every package |
-| `pnpm -r lint` | ESLint + Prettier check across every package |
-| `pnpm -r build` | `vite build` for every plugin |
+| Command                  | Purpose                                                                   |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `pnpm install`           | Install dependencies for every package                                    |
+| `pnpm -r typecheck`      | `vue-tsc --noEmit` across every package                                   |
+| `pnpm -r test`           | `vitest run` across every package                                         |
+| `pnpm -r lint`           | ESLint + Prettier check across every package                              |
+| `pnpm -r build`          | `vite build` for every plugin                                             |
 | `pnpm -r --parallel dev` | Start dev mode for every plugin in parallel (rare; usually filter to one) |
 
 Filter to a single workspace:
@@ -66,11 +66,11 @@ export default defineConfig({
   build: {
     rollupOptions: {
       input: {
-        code: 'code/main.ts',           // bundled into dist/code.js
-        ui: 'ui/index.html',            // bundled into dist/ui.html + assets
+        code: 'code/main.ts', // bundled into dist/code.js
+        ui: 'ui/index.html', // bundled into dist/ui.html + assets
       },
       output: {
-        format: 'iife',                 // Figma sandbox needs IIFE for `code` bundle
+        format: 'iife', // Figma sandbox needs IIFE for `code` bundle
         entryFileNames: '[name].js',
       },
     },

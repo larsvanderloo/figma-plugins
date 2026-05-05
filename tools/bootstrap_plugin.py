@@ -95,9 +95,7 @@ def parse_editor_types(raw: str | None) -> list[str]:
     types = [t.strip() for t in raw.split(",") if t.strip()]
     bad = [t for t in types if t not in VALID_EDITOR_TYPES]
     if bad:
-        sys.exit(
-            f"error: unknown editor types {bad!r}. Valid: {sorted(VALID_EDITOR_TYPES)}"
-        )
+        sys.exit(f"error: unknown editor types {bad!r}. Valid: {sorted(VALID_EDITOR_TYPES)}")
     if not types:
         sys.exit("error: --editor-types must list at least one type")
     return types

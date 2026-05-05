@@ -7,10 +7,13 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ## [Unreleased]
 
 ### Added
+
 - Initial scaffold from `plugins/_template/`.
 
 ### Changed
+
 - —
 
 ### Fixed
+
 - —

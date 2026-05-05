@@ -8,6 +8,9 @@ export default defineConfig({
   test: {
     environment: 'node', // ui-side packages override to "jsdom"
     globals: false,
+    // packages without test files (e.g., packages/figma-api before its first test)
+    // shouldn't fail CI. Promote to false once every package has at least one test.
+    passWithNoTests: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html'],

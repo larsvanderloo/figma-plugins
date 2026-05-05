@@ -27,7 +27,9 @@ figma.ui.postMessage({
 // originating correlationId.
 figma.ui.onmessage = (msg: Message) => {
   if (msg.version !== MESSAGE_BUS_VERSION) {
-    console.error(`message-bus version mismatch: got ${msg.version}, expected ${MESSAGE_BUS_VERSION}`);
+    console.error(
+      `message-bus version mismatch: got ${msg.version}, expected ${MESSAGE_BUS_VERSION}`,
+    );
     return;
   }
   switch (msg.type) {

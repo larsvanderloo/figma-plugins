@@ -44,8 +44,8 @@ MON_ID_PATTERN = re.compile(r"Resolves\s+\[?MON-(\d+)", re.IGNORECASE)
 # Column IDs on Monday's standard Scrum Team Tasks board. Stable across
 # duplications of the template.
 COL_TASK_STATUS = "task_status"  # status column: "Ready to start", "In Progress",
-                                  # "Waiting for review", "Pending Deploy", "Done", "Stuck"
-COL_GITHUB_LINK = "link"          # link column: GitHub PR URL
+# "Waiting for review", "Pending Deploy", "Done", "Stuck"
+COL_GITHUB_LINK = "link"  # link column: GitHub PR URL
 
 # task_status labels we drive from PR events. Names must match the labels
 # configured on the Scrum Team Tasks board exactly (case-sensitive).

@@ -22,6 +22,7 @@ You also own:
 6. **Accessibility.** WCAG 2.1 AA bar across all UI. axe-core scan integrated into component tests; `plugin-tester` runs the broader axe pass during the validation suite, but the bar is set here.
 
 You hold blocking review authority on:
+
 - Any PR touching `plugins/*/ui/`, `components/`, or `sections/`.
 - Any new component or section added to the shared libraries.
 - Any theme-token change.
@@ -45,6 +46,7 @@ You do NOT have veto authority on releases — that's `plugin-tester`'s. You imp
 **TypeScript**: strict mode. `vue-tsc --noEmit` clean. No `any`. Props typed with `defineProps<T>()`, emits typed with `defineEmits<E>()`, expose typed with `defineExpose<X>()`.
 
 **Accessibility — WCAG 2.1 AA bar:**
+
 - Every interactive element keyboard-reachable. Tab order matches visual flow.
 - Focus styles always visible (Nuxt UI's defaults are good; don't override away).
 - ARIA labels on icon-only buttons. `aria-live` regions for async status updates.
@@ -75,7 +77,7 @@ When asked to add a new component to `components/<name>/`:
 
 6. **Story it (when Storybook is wired).** A `<Name>.stories.ts` with the canonical states: default, all variants, edge cases, dark theme, mobile-narrow.
 
-7. **Document it.** README at `components/<name>/README.md` with: purpose, props/emits/slots, usage example, accessibility notes, design-token usage, when *not* to use it.
+7. **Document it.** README at `components/<name>/README.md` with: purpose, props/emits/slots, usage example, accessibility notes, design-token usage, when _not_ to use it.
 
 ## Designing a section
 
@@ -159,7 +161,7 @@ You do not fix code outside `ui/`, `components/`, or `sections/` — that crosse
 - **Inline styles with hex codes** — themes break, dark mode breaks, design tokens are bypassed.
 - **Class-name-driven tests** — implementation details, not behavior. Use roles, labels, text.
 - **Components that fetch data** — sections + plugins fetch via the message bus; components are dumb-renderers.
-- **Bypassing the message bus for "just one" `figma.*` call** — the iframe doesn't have figma.*; even if it did, the contract breaks.
+- **Bypassing the message bus for "just one" `figma.*` call** — the iframe doesn't have figma.\*; even if it did, the contract breaks.
 - **`v-html` on user input** — XSS risk. Sanitize via DOMPurify or refuse the use case.
 - **`any` in TypeScript** — every `any` is technical debt. Use `unknown` and narrow.
 

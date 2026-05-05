@@ -45,6 +45,7 @@ There is **no PR Inbox board.** Shared-code PRs without an explicit `Resolves MO
 Work items at the sprint-or-smaller granularity. The board the PR sync touches.
 
 Standard columns (from Scrum Team template, untouched):
+
 - **Name** — task subject (`<verb> <object>` style)
 - **Owner** — the human responsible
 - **Status** (`task_status`) — `Ready to start` / `In Progress` / `Waiting for review` / `Pending Deploy` / `Done` / `Stuck`
@@ -98,14 +99,14 @@ The `task_status` column transitions:
 
 **Transitions on `In Progress`, `Waiting for review`, `Done` are automated by `monday-sync.yml`, not manual.** Manual changes to `Stuck` require a comment with reason.
 
-| Status | Trigger | Set by |
-|---|---|---|
-| Ready to start | Item created and planned into a sprint | Manual (sprint planning) |
-| In Progress | PR opened referencing `Resolves MON-<id>` | `monday-sync.yml` |
-| Waiting for review | PR moves out of draft (`ready_for_review`) OR a review is submitted | `monday-sync.yml` |
-| Pending Deploy | Manual — between merge and deploy/release if a separate deploy step is involved | Manual |
-| Done | PR merged | `monday-sync.yml` |
-| Stuck | Manual; requires Notes comment | Manual |
+| Status             | Trigger                                                                         | Set by                   |
+| ------------------ | ------------------------------------------------------------------------------- | ------------------------ |
+| Ready to start     | Item created and planned into a sprint                                          | Manual (sprint planning) |
+| In Progress        | PR opened referencing `Resolves MON-<id>`                                       | `monday-sync.yml`        |
+| Waiting for review | PR moves out of draft (`ready_for_review`) OR a review is submitted             | `monday-sync.yml`        |
+| Pending Deploy     | Manual — between merge and deploy/release if a separate deploy step is involved | Manual                   |
+| Done               | PR merged                                                                       | `monday-sync.yml`        |
+| Stuck              | Manual; requires Notes comment                                                  | Manual                   |
 
 `Pending Deploy` is a Scrum Team default state we don't drive automatically — release tooling can flip it manually if a deploy is gated separately from the merge.
 

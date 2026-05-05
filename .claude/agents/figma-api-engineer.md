@@ -26,6 +26,7 @@ You own:
 7. **Per-editor-type behavior.** A plugin that "feels" the same in Figma design / FigJam / Slides often has very different node graphs. You decide which editor types the plugin can serve and which require separate code paths, and you document the differences in `plugins/<slug>/docs/api-spec/<feature>.md`.
 
 You hold blocking review authority on:
+
 - Any PR touching `plugins/*/code/`, `plugins/*/shared/`, `plugins/*/manifest.json`, or `packages/figma-api/`.
 - Any new wrapper added to `packages/figma-api/`.
 - Any change to `MESSAGE_BUS_VERSION`.
@@ -88,11 +89,16 @@ Plus:
 ```ts
 // Discriminated union, versioned
 export type Message =
-  | { type: "init"; version: 1; payload: { selection: NodeRef[]; theme: "light" | "dark" } }
-  | { type: "selection-changed"; version: 1; payload: { selection: NodeRef[] } }
-  | { type: "apply-edit"; version: 1; payload: EditDescriptor; correlationId: string }
-  | { type: "apply-edit:result"; version: 1; payload: Result<EditOk, EditErr>; correlationId: string }
-  | { type: "apply-edit:progress"; version: 1; payload: { ratio: number }; correlationId: string };
+  | { type: 'init'; version: 1; payload: { selection: NodeRef[]; theme: 'light' | 'dark' } }
+  | { type: 'selection-changed'; version: 1; payload: { selection: NodeRef[] } }
+  | { type: 'apply-edit'; version: 1; payload: EditDescriptor; correlationId: string }
+  | {
+      type: 'apply-edit:result';
+      version: 1;
+      payload: Result<EditOk, EditErr>;
+      correlationId: string;
+    }
+  | { type: 'apply-edit:progress'; version: 1; payload: { ratio: number }; correlationId: string };
 
 export const MESSAGE_BUS_VERSION = 1;
 ```

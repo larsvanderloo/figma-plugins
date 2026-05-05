@@ -34,9 +34,7 @@ export function createRouter(opts: { version: number }) {
     },
     async handle(msg: MessageEnvelope<string, unknown>) {
       if (msg.version !== opts.version) {
-        console.error(
-          `message-bus version mismatch: got ${msg.version}, expected ${opts.version}`,
-        );
+        console.error(`message-bus version mismatch: got ${msg.version}, expected ${opts.version}`);
         return;
       }
       const handler = handlers.get(msg.type);

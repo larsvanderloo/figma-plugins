@@ -40,7 +40,7 @@ function close() {
 
 <template>
   <main class="p-4">
-    <h1 class="text-base font-semibold">{{plugin_name}}</h1>
+    <h1 class="text-base font-semibold">{{ plugin_name }}</h1>
     <p v-if="!ready" class="text-sm text-gray-500">Loading…</p>
     <div v-else>
       <p class="text-sm">Editor: {{ editorType }}</p>

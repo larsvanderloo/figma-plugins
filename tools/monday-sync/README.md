@@ -14,12 +14,12 @@ Owned by `project-pm`. The board template is Monday's standard **Scrum Team** (w
 
 Status transitions:
 
-| Event | Status set |
-|---|---|
-| PR opened | `In Progress` |
-| PR ready_for_review | `Waiting for review` |
-| Review submitted | `Waiting for review` |
-| PR merged | `Done` |
+| Event                   | Status set                                      |
+| ----------------------- | ----------------------------------------------- |
+| PR opened               | `In Progress`                                   |
+| PR ready_for_review     | `Waiting for review`                            |
+| Review submitted        | `Waiting for review`                            |
+| PR merged               | `Done`                                          |
 | PR closed without merge | (no change — set `Stuck` manually if abandoned) |
 
 ## What's intentionally NOT here

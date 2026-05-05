@@ -1,0 +1,32 @@
+# Prettier ignore — mirrors .gitignore for files Prettier shouldn't touch.
+
+# Build output
+dist/
+build/
+.vite/
+.cache/
+.output/
+
+# Per-plugin builds
+plugins/*/dist/
+components/dist/
+sections/*/dist/
+packages/*/dist/
+
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Lockfiles (pnpm format diverges from prettier)
+pnpm-lock.yaml
+package-lock.json
+yarn.lock
+
+# Python
+.venv/
+.venv-*/
+__pycache__/
+
+# Generated / large
+*.tsbuildinfo
+coverage/

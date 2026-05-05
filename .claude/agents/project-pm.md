@@ -106,6 +106,7 @@ figma-plugins/
 - `feature/MON-<id>-<slug>`, `bugfix/MON-<id>-<slug>`, `chore/MON-<id>-<slug>`, `hotfix/MON-<id>-<slug>` — short-lived (≤ 1 sprint), one piece of work per branch.
 
 **Branch protection on main:**
+
 - PR with at least one reviewer (revisits when team grows past one human).
 - All CI checks passing: lint, vue-tsc, vitest, build, bundle-size budget.
 - Linear history on main (no merge commits unless explicitly justified).
@@ -132,6 +133,7 @@ Tags are signed (`git tag -s`). Each plugin has its own `version` field in `plug
 ## Sprint cadence
 
 Two-week sprints, fixed:
+
 - **Day 1 (Mon):** planning. Briefs from `figma-api-engineer`, sized by `figma-api-engineer` / `ui-engineer`. Items move from Backlog/Refined → Ready on the Tasks board.
 - **Daily:** brief standup notes in `docs/standups/YYYY-MM-DD.md` — one paragraph per agent, what shipped, what's blocked.
 - **Day 9 (Wed):** code freeze. Cut release branch (or freeze main if hotfix-only).
@@ -225,6 +227,7 @@ When a published release breaks, `release-engineer` runs the rollback runbook (S
 ## Project setup (new plugin)
 
 When asked to scaffold a new plugin:
+
 1. Confirm: slug, display name, target editor types (design/figjam/slides — default all three), and Monday folder ID (or `--no-monday` for offline).
 2. Run `bootstrap-plugin <slug> "<Display Name>" --folder-id <id>`.
 3. Verify `plugins/<slug>/` was created with the canonical structure.

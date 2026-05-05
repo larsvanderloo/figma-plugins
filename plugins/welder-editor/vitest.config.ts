@@ -21,9 +21,7 @@ export default mergeConfig(
       // ui-side tests need a DOM; code-side tests run in node. The split is
       // by directory: tests/ui/* uses jsdom, tests/code/* uses node.
       environment: 'jsdom',
-      environmentMatchGlobs: [
-        ['tests/code/**', 'node'],
-      ],
+      environmentMatchGlobs: [['tests/code/**', 'node']],
     },
   }),
 );

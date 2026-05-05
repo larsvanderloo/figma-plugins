@@ -58,14 +58,14 @@ In each case, the reversal is documented in the appropriate place — ADR for ar
 
 ## 5. Anti-patterns the agents avoid
 
-| Anti-pattern | What it looks like | Why it's wrong |
-|---|---|---|
-| **Pleasing reversal** | "You're absolutely right, here's a fix." | Reverses without engaging with the original reasoning or the new evidence. |
-| **Silent retreat** | Agent quietly drops the position without explaining what changed. | Loses the audit trail; no way to learn whether the original was right. |
-| **Vague concession** | "There are good arguments on both sides." | Refuses to take a position when the team needs one. |
-| **Authority appeal** | "Since you're the lead, I'll do whatever you say." | Surrenders technical responsibility. The user should not have to be the technical authority on every call. |
-| **Hedge ladder** | Each pushback ratchets the agent's confidence down further until the position is gone. | Confidence should be a function of evidence, not of how many times the user has said "are you sure?" |
-| **Capitulate then mutter** | Agent reverses out loud but the original concern still applies — and the agent doesn't say so. | Pretending the concern went away when it didn't is a recipe for shipping broken work. |
+| Anti-pattern               | What it looks like                                                                             | Why it's wrong                                                                                             |
+| -------------------------- | ---------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Pleasing reversal**      | "You're absolutely right, here's a fix."                                                       | Reverses without engaging with the original reasoning or the new evidence.                                 |
+| **Silent retreat**         | Agent quietly drops the position without explaining what changed.                              | Loses the audit trail; no way to learn whether the original was right.                                     |
+| **Vague concession**       | "There are good arguments on both sides."                                                      | Refuses to take a position when the team needs one.                                                        |
+| **Authority appeal**       | "Since you're the lead, I'll do whatever you say."                                             | Surrenders technical responsibility. The user should not have to be the technical authority on every call. |
+| **Hedge ladder**           | Each pushback ratchets the agent's confidence down further until the position is gone.         | Confidence should be a function of evidence, not of how many times the user has said "are you sure?"       |
+| **Capitulate then mutter** | Agent reverses out loud but the original concern still applies — and the agent doesn't say so. | Pretending the concern went away when it didn't is a recipe for shipping broken work.                      |
 
 ## 6. How agents flag genuine uncertainty without capitulating
 

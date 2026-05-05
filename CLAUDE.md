@@ -38,24 +38,24 @@ Practical consequences:
 
 ## Agent ownership map
 
-| Path | Owner | Authority |
-|------|-------|-----------|
-| `components/`, `components/tokens/`, `sections/` | `ui-engineer` | Atomic UI primitives, design tokens, composite views — shared across plugins |
-| `packages/figma-api/` | `figma-api-engineer` | Typed wrappers around `figma.*`, message-bus router, manifest helpers |
-| `plugins/*/code/` | `figma-api-engineer` | Main-thread logic, document mutations, message-bus router |
-| `plugins/*/shared/` | `figma-api-engineer` | The contract; do not modify without an ADR or `MESSAGE_BUS_VERSION` bump |
-| `plugins/*/ui/` | `ui-engineer` | Iframe Vue app — assembly, styling, accessibility, state plumbing into the message bus |
-| `plugins/*/manifest.json` | `figma-api-engineer` | editorType, capabilities, network access, parameters |
-| `docs/perf/`, `plugins/*/docs/perf/`, bundle-size budgets | `figma-api-engineer` (code-side) + `ui-engineer` (ui-side) | Per-plugin perf budgets, hot-path review |
-| `validation/` (validation suite, e2e gauntlet) | `plugin-tester` | **Veto authority on releases.** Validation suite, e2e gauntlet, accessibility audits |
-| `validation/listening-tests/` (usability tests) | `plugin-tester` | Task-based protocols, panel recruitment, statistical analysis |
-| `Bugs Queue` board | `plugin-tester` | Triage, severity, owner-agent assignment |
-| `validation/submissions/` | `release-engineer` | Figma Community submission packages |
-| `tools/demos/`, demo CI, review site | `release-engineer` | Source library, demo tooling, review interface |
-| `runbooks/audit-pipeline.md`, External Feedback queue, beta program | `release-engineer` | External feedback pipeline, Community reviews, beta phases, Figma policy correspondence |
-| Release tagging, GitHub Releases, signing | `release-engineer` | Tag mechanics, artifact packaging, draft → published promotion |
-| `.github/`, `docs/adr/`, `runbooks/` (general) | `project-pm` | Process, branching, sprint cadence, ADRs, release timing (mechanics belong to release-engineer) |
-| `plugins/*/docs/product/research/**`, `plugins/*/docs/product/specs/**` (when explicitly asked) | `product-researcher` | Desk research + active-listening synthesis + quarterly external signal review |
+| Path                                                                                            | Owner                                                      | Authority                                                                                       |
+| ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `components/`, `components/tokens/`, `sections/`                                                | `ui-engineer`                                              | Atomic UI primitives, design tokens, composite views — shared across plugins                    |
+| `packages/figma-api/`                                                                           | `figma-api-engineer`                                       | Typed wrappers around `figma.*`, message-bus router, manifest helpers                           |
+| `plugins/*/code/`                                                                               | `figma-api-engineer`                                       | Main-thread logic, document mutations, message-bus router                                       |
+| `plugins/*/shared/`                                                                             | `figma-api-engineer`                                       | The contract; do not modify without an ADR or `MESSAGE_BUS_VERSION` bump                        |
+| `plugins/*/ui/`                                                                                 | `ui-engineer`                                              | Iframe Vue app — assembly, styling, accessibility, state plumbing into the message bus          |
+| `plugins/*/manifest.json`                                                                       | `figma-api-engineer`                                       | editorType, capabilities, network access, parameters                                            |
+| `docs/perf/`, `plugins/*/docs/perf/`, bundle-size budgets                                       | `figma-api-engineer` (code-side) + `ui-engineer` (ui-side) | Per-plugin perf budgets, hot-path review                                                        |
+| `validation/` (validation suite, e2e gauntlet)                                                  | `plugin-tester`                                            | **Veto authority on releases.** Validation suite, e2e gauntlet, accessibility audits            |
+| `validation/listening-tests/` (usability tests)                                                 | `plugin-tester`                                            | Task-based protocols, panel recruitment, statistical analysis                                   |
+| `Bugs Queue` board                                                                              | `plugin-tester`                                            | Triage, severity, owner-agent assignment                                                        |
+| `validation/submissions/`                                                                       | `release-engineer`                                         | Figma Community submission packages                                                             |
+| `tools/demos/`, demo CI, review site                                                            | `release-engineer`                                         | Source library, demo tooling, review interface                                                  |
+| `runbooks/audit-pipeline.md`, External Feedback queue, beta program                             | `release-engineer`                                         | External feedback pipeline, Community reviews, beta phases, Figma policy correspondence         |
+| Release tagging, GitHub Releases, signing                                                       | `release-engineer`                                         | Tag mechanics, artifact packaging, draft → published promotion                                  |
+| `.github/`, `docs/adr/`, `runbooks/` (general)                                                  | `project-pm`                                               | Process, branching, sprint cadence, ADRs, release timing (mechanics belong to release-engineer) |
+| `plugins/*/docs/product/research/**`, `plugins/*/docs/product/specs/**` (when explicitly asked) | `product-researcher`                                       | Desk research + active-listening synthesis + quarterly external signal review                   |
 
 When the boundary is unclear, consult `project-pm` before acting.
 
@@ -98,6 +98,7 @@ Do not skip steps. Do not let a downstream agent silently fix work owned by an u
 Trunk-based on `main`. Feature/chore/bugfix/hotfix branches off `main`; PRs target `main`. SemVer. Signed tags on `main` mark releases — see `runbooks/release-candidate-checklist.md` for the tagging discipline and pre-beta gate.
 
 Branch protection on `main` (Pro/free-tier limitations apply). PRs require:
+
 - Linked issue and Monday.com item ID (`Resolves MON-<id>`)
 - All CI checks green (lint, vue-tsc, vitest, @testing-library/vue, build, bundle-size budget)
 - `ui-engineer` approval for any change under `plugins/*/ui/`, `components/`, or `sections/`
@@ -146,6 +147,7 @@ Key invariants:
 - **MAJOR releases** can break message-bus contracts, but migrations must be implemented and tested.
 
 For new plugins, the build must pass (run by `plugin-tester`):
+
 - `vue-tsc --noEmit` clean (zero errors).
 - `vitest run` green.
 - `@testing-library/vue` component tests green.
@@ -161,24 +163,28 @@ For new plugins, the build must pass (run by `plugin-tester`):
 The Figma plugin runtime has two threads with strict separation. Crossing them outside the message bus is a blocking review comment from `figma-api-engineer`.
 
 In `code/` (Figma sandbox, runs `figma.*`):
+
 - No DOM access — no `document`, `window`, `localStorage`, `fetch` against arbitrary URLs (only `allowedDomains` from manifest).
 - No long-running synchronous loops over many nodes — batch via `figma.skipInvisibleInstanceChildren = true` and chunked iteration.
 - No silent error-eat — every operation returns a typed result through the message bus, success or failure.
 - Document mutations grouped under a single user-visible undo step where possible (`figma.commitUndo()` discipline).
 
 In `ui/` (iframe, runs Vue):
+
 - No `figma.*` imports — the iframe has no Figma API surface.
 - No direct DOM mutations outside Vue's reactivity (no `document.querySelector` shenanigans).
 - All state that depends on Figma comes through the message bus; the ui is a render of message-bus-derived state, not a parallel store.
 - Long ops show progress, are cancellable, and don't block first paint.
 
 Across the bus (`shared/messages.ts`):
+
 - Every message has a versioned, typed schema. Breaking schema changes bump the message-bus version and ship a migration.
 - Messages are validated at the boundary — both sides reject malformed input rather than crashing.
 
 ## Documentation requirements
 
 Every non-obvious decision becomes an ADR in `docs/adr/`. Every plugin ships with:
+
 - Bundle-size and render-perf budget documented in `docs/perf/<plugin>.md`.
 - Threading and message-bus model documented in `docs/threading/<plugin>.md`.
 - A rollback note in any PR that touches release-critical paths.
@@ -200,19 +206,19 @@ Two-step heuristic for "I have an idea — who do I talk to?"
 
 **Step 1: name the kind of work.**
 
-| If you're starting... | Talk to first |
-|---|---|
-| A new plugin | `project-pm` (scaffolds the repo + Monday folder), then `figma-api-engineer` (api-spec brief) |
-| A new section or component | `ui-engineer` |
-| A new feature on an existing plugin | `project-pm` for scope/sprint, then `figma-api-engineer` (if it touches code/shared) or `ui-engineer` (if ui-only) |
-| A bug report from a user | `release-engineer` (intake), then `plugin-tester` (triage on Bugs Queue) |
-| A perf concern (bundle size, slow render, large-doc latency) | `figma-api-engineer` (code-side) or `ui-engineer` (ui-side) |
-| A Figma API question / manifest / editor-type behavior | `figma-api-engineer` |
-| A UI/UX / accessibility / theming / Nuxt UI question | `ui-engineer` |
-| A validation / test / e2e gauntlet question | `plugin-tester` |
-| A release / Community submission / beta question | `release-engineer` |
-| A user-research / signal-review question | `product-researcher` |
-| A vague idea you haven't shaped yet | `project-pm` (acts as the front door) |
+| If you're starting...                                        | Talk to first                                                                                                      |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| A new plugin                                                 | `project-pm` (scaffolds the repo + Monday folder), then `figma-api-engineer` (api-spec brief)                      |
+| A new section or component                                   | `ui-engineer`                                                                                                      |
+| A new feature on an existing plugin                          | `project-pm` for scope/sprint, then `figma-api-engineer` (if it touches code/shared) or `ui-engineer` (if ui-only) |
+| A bug report from a user                                     | `release-engineer` (intake), then `plugin-tester` (triage on Bugs Queue)                                           |
+| A perf concern (bundle size, slow render, large-doc latency) | `figma-api-engineer` (code-side) or `ui-engineer` (ui-side)                                                        |
+| A Figma API question / manifest / editor-type behavior       | `figma-api-engineer`                                                                                               |
+| A UI/UX / accessibility / theming / Nuxt UI question         | `ui-engineer`                                                                                                      |
+| A validation / test / e2e gauntlet question                  | `plugin-tester`                                                                                                    |
+| A release / Community submission / beta question             | `release-engineer`                                                                                                 |
+| A user-research / signal-review question                     | `product-researcher`                                                                                               |
+| A vague idea you haven't shaped yet                          | `project-pm` (acts as the front door)                                                                              |
 
 **Step 2: bring the right artifact.**
 

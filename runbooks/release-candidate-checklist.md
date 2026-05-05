@@ -86,6 +86,7 @@ Per-plugin tags, scoped by plugin slug:
 ```
 
 Examples:
+
 - `welder-editor-v0.1.0`
 - `welder-editor-v1.0.0-rc.1`
 - `welder-editor-v1.0.0-beta.2`

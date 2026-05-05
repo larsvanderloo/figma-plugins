@@ -9,6 +9,7 @@
 We're starting a Figma-plugins team that will ship multiple plugins (first: welder-editor; more to follow) targeting Figma design, FigJam, and Figma Slides. The audio-plugins team in a sibling repo has a working professional setup — monorepo with shared components/sections, agent-driven ownership, Monday-sync, runbooks, learnings — that we want to mirror with a different domain.
 
 Open questions:
+
 - Monorepo vs per-plugin repos?
 - Shared component library structure?
 - How to map the audio-plugins agent philosophy to a UI-domain stack?
@@ -22,16 +23,17 @@ Open questions:
 
 **Agent roster — 6 agents, matching the Owner Agent dropdown labels in Monday workspace 6325546:**
 
-| Agent | Scope |
-|---|---|
-| `project-pm` | Process, structure, sprint cadence, ADRs, release timing (mechanics belong to release-engineer) |
-| `figma-api-engineer` | Plugin API surface, manifest, message-bus contract (`shared/messages.ts`), code-side TypeScript (`code/`), document mutations, persisted state, code-side bundle size and perf |
-| `ui-engineer` | Vue 3 + Nuxt UI v4 (`ui/`), atomic components, composite sections, design tokens, theming, accessibility, ui-side bundle size and render perf |
-| `plugin-tester` | Validation suite (vue-tsc, vitest, @testing-library/vue, axe), e2e gauntlet across design + FigJam + Slides, Bugs Queue triage, usability tests, accessibility audits, **veto authority on releases** |
-| `release-engineer` | Release pipeline (tagging, signing, GitHub Releases), Figma Community submissions, demo pipeline, external feedback intake, beta program, Figma plugin-policy correspondence |
-| `product-researcher` | Desk research, active-listening synthesis, quarterly external signal review (co-produced with release-engineer) |
+| Agent                | Scope                                                                                                                                                                                                 |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `project-pm`         | Process, structure, sprint cadence, ADRs, release timing (mechanics belong to release-engineer)                                                                                                       |
+| `figma-api-engineer` | Plugin API surface, manifest, message-bus contract (`shared/messages.ts`), code-side TypeScript (`code/`), document mutations, persisted state, code-side bundle size and perf                        |
+| `ui-engineer`        | Vue 3 + Nuxt UI v4 (`ui/`), atomic components, composite sections, design tokens, theming, accessibility, ui-side bundle size and render perf                                                         |
+| `plugin-tester`      | Validation suite (vue-tsc, vitest, @testing-library/vue, axe), e2e gauntlet across design + FigJam + Slides, Bugs Queue triage, usability tests, accessibility audits, **veto authority on releases** |
+| `release-engineer`   | Release pipeline (tagging, signing, GitHub Releases), Figma Community submissions, demo pipeline, external feedback intake, beta program, Figma plugin-policy correspondence                          |
+| `product-researcher` | Desk research, active-listening synthesis, quarterly external signal review (co-produced with release-engineer)                                                                                       |
 
 **Hierarchy:**
+
 - `components/` — atomic Vue primitives + design tokens (atop Nuxt UI v4)
 - `sections/` — composite reusable views built from components
 - `plugins/<slug>/` — per-plugin: `code/` (Figma sandbox), `ui/` (Vue iframe), `shared/` (message-bus contract), `tests/`, `docs/`, `validation/`
@@ -57,6 +59,7 @@ Open questions:
 ## Consequences
 
 **Positive:**
+
 - Single secret/variable setup for Monday sync.
 - Shared `components/` and `sections/` libraries reused across plugins via pnpm workspace links.
 - Cross-plugin refactors are single-PR.
@@ -65,16 +68,19 @@ Open questions:
 - Scrum Team's standard 6-board structure plus standard column schema means dashboards / burndown / velocity widgets all work out of the box.
 
 **Negative:**
+
 - Independent plugin release cadences are awkward in a monorepo (per-plugin tags help, but main is shared).
 - Workspace tooling (pnpm) adds a learning curve for contributors used to npm.
 - The 6-agent ceremony is moderate for a solo dev with one plugin; the framework will feel intentional once the second plugin lands.
 
 **Mitigations:**
+
 - Per-plugin tags scoped by slug (`welder-editor-v0.2.0`) decouple release cadences within the monorepo.
 - pnpm is well-documented and the `runbooks/local-development.md` covers the workflow.
 - The 6 agents are well-scoped — agent invocation is light when only one is needed.
 
 **Reversibility:**
+
 - Splitting to per-plugin repos later is straightforward via `git filter-repo --subdirectory-filter plugins/<slug>`.
 - Stack migrations (Vue 4, future Nuxt UI versions) follow the standard ADR process.
 - Agent roster adjustments require an ADR; no agent is locked in. Adding a 7th agent or splitting an existing one should be evaluated against whether it changes the Monday Owner Agent dropdown (which would be the same ADR scope).

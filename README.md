@@ -42,14 +42,17 @@ figma-plugins/
 1. **Clone this repo** to your machine.
 
 2. **Install Node tooling deps** (Node 20+, pnpm 9+):
+
    ```bash
    pnpm install
    ```
 
 3. **Install Python tooling deps** (Python 3.11+ for `tomllib`):
+
    ```bash
    pip install -e .
    ```
+
    (macOS: `brew install python@3.11` if not already.)
 
 4. **Set the GitHub repo secret** for Monday sync:
@@ -68,6 +71,7 @@ bootstrap-plugin <slug> "<Display Name>" --folder-id <monday-folder-id>
 ```
 
 Example:
+
 ```bash
 bootstrap-plugin token-extract "Token Extract" --folder-id <id>
 ```
@@ -94,9 +98,11 @@ There are two ways to invoke it.
 **Default — CI on self-hosted runner.** `monday-sync.yml` runs on every PR open / ready-for-review / close / review-submitted event. The runner is the local Mac (`runs-on: [self-hosted, macOS, ARM64]`), so there's no GitHub Actions billing exposure.
 
 **Fallback — local CLI.** If the runner is offline:
+
 ```bash
 sync-pr <pr-number> [event]    # event: opened (default) | ready_for_review | closed
 ```
+
 Reads `MONDAY_API_TOKEN` from `.monday-token` (gitignored) at the repo root, or the env var. Reads `GITHUB_TOKEN` from `gh auth token`. Same `tools/monday-sync/sync.py` code path as the workflow.
 
 ## Conventions

@@ -1,11 +1,16 @@
 name: Validate
 
-# Minimal CI gate. Validates every plugins/*/manifest.json against the Figma
-# manifest schema. Triggered on PRs, pushes to main, manual workflow_dispatch
-# from a Monday recipe, or `gh workflow run validate.yml`.
+# CI gate. Three parallel jobs:
+#   manifest — JSON-shape check on every plugins/*/manifest.json
+#   node     — pnpm install + lint + vue-tsc + vitest + build
+#   python   — ruff + mypy + pytest
 #
-# The full lint + vue-tsc + vitest + build matrix is deferred until the
-# self-hosted runner has pnpm/node in PATH (see HANDOFF.md TODOs).
+# Triggers: PRs (opened/sync/reopen/ready-for-review), pushes to main,
+# manual workflow_dispatch (Monday recipes can call this).
+#
+# Self-hosted macOS arm64 runner. The runner is launchd-spawned, which
+# means /opt/homebrew/bin is NOT in PATH by default — the `env: PATH:`
+# block on the node + python jobs adds it so pnpm/node/python3 resolve.
 
 on:
   pull_request:
@@ -20,6 +25,11 @@ concurrency:
 
 permissions:
   contents: read
+
+# Used by node + python jobs. The launchd-spawned runner inherits a minimal
+# PATH; Homebrew binaries are at /opt/homebrew/bin on Apple-Silicon Macs.
+env:
+  PATH_HOMEBREW: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
 
 jobs:
   manifest:
@@ -47,3 +57,73 @@ jobs:
           done
           echo ""
           echo "All plugin manifests valid."
+
+  node:
+    name: Node — eslint + vue-tsc + vitest + build
+    runs-on: [self-hosted, macOS, ARM64]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    env:
+      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Versions
+        run: |
+          node --version
+          pnpm --version
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint (eslint + prettier check)
+        run: pnpm lint
+
+      - name: Type-check
+        run: pnpm typecheck
+
+      - name: Unit + component tests
+        run: pnpm test
+
+      - name: Build all plugins
+        run: pnpm build
+
+  python:
+    name: Python — ruff + mypy + pytest
+    runs-on: [self-hosted, macOS, ARM64]
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    env:
+      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python venv
+        run: |
+          python3 -m venv .venv-ci
+          .venv-ci/bin/pip install --quiet --upgrade pip
+          .venv-ci/bin/pip install --quiet -e '.[dev]'
+
+      - name: Ruff lint
+        run: .venv-ci/bin/ruff check
+
+      - name: Ruff format check
+        run: .venv-ci/bin/ruff format --check
+
+      - name: Mypy
+        run: .venv-ci/bin/mypy tools/
+
+      - name: Pytest
+        # Exit code 5 = "no tests collected" — treat as success during early
+        # sprints before any test files exist. Promote to failure once the
+        # first test_*.py lands.
+        shell: bash
+        run: |
+          set +e
+          .venv-ci/bin/pytest -q
+          rc=$?
+          if [ $rc -eq 5 ]; then
+            echo "::warning::pytest collected no tests (early sprint — expected)"
+            exit 0
+          fi
+          exit $rc

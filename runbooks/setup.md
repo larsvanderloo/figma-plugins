@@ -58,6 +58,7 @@ bootstrap-plugin <slug> "<Display Name>" --folder-id <monday-folder-id>
 ```
 
 Example:
+
 ```bash
 bootstrap-plugin token-extract "Token Extract" --folder-id <id>
 ```
