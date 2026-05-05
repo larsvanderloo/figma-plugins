@@ -245,3 +245,49 @@ These decisions are already locked in and reducing bundle size relative to the e
 ### Next update
 
 Re-measure after Sprint 4 close. Sprint 4 adds the heaviest editors (TableEditor + JourneyEditor). The frame-trace gate for TableEditor toggle (< 16 ms per T42.21) is a hard merge gate for the Sprint 4 TableEditor RC; document results in this section at that time.
+
+---
+
+## Sprint 3 measurement (post-Wave-2, pre-App.vue wiring)
+
+**Measured:** 2026-05-05 — commit fbaf5ad (PR #29, CardEditor added; Sprint 3 sections not yet wired into App.vue)
+**Built with:** `pnpm --filter @figma-plugins/welder-editor build` (Vite 5.4.21, production — `vite build && vite build --config vite.code.config.ts`)
+**Measurement command:** `gzip -c dist/<artifact> | wc -c` (raw byte output)
+
+### Total measured sizes (gzipped)
+
+| Artifact                | Measured (bytes) | Measured (KB) | Budget        | % of budget | Status |
+| ----------------------- | ---------------- | ------------- | ------------- | ----------- | ------ |
+| `dist/code.js`          | 10,821           | 10.57 KB      | 60 KB         | 17.6%       | PASS   |
+| `dist/ui.js`            | 45,508           | 44.44 KB      | 250 KB        | 17.8%       | PASS   |
+| `dist/ui.css`           | 2,320            | 2.27 KB       | (informative) | —           | —      |
+| `dist/ui/index.html`    | 240              | 0.23 KB       | (informative) | —           | —      |
+| `dist/lucide-subset.js` | 1,661            | 1.62 KB       | (informative) | —           | —      |
+
+No `dist/messages.js` chunk present. `dist/code.js` confirmed to start with `var st=` (single-file IIFE; no import/export regression).
+
+### Delta vs Sprint 2 final measurement (PR #23, commit 2ca82e9)
+
+| Artifact                | Sprint 2 (bytes) | Sprint 3 (bytes) | Delta | Direction    |
+| ----------------------- | ---------------- | ---------------- | ----- | ------------ |
+| `dist/code.js`          | 10,807           | 10,821           | +14   | Flat (+0.1%) |
+| `dist/ui.js`            | 45,901           | 45,508           | −393  | Down (−0.9%) |
+| `dist/lucide-subset.js` | 1,661            | 1,661            | 0     | Unchanged    |
+| `dist/ui.css`           | 2,442            | 2,320            | −122  | Down (−5.0%) |
+
+### Comparison vs ADR-0003 budgets and stretch targets
+
+| Artifact       | Measured | Hard budget | Stretch target | vs hard budget | vs stretch     |
+| -------------- | -------- | ----------- | -------------- | -------------- | -------------- |
+| `dist/code.js` | 10.57 KB | 60 KB       | 40 KB          | 82.4% headroom | 73.6% headroom |
+| `dist/ui.js`   | 44.44 KB | 250 KB      | 200 KB         | 82.2% headroom | 77.8% headroom |
+
+Both artifacts beat the stretch targets by a wide margin.
+
+### What changed and why
+
+Sprint 3 merged four PRs since the Sprint 2 measurement: CardList (PR #26), section migration of SlidePicker / TitleDescription / BadgeEditor / IconPicker to `components/src/` primitives (InputField + FormGroup + StatusMessage, PR #27), the build-split hotfix emitting code.js as a single-file IIFE (PR #28), and CardEditor composing TitleDescription + IconPicker + ImageEditor (PR #29). Despite adding two new sections (CardList and CardEditor), the ui bundle shrank by 393 bytes gzip. The section migration in PR #27 reduced duplication inside the section modules by unifying shared primitives (FormGroup, InputField, StatusMessage) — cross-section repetition that was previously inlined separately in each section now compresses more aggressively at the bundle level because gzip sees the shared patterns once. CardList and CardEditor are NOT yet wired into App.vue (that wiring is Sprint 3 task 3.4); they exist only in `sections/` and are absent from the current App.vue import tree, which is why they do not appear in the ui bundle measurement. The code.js delta of +14 bytes is rounding noise; the code-side had no functional changes in Sprint 3.
+
+### Next update
+
+Re-measure after Sprint 3 task 3.4 (App.vue wiring of CardList + CardEditor) and at Sprint 4 close when TableEditor and JourneyEditor are introduced. CardList + CardEditor wiring is expected to add ~2–4 KB gzip to ui.js (within the ~6–10 KB Sprint 3 estimate from the Sprint 2 headroom analysis). The frame-trace gate for TableEditor toggle (< 16 ms per T42.21) remains the hard merge gate for the Sprint 4 TableEditor RC.
