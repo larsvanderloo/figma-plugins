@@ -37,9 +37,11 @@ The monorepo uses `figma.showUI(__html__, ...)` where `__html__` is Figma's buil
 pnpm build
 # code-side
 gzip -c dist/code.js | wc -c
-# ui-side (JS bundle; dist/ui/index.html is the trivial HTML shell, not gated)
-gzip -c dist/ui.js | wc -c
+# ui-side (single-file bundle — JS + CSS inlined into dist/ui/index.html)
+gzip -c dist/ui/index.html | wc -c
 ```
+
+**Build structure note (hotfix — 2026-05-05):** Starting with the syntax-error hotfix, the ui build uses `vite-plugin-singlefile` to inline all JS and CSS into `dist/ui/index.html`. There are no longer separate `dist/ui.js`, `dist/ui.css`, or `dist/lucide-subset.js` artifacts. The budget artifact for the ui side is now `dist/ui/index.html` (the inlined single-file bundle). The gzip budget ceiling (`≤ 250 KB`) and stretch target (`≤ 200 KB`) are unchanged — the new single-file artifact is ~48.5 KB gzip, well within both.
 
 ---
 
@@ -291,3 +293,24 @@ Sprint 3 merged four PRs since the Sprint 2 measurement: CardList (PR #26), sect
 ### Next update
 
 Re-measure after Sprint 3 task 3.4 (App.vue wiring of CardList + CardEditor) and at Sprint 4 close when TableEditor and JourneyEditor are introduced. CardList + CardEditor wiring is expected to add ~2–4 KB gzip to ui.js (within the ~6–10 KB Sprint 3 estimate from the Sprint 2 headroom analysis). The frame-trace gate for TableEditor toggle (< 16 ms per T42.21) remains the hard merge gate for the Sprint 4 TableEditor RC.
+
+---
+
+## Hotfix measurement — syntax-error fix (vite-plugin-singlefile)
+
+**Measured:** 2026-05-05 — fix/figma-plugin-load-syntax-error (this hotfix)
+**Built with:** `pnpm --filter @figma-plugins/welder-editor build` (Vite 5.4.21 + vite-plugin-singlefile 2.3.3)
+**Measurement command:** `gzip -c dist/<artifact> | wc -c`
+
+### Total measured sizes (gzipped)
+
+| Artifact             | Measured (bytes) | Measured (KB) | Budget | % of budget | Status |
+| -------------------- | ---------------- | ------------- | ------ | ----------- | ------ |
+| `dist/code.js`       | 10,821           | 10.57 KB      | 60 KB  | 17.6%       | PASS   |
+| `dist/ui/index.html` | 49,652           | 48.49 KB      | 250 KB | 19.4%       | PASS   |
+
+Previous separate artifacts (`dist/ui.js`, `dist/ui.css`, `dist/ui/index.html`, `dist/lucide-subset.js`) are replaced by the single `dist/ui/index.html`. The old aggregate gzip (Sprint 3: 45,508 + 2,320 + 240 + 1,661 = 49,729 bytes) is essentially the same as the new single-file (49,652 bytes gzip) — a net saving of 77 bytes gzip. The singlefile approach adds trivial inlining overhead; gzip entropy from the concatenated content is the same since the bytes are identical.
+
+### Root-cause note
+
+The Figma plugin sandbox loads `manifest.ui` as a raw HTML string (`__html__` global) and injects it into a sandboxed iframe with no server. The previous `dist/ui/index.html` contained `<script type="module" crossorigin src="/ui.js">` — an external reference that the sandbox iframe could not resolve, producing "Syntax error on line 1: Unexpected token {" in the Figma console. `vite-plugin-singlefile` inlines all JS and CSS into the HTML so the iframe is fully self-contained.
