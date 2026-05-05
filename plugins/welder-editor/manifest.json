@@ -1,6 +1,6 @@
 {
   "name": "Welder Editor",
-  "id": "REPLACE_WITH_FIGMA_PLUGIN_ID",
+  "id": "welder-editor-dev",
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui/index.html",
