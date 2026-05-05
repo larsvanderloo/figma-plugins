@@ -1,0 +1,66 @@
+[project]
+name = "figma-plugins-tooling"
+version = "0.1.0"
+description = "Tooling for the figma-plugins monorepo: bootstrap, monday-sync, perf"
+requires-python = ">=3.11"
+
+# Minimal — Python stdlib's tomllib (3.11+) replaces older toml libraries.
+dependencies = [
+    "requests>=2.31",
+]
+
+[project.optional-dependencies]
+# Local development (linting, formatting, testing of the Python tools).
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.4",
+    "mypy>=1.10",
+    "types-requests>=2.31",
+]
+
+[project.scripts]
+bootstrap-plugin = "tools.bootstrap_plugin:main"
+sync-pr = "tools.sync_pr:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["tools"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP", "B", "C4", "PIE"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.11"
+# Non-strict for now; tighten incrementally as docstrings/types land per file.
+strict = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = "-ra --strict-markers"
+testpaths = [
+    "tools",
+    "components",
+    "sections",
+    "plugins",
+]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+norecursedirs = [
+    "build*",
+    "dist",
+    ".venv",
+    "*.egg-info",
+    "node_modules",
+    ".git",
+    "_template",
+]

@@ -1,0 +1,17 @@
+// Root vitest config. Per-package vitest.config.ts files extend this when
+// they need plugin-specific test setup (jsdom for ui-side, no env for
+// code-side). Most packages can rely on this base.
+
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    environment: 'node', // ui-side packages override to "jsdom"
+    globals: false,
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'html'],
+      exclude: ['**/_template/**', '**/dist/**', '**/*.config.*', '**/*.stories.*'],
+    },
+  },
+});

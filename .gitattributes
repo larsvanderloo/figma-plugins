@@ -1,0 +1,26 @@
+# git-LFS tracking
+#
+# Demo videos and large reference Figma documents can balloon repo size when
+# tracked as plain blobs. The thresholds below are conservative; promote a
+# new pattern to LFS when the asset class crosses ~10 MB cumulative.
+#
+# Verify on first clone:
+#     git lfs install                # one-time, per machine
+#     git clone <repo>               # downloads pointers + LFS objects
+#     git lfs ls-files               # confirms LFS-tracked files
+#
+# Adding a new file under a tracked path: just `git add` and commit; LFS
+# replaces with a pointer transparently.
+
+# Formal usability-test stimuli — videos and screen recordings can be tens
+# of MB per round. Patterns kept narrow so casual gifs in tests/ stay as
+# plain blobs.
+validation/listening-tests/**/*.mp4 filter=lfs diff=lfs merge=lfs -text
+validation/listening-tests/**/*.mov filter=lfs diff=lfs merge=lfs -text
+
+# Canonical Figma source files for the demo pipeline (.fig binary). Routinely
+# > 5 MB. Stored as plain blobs only when below threshold; LFS is the default.
+tools/demos/sources/**/*.fig filter=lfs diff=lfs merge=lfs -text
+
+# Future: review-checkpoint kits and any large screenshot bundles may also
+# want LFS once they grow past ~10 MB cumulative. Add tracking patterns here.

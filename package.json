@@ -1,0 +1,31 @@
+{
+  "name": "@figma-plugins/monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Figma plugins monorepo (design + FigJam + slides)",
+  "packageManager": "pnpm@9.0.0",
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "build": "pnpm -r build",
+    "format": "prettier --write \"**/*.{ts,vue,js,json,md}\"",
+    "format:check": "prettier --check \"**/*.{ts,vue,js,json,md}\""
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.100.0",
+    "@types/node": "^20.10.0",
+    "@vue/tsconfig": "^0.5.1",
+    "eslint": "^9.0.0",
+    "eslint-plugin-vue": "^9.20.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "prettier": "^3.2.0",
+    "typescript": "^5.4.0",
+    "vue-tsc": "^2.0.0"
+  }
+}

@@ -1,0 +1,5 @@
+# Placeholder so git tracks the directory before any component is added.
+# Components live under components/src/_template/ — this top-level _template
+# is the workspace-package skeleton (currently the same as the components
+# package itself; reserved for future split if components/ grows beyond
+# a single workspace package).

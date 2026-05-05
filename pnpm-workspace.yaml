@@ -1,0 +1,12 @@
+# pnpm workspace member list. Each glob expands to one or more packages,
+# discovered by walking each path and reading package.json.
+#
+# Adding a plugin: bootstrap-plugin scaffolds it under plugins/<slug>/, which
+# is already covered by the `plugins/*` glob. No changes here required.
+packages:
+  - "plugins/*"
+  - "!plugins/_template"
+  - "components"
+  - "sections/*"
+  - "!sections/_template"
+  - "packages/*"

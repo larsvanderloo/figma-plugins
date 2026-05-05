@@ -1,0 +1,51 @@
+# Plugin metadata. Read by tools/monday-sync/sync.py to find the right
+# Monday boards for this plugin's PR events. Also a place for plugin-level
+# config that the bootstrap process bakes into placeholders.
+#
+# Monday workspace structure (per runbooks/monday-workflow.md):
+#   workspace_id = 6325546 (Figma Plugins)
+#     └── folder/welder-editor/  (folder_id 2990413)
+#           ├── Epics             — strategic tracks, multi-sprint
+#           ├── Sprints           — sprint container
+#           ├── Tasks             — work items (sync target for PRs)
+#           ├── Retrospectives    — sprint retros
+#           ├── Bugs Queue        — bug intake
+#           └── Capacity          — sprint capacity planning
+
+[plugin]
+slug = "welder-editor"
+name = "Welder Editor"
+class_prefix = "WelderEditor"
+version = "0.1.0"
+editor_types = ["figma", "figjam", "slides"]
+
+# Owner agent — which subagent has primary responsibility per the
+# ownership map in CLAUDE.md. One of:
+#   project-pm | figma-api-engineer | ui-engineer |
+#   plugin-tester | release-engineer | product-researcher
+owner_agent = "ui-engineer"
+
+[monday]
+enabled = true
+workspace_id = "6325546"
+folder_id = "2990413"
+# Board IDs from the duplicated Scrum Team template. Sync writes to the
+# Tasks board on PR events; the others are referenced for context.
+tasks_board_id = "5095865862"
+sprints_board_id = "5095865860"
+epics_board_id = "5095865857"
+bugs_board_id = "5095865858"
+retros_board_id = "5095865855"
+capacity_board_id = "5095865859"
+
+[validation]
+code_bundle_kb_budget = 50
+ui_bundle_kb_budget = 250
+init_paint_ms_budget = 200
+
+[message_bus]
+version = 1
+
+[release]
+formats = ["figma-community"]
+primary_editor = "figma"

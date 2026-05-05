@@ -1,0 +1,58 @@
+name: Monday Sync
+
+# Monorepo-aware sync from GitHub PR events to Monday.com (Scrum Team edition).
+#
+# Detects which plugins/<slug>/ directories a PR touched, reads each affected
+# plugin's plugin.toml for its monday.tasks_board_id, and updates that board's
+# item linked via "Resolves MON-{id}" in the PR body. Targets Monday's standard
+# Scrum Team Tasks board per plugin folder, in workspace 6325546.
+#
+# Required secrets (one repo secret):
+#   MONDAY_API_TOKEN              — Monday API token (Avatar → Developers → My Access Tokens)
+#
+# No PR Inbox board. Shared-code PRs without `Resolves MON-{id}` are skipped.
+
+on:
+  pull_request:
+    types: [opened, ready_for_review, closed]
+  pull_request_review:
+    types: [submitted]
+
+concurrency:
+  group: monday-sync-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  sync:
+    name: Sync to Monday
+    runs-on: [self-hosted, macOS, ARM64]
+    if: |
+      github.event_name != 'pull_request' ||
+      github.event.action != 'synchronize' ||
+      github.event.pull_request.draft == false
+    steps:
+      - name: Checkout (full history for diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python venv with requests
+        # Uses the system python3 (>= 3.11 required for tomllib). Avoids
+        # actions/setup-python which hard-codes /Users/runner/hostedtoolcache
+        # and breaks self-hosted runners.
+        run: |
+          python3 -m venv .venv-ci
+          .venv-ci/bin/pip install --quiet requests
+
+      - name: Run Monday sync
+        env:
+          MONDAY_API_TOKEN: ${{ secrets.MONDAY_API_TOKEN }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          GITHUB_RUN_ID: ${{ github.run_id }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: .venv-ci/bin/python tools/monday-sync/sync.py

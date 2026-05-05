@@ -1,0 +1,91 @@
+# Build artifacts
+dist/
+build/
+out/
+.cache/
+.vite/
+.nuxt/
+.output/
+
+# Per-plugin built bundles (Figma loads from each plugin's dist/)
+plugins/*/dist/
+
+# Node
+node_modules/
+.pnpm-store/
+.npm/
+.yarn/
+.yarn-cache/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+.vscode/
+.idea/
+*.code-workspace
+
+# TypeScript / Vue
+*.tsbuildinfo
+.vue-tsc/
+
+# Test / coverage
+coverage/
+.nyc_output/
+.vitest-cache/
+
+# Python (monday-sync, bootstrap, perf tooling)
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+venv/
+.venv/
+env/
+.env
+
+# Demo outputs (large media). Use /* not / so we can re-include
+# specific subdirs below — `dir/` excludes the directory itself and prevents
+# any per-file re-include from working.
+tools/demos/output/*
+tools/demos/cache/
+*.mov
+*.mp4
+*.gif
+!plugins/*/tests/**/*.gif
+!components/*/tests/**/*.gif
+!sections/*/tests/**/*.gif
+# Demo-pipeline source library (small canonical Figma docs and reference
+# clips kept as plain blobs; threshold for migrating to LFS noted in
+# .gitattributes).
+!tools/demos/sources/**/*.gif
+!tools/demos/sources/**/*.png
+# Review-checkpoint kits — MVP deliverables that ride alongside the
+# generator script. Carved out of the tools/demos/output/ ignore.
+# Formal-protocol usability tests still belong under
+# validation/listening-tests/<plugin>/<date>/ per CLAUDE.md.
+!tools/demos/output/review-checkpoint-*/
+!tools/demos/output/review-checkpoint-*/**
+
+# Formal usability-test stimuli ride with the round PR so the round is
+# reproducible.
+!validation/listening-tests/**/*.gif
+!validation/listening-tests/**/*.png
+!validation/listening-tests/**/*.mp4
+
+# Per-plugin local config (untracked unless explicitly added)
+plugins/*/.local/
+
+# Secrets — these should never be committed; use GitHub secrets instead
+.monday-token
+*.pem
+*.key
+*.figma-token
+
+# Figma plugin manifest debugging artifacts
+manifest-cache/

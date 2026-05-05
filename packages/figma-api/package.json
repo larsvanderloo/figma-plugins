@@ -1,0 +1,29 @@
+{
+  "name": "@figma-plugins/figma-api",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Typed wrappers around figma.* + message-bus router for Figma plugins",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./router": "./src/router.ts"
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . && prettier --check ."
+  },
+  "dependencies": {
+    "zod": "^3.22.0"
+  },
+  "devDependencies": {
+    "@figma/plugin-typings": "^1.100.0",
+    "@vue/tsconfig": "^0.5.1",
+    "typescript": "^5.4.0",
+    "vue-tsc": "^2.0.0",
+    "vitest": "^1.5.0"
+  }
+}
