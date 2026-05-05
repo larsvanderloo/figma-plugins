@@ -17,3 +17,5 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Fixed
 
 - —
+
+<!-- sprint+task lifecycle test 2026-05-05 -->
