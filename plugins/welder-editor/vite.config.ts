@@ -12,6 +12,7 @@
 
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
+import ui from '@nuxt/ui/vite';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -24,6 +25,7 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 export default defineConfig(({ command, mode }) => ({
   plugins: [
     vue(),
+    ui(),
     ...(command === 'build' && mode !== 'test'
       ? [
           visualizer({
