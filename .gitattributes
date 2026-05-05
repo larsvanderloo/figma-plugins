@@ -24,3 +24,16 @@ tools/demos/sources/**/*.fig filter=lfs diff=lfs merge=lfs -text
 
 # Future: review-checkpoint kits and any large screenshot bundles may also
 # want LFS once they grow past ~10 MB cumulative. Add tracking patterns here.
+
+# pnpm lockfile auto-regenerate on conflict.
+#
+# When concurrent feature branches each add deps (e.g. section workspaces
+# under sections/<Name>/), they all touch pnpm-lock.yaml. The first PR to
+# merge sets the lockfile shape; subsequent PRs conflict on overlapping
+# YAML line ranges even when their package.json deltas are independent.
+#
+# The 'pnpm-lockfile' driver (registered by scripts/install-merge-driver.sh,
+# invoked by the root package.json `prepare` script on every `pnpm install`)
+# resolves the conflict by re-running `pnpm install --lockfile-only` — the
+# regenerated lockfile reflects all merged package.json files at once.
+pnpm-lock.yaml merge=pnpm-lockfile

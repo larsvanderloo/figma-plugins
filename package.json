@@ -9,7 +9,7 @@
     "pnpm": ">=9.0.0"
   },
   "scripts": {
-    "prepare": "lefthook install --reset-hooks-path",
+    "prepare": "lefthook install --reset-hooks-path && bash scripts/install-merge-driver.sh",
     "typecheck": "pnpm -r typecheck",
     "test": "pnpm -r test",
     "lint": "pnpm -r lint",
