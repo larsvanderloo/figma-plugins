@@ -134,6 +134,72 @@ jobs:
         # blocking/advisory policy documented above and in the test source.
         run: pnpm --filter @figma-plugins/welder-editor exec vitest run tests/ui/axe.test.ts
 
+  bundle-size:
+    name: Bundle-size gate — welder-editor (ADR-0003)
+    runs-on: [self-hosted, macOS, ARM64]
+    # Runs after the node job so we know the lockfile is consistent.
+    # The node job already ran `pnpm build`; we rebuild here because jobs
+    # do not share filesystem state — each job gets a fresh checkout.
+    needs: node
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    env:
+      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
+    #
+    # Budgets from ADR-0003 (docs/adr/0003-welder-editor-bundle-budget.md):
+    #   code-side  dist/code.js  ≤ 60 KB gzipped
+    #   ui-side    dist/ui.js    ≤ 250 KB gzipped
+    #
+    # ARTIFACT NOTE: ADR-0003, the perf doc, and manifest.json all reference
+    # dist/ui.html as the ui artifact (Vite single-file inline HTML).  The
+    # current Vite multi-entry config produces dist/ui.js (JS bundle) +
+    # dist/ui/index.html (HTML shell, ~255 bytes) instead.  The JS bundle
+    # dist/ui.js is the correct artifact to gate against the 250 KB budget;
+    # dist/ui/index.html is a trivially-small shell that is not the deliverable.
+    #
+    # This discrepancy — manifest.json "ui": "dist/ui.html" vs actual output
+    # dist/ui.js + dist/ui/index.html — means Figma cannot currently load the
+    # plugin.  Routed to figma-api-engineer (build config / manifest) and
+    # ui-engineer (Vite output config) for resolution before Sprint 1 RC.
+    # Tracked as a P1 validation finding (manifest "ui" field points to a
+    # non-existent file).
+    #
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Versions
+        run: |
+          node --version
+          pnpm --version
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all plugins
+        run: pnpm build
+
+      - name: Bundle-size gate (code-side)
+        run: |
+          BYTES=$(gzip -c plugins/welder-editor/dist/code.js | wc -c)
+          BUDGET=$((60 * 1024))
+          echo "code.js gzip = $BYTES bytes (budget $BUDGET)"
+          if [ "$BYTES" -gt "$BUDGET" ]; then
+            echo "::error::dist/code.js gzipped $BYTES bytes exceeds 60 KB budget per ADR-0003"
+            exit 1
+          fi
+
+      - name: Bundle-size gate (ui-side)
+        # Gates dist/ui.js — the actual JS bundle produced by the Vite multi-
+        # entry build.  Budget is 250 KB per ADR-0003.  See ARTIFACT NOTE above.
+        run: |
+          BYTES=$(gzip -c plugins/welder-editor/dist/ui.js | wc -c)
+          BUDGET=$((250 * 1024))
+          echo "ui.js gzip = $BYTES bytes (budget $BUDGET)"
+          if [ "$BYTES" -gt "$BUDGET" ]; then
+            echo "::error::dist/ui.js gzipped $BYTES bytes exceeds 250 KB budget per ADR-0003"
+            exit 1
+          fi
+
   python:
     name: Python — ruff + mypy + pytest
     runs-on: [self-hosted, macOS, ARM64]
