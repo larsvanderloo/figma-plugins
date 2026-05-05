@@ -1,10 +1,15 @@
-// Accessibility gate — axe-core WCAG 2.1 AA scan against the stub App.vue.
+// Accessibility gate — axe-core WCAG 2.1 AA scan against the assembled App.vue.
 //
 // Owner: plugin-tester (test harness) + ui-engineer (violations are theirs to fix).
 //
 // Gating policy (matches .github/workflows/validate.yml `axe` job comment):
 //   BLOCKING now   — impact "serious" or "critical"
 //   WARN only now  — impact "moderate" or "minor" (promoted to blocking at Sprint 2 RC)
+//
+// Updated Sprint 2 Task 2.9: mounts the assembled plugin (not the stub).
+// The mount state used here (empty store / no slide selected) is the plugin's
+// initial paint — the state a screen-reader user sees on plugin open.
+// Additional mounted states are in tests/ui/App.test.ts §6.
 //
 // This test runs in jsdom (set by vitest.config.ts environmentMatchGlobs:
 // tests/ui/* → jsdom). axe-core works in jsdom with the caveats below.
@@ -24,12 +29,11 @@
 //   3. ui-engineer resolves moderate/minor findings before RC.
 
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import axe from 'axe-core';
 
-// App.vue is a stub in Sprint 0. This test will be re-run at every Sprint RC
-// against the assembled plugin. The test is intentionally import-path stable —
-// App.vue always lives at ui/App.vue regardless of Sprint.
+// App.vue is import-path stable — always lives at ui/App.vue.
 import App from '../../ui/App.vue';
 
 // ---------------------------------------------------------------------------
@@ -65,15 +69,20 @@ function formatViolations(violations: axe.Result[]): string {
     .join('\n\n');
 }
 
-describe('App.vue — axe WCAG 2.1 AA scan', () => {
+describe('App.vue — axe WCAG 2.1 AA scan (initial paint state)', () => {
   let wrapper: ReturnType<typeof mount>;
   let el: Element;
 
   beforeEach(() => {
-    // Mount App.vue in jsdom. The stub renders a simple <main> with loading
-    // state and a close button — a representative surface for the gate.
+    // Fresh Pinia instance for this test (setup.ts also runs beforeEach, but
+    // we need the pinia instance to pass to mount's global.plugins).
+    const pinia = createPinia();
+    setActivePinia(pinia);
+
+    // Mount App.vue in initial state (empty store, no slide selected).
     wrapper = mount(App, {
       attachTo: document.body,
+      global: { plugins: [pinia] },
     });
     el = wrapper.element;
   });

@@ -51,6 +51,38 @@ try {
 import { afterEach, beforeEach } from 'vitest';
 import { cleanup } from '@testing-library/vue';
 
+// ---------------------------------------------------------------------------
+// ResizeObserver shim
+//
+// jsdom does not implement ResizeObserver. CropperCanvas.vue (inside ImageEditor)
+// uses it to track the canvas dimensions. Without this shim, any test that mounts
+// ImageEditor (directly or via App.vue with an image-containing GeneralSections
+// fixture) throws "ResizeObserver is not defined" and the suite aborts.
+//
+// The shim is a minimal no-op: observe/unobserve/disconnect do nothing.
+// CropperCanvas handles the case where the observer callback never fires by
+// reading the canvas clientWidth/clientHeight on its own mount hook — so
+// the crop UI is simply static in tests, which is correct for unit/smoke tests.
+// ---------------------------------------------------------------------------
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class ResizeObserverStub {
+    observe(): void {
+      /* no-op */
+    }
+    unobserve(): void {
+      /* no-op */
+    }
+    disconnect(): void {
+      /* no-op */
+    }
+  }
+  Object.defineProperty(globalThis, 'ResizeObserver', {
+    configurable: true,
+    writable: true,
+    value: ResizeObserverStub,
+  });
+}
+
 //   afterEach(cleanup)
 //     @testing-library/vue does NOT auto-cleanup unless vitest is configured
 //     with `globals: true` (this repo uses `globals: false`). Without cleanup,
