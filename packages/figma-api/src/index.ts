@@ -5,3 +5,9 @@
 // the package detects the runtime and exports the appropriate surface.
 
 export * from './router';
+export * from './selection';
+export * from './mutate';
+export * from './progress';
+export * from './variables';
+export * from './fonts';
+export * from './manifest';

@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# commit-msg hook — enforces the [#MON-<id>] commit-subject suffix from the
+# project-pm spec ("Every commit subject ends with [#MON-<id>]" per
+# `.claude/agents/project-pm.md` §"Sprint tracking: Monday.com").
+#
+# Behavior:
+#   1. If the subject already ends with [#MON-NNNN], pass.
+#   2. If the current branch slug contains MON-NNNN (per the
+#      `<type>/MON-<id>-<slug>` convention in
+#      `runbooks/monday-workflow.md` §7), auto-append [#MON-NNNN] to
+#      the subject.
+#   3. Otherwise, warn (do NOT block — leaves room for non-Monday-tracked
+#      work like typo fixes or interactive-rebase reword) and exit 0.
+#
+# Skips: merge commits (Merge ...), fixup!/squash! (rebase autosquash),
+# WIP/wip subjects.
+#
+# Called by lefthook's commit-msg hook (see lefthook.yml commit-msg.commands.mon-id-check).
+# Activated automatically on `pnpm install` via the `prepare` script.
+# (Documented in runbooks/setup.md §7.)
+
+set -eu
+
+commit_msg_file="$1"
+subject=$(head -n 1 "$commit_msg_file")
+
+case "$subject" in
+    Merge*|fixup!*|squash!*|WIP|wip)
+        exit 0
+        ;;
+esac
+
+if printf '%s' "$subject" | grep -qE '\[#MON-[0-9]+\]( *)?$'; then
+    exit 0
+fi
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null || true)
+mon_id=$(printf '%s' "$branch" | grep -oE 'MON-[0-9]+' | head -n 1 || true)
+
+if [ -n "${mon_id:-}" ]; then
+    rest=$(tail -n +2 "$commit_msg_file" 2>/dev/null || true)
+    {
+        printf '%s [#%s]\n' "$subject" "$mon_id"
+        if [ -n "$rest" ]; then
+            printf '%s\n' "$rest"
+        fi
+    } > "$commit_msg_file"
+    exit 0
+fi
+
+cat <<'EOF' >&2
+WARNING: commit subject does not end with [#MON-<id>] and current branch
+WARNING: contains no MON id. Per project-pm spec, commits referencing a
+WARNING: Monday item should have the [#MON-NNNN] suffix.
+WARNING:
+WARNING: Non-tracking commits (typo fixes, mid-rebase rewords, exploratory
+WARNING: branches) are fine — this is a warning, not a block.
+EOF
+exit 0

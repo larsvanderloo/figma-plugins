@@ -21,8 +21,8 @@
 //   import ComponentUnderTest from '../../ui/<path>/ComponentUnderTest.vue'
 //   // or from sections: import SectionName from '../../../sections/SectionName/SectionName.vue'
 
-import { describe, it, expect, afterEach } from 'vitest';
-import { render, screen, cleanup } from '@testing-library/vue';
+import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/vue';
 
 // App.vue is the stable entry point. It always lives at ui/App.vue regardless
 // of sprint. Sprint 2 replaces the stub with the assembled plugin; this test
@@ -30,20 +30,15 @@ import { render, screen, cleanup } from '@testing-library/vue';
 // renders a heading and a close control.
 import App from '../../ui/App.vue';
 
-// @testing-library/vue's auto-cleanup only fires when vitest has `globals: true`
-// (which this repo does not use). Explicit cleanup() per test prevents render
-// residue from leaking across tests within the same file.
-// Sprint 1 follow-up: add `setupFiles: ['@testing-library/vue/cleanup-after-each']`
-// to plugins/welder-editor/vitest.config.ts so this becomes ambient.
-afterEach(() => {
-  cleanup();
-});
+// Cleanup and Pinia bootstrap are handled globally by tests/setup.ts
+// (registered via setupFiles in vitest.config.ts). No per-file afterEach
+// needed here — Sprint 2+ section tests follow the same pattern.
 
 describe('App.vue — @testing-library/vue harness smoke test', () => {
   it('renders the plugin heading', () => {
     // render() mounts the component into a real jsdom DOM node and returns
-    // query utilities bound to that container. cleanup() is registered in the
-    // top-level afterEach above (vitest is not configured with globals: true).
+    // query utilities bound to that container. Cleanup is handled globally by
+    // tests/setup.ts — no per-file afterEach needed.
     render(App);
 
     // Query by role + accessible name. This is the correct pattern for
