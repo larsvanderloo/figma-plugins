@@ -1,10 +1,12 @@
 // Vite config for a Figma plugin. Two entries:
 //   - code/main.ts → dist/code.js (IIFE — Figma sandbox doesn't support ES modules)
-//   - ui/index.html → dist/ui.html (standard Vite app, loaded in iframe)
+//   - ui/index.html → dist/ui/index.html (standard Vite app, loaded in iframe)
 //
-// manifest.json references dist/code.js and dist/ui.html. During `vite build
-// --watch` (dev), Vite serves the ui from a localhost URL; in dev, manually
-// re-import the manifest in Figma after big changes to refresh.
+// Rollup places HTML entries in a subdirectory named after the entry key, so
+// the named entry `ui` produces dist/ui/index.html, not dist/ui.html.
+// manifest.json references dist/code.js and dist/ui/index.html accordingly.
+// During `vite build --watch` (dev), Vite serves the ui from a localhost URL;
+// in dev, manually re-import the manifest in Figma after big changes to refresh.
 //
 // Bundle visualizer: active only during production builds (`pnpm build`).
 // Outputs dist/bundle-stats.html — use it to check against the ADR-0003 budget.
