@@ -39,7 +39,12 @@ retros_board_id = "5095865855"
 capacity_board_id = "5095865859"
 
 [validation]
-code_bundle_kb_budget = 50
+# Budgets ratified in ADR-0003. Units: minified-gzipped KB; init in ms.
+# Code-side baseline corrected: ~24 KB gzip after subtracting the external
+# build's embedded ui.html (chunked-text-loader workaround). Monorepo uses
+# figma.showUI(__html__,...) — no embedding — so 60 KB target gives headroom
+# for Zod (+13-21 KB) and packages/figma-api/ wrappers (+3-5 KB).
+code_bundle_kb_budget = 60
 ui_bundle_kb_budget = 250
 init_paint_ms_budget = 200
 
