@@ -2,12 +2,12 @@
   "name": "@figma-plugins/sections-table-editor",
   "version": "0.1.0",
   "private": true,
-  "description": "TableEditor section — CSV import schema + parser, plus (4.1) the TableEditor.vue composite view.",
+  "description": "TableEditor section — CSV import schema + parser, plus the TableEditor.vue composite view.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "typecheck": "vue-tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "eslint . && prettier --check ."
@@ -15,11 +15,18 @@
   "dependencies": {
     "zod": "^3.22.0",
     "vue": "^3.4.0",
-    "@figma-plugins/components": "workspace:*"
+    "@figma-plugins/components": "workspace:*",
+    "@figma-plugins/sections-property-panel": "workspace:*"
   },
   "devDependencies": {
+    "@testing-library/vue": "^8.0.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "@vue/test-utils": "^2.4.0",
     "@vue/tsconfig": "^0.5.1",
+    "axe-core": "^4.10.0",
+    "jsdom": "^24.0.0",
     "typescript": "^5.4.0",
+    "vue-tsc": "^2.0.0",
     "vitest": "^1.5.0"
   }
 }
