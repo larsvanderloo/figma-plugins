@@ -1,0 +1,39 @@
+{
+  "name": "@figma-plugins/sections-card-editor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CardEditor — section for editing a single CardWrap card: heading, paragraph, icon, and visual (image).",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    "./CardEditor": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . && prettier --check ."
+  },
+  "dependencies": {
+    "vue": "^3.4.0",
+    "@figma-plugins/components": "workspace:*",
+    "@figma-plugins/sections-title-description-editor": "workspace:*",
+    "@figma-plugins/sections-icon-picker": "workspace:*",
+    "@figma-plugins/sections-image-editor": "workspace:*"
+  },
+  "devDependencies": {
+    "@testing-library/vue": "^8.0.0",
+    "@vitejs/plugin-vue": "^5.0.0",
+    "@vue/test-utils": "^2.4.0",
+    "@vue/tsconfig": "^0.5.1",
+    "axe-core": "^4.10.0",
+    "jsdom": "^24.0.0",
+    "typescript": "^5.4.0",
+    "vue-tsc": "^2.0.0",
+    "vitest": "^1.5.0"
+  }
+}
