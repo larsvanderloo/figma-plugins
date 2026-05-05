@@ -89,13 +89,24 @@ For agent ownership, validation thresholds, plugin-thread rules, and the decisio
 
 ## 7. Git hooks + commit signing (one-time per clone)
 
-The repo ships a commit-msg hook at `.githooks/commit-msg` that auto-injects the `[#MON-<id>]` suffix on commit subjects when the current branch slug contains a Monday ID (per the `<type>/MON-<id>-<slug>` convention in `runbooks/monday-workflow.md` §9). Activate it by pointing git at the repo's `.githooks/` directory:
+Git hooks are managed by **Lefthook** and install automatically when you run `pnpm install` (via the `prepare` script). No manual `git config` step is needed for new clones.
+
+The pre-commit hook runs two jobs in parallel on every `git commit`:
+
+- **prettier-write** — auto-formats staged `*.{ts,vue,md,json,yml}` files and re-stages the result. Deterministic and silent when nothing changes.
+- **eslint** — lints staged `*.{ts,tsx}` files. Blocks the commit on any error (zero-warnings policy). No auto-fix; keeps changes deliberate.
+
+The commit-msg hook runs the MON-id script at `.githooks/commit-msg-script.sh`: it auto-appends `[#MON-<id>]` to the commit subject when the branch slug contains a Monday ID (per the `<type>/MON-<id>-<slug>` convention in `runbooks/monday-workflow.md` §9), and warns (does not block) when no MON id is found.
+
+To skip hooks in an emergency (e.g., a WIP stash during an interactive rebase): set `LEFTHOOK=0` before the git command. Use this sparingly — the hooks exist to catch the failures that burned Sprint 0.
+
+If you are setting up a worktree (`git worktree add`) and `pnpm install` is not re-run in the worktree, run:
 
 ```bash
-git config core.hooksPath .githooks
+pnpm exec lefthook install --reset-hooks-path
 ```
 
-This is per-clone — re-run after a fresh `git clone`. The hook warns rather than blocks when neither the branch nor the subject has a MON id, so non-Monday-tracked work (typo fixes, mid-rebase rewords) still goes through.
+from the worktree root to wire up the hooks there.
 
 ### Commit signing (optional, recommended once a key exists)
 
