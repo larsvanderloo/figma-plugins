@@ -1,12 +1,14 @@
 // sections/IconPicker/tests/setup.ts — Vitest global setup for IconPicker tests.
 //
 // Owner: ui-engineer
+// Resolves: MON-2894474937 (Sprint 5 Wave 3, Task 5.5)
 //
 // Node 25 localStorage shim — same rationale as SlidePicker/tests/setup.ts.
 // Pinia@3 / @vue/devtools-kit calls localStorage.getItem() at module-evaluation
 // time. Node 25 throws a SecurityError on the native localStorage getter unless
 // started with --localstorage-file. This shim installs a no-op Map-backed store
-// before any dynamic import.
+// before any dynamic import. It also serves as the localStorage backing store
+// for the recent-icons round-trip tests in IconPicker.test.ts.
 const _lsStore: Record<string, string> = {};
 try {
   void globalThis.localStorage;
@@ -34,32 +36,9 @@ try {
   });
 }
 
-import { afterEach, vi } from 'vitest';
+import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/vue';
-import { _resetManifestForTesting } from '../src/icons.js';
-
-// ---------------------------------------------------------------------------
-// Mock @iconify/vue so tests don't depend on actual icon rendering.
-// The Icon component renders a <span data-icon="..."> stub.
-// addCollection is a no-op spy — we test that it is called with the right data.
-// ---------------------------------------------------------------------------
-
-vi.mock('@iconify/vue', () => ({
-  Icon: {
-    name: 'Icon',
-    props: {
-      icon: { type: String, required: true },
-      width: { type: [String, Number], default: undefined },
-      height: { type: [String, Number], default: undefined },
-    },
-    template: '<span :data-icon="icon" :aria-hidden="true" />',
-  },
-  addCollection: vi.fn(),
-}));
 
 afterEach(() => {
   cleanup();
-  // Reset the manifest singleton so each test starts from a clean state.
-  _resetManifestForTesting();
-  vi.clearAllMocks();
 });

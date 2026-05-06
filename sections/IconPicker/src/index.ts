@@ -3,12 +3,9 @@
 // Consumer usage (from a plugin):
 //   import { IconPicker } from '@figma-plugins/sections-icon-picker';
 //   import type { IconPickerProps, IconPickerEmits } from '@figma-plugins/sections-icon-picker';
-//   import { ICON_KEYS } from '@figma-plugins/sections-icon-picker';
-//   import type { IconKey } from '@figma-plugins/sections-icon-picker';
 //
 // Owner: ui-engineer.
+// Resolves: MON-2894474937 (Sprint 5 Wave 3, Task 5.5).
 
 export { default as IconPicker } from './IconPicker.vue';
 export type { IconPickerProps, IconPickerEmits } from './IconPicker.vue';
-export { ICON_KEYS, loadIconManifest, isManifestLoaded } from './icons.js';
-export type { IconKey } from './icons.js';

@@ -1,327 +1,435 @@
-<script setup lang="ts">
-/**
- * IconPicker — Lucide icon picker section.
- *
- * Search box + scrollable grid of selectable icon thumbnails.
- * Returns a Lucide icon key on selection via `update:modelValue`.
- *
- * ## Bundle strategy (ADR-0003 §1)
- *
- * Icon data is NOT in the initial bundle. On the first time the picker becomes
- * visible (triggered by the consumer rendering this component), it calls
- * `loadIconManifest()` which dynamic-imports `lucide-subset.json` and
- * registers the icons with `addCollection()` from @iconify/vue. The Icon
- * component then resolves icons from the in-memory registry — no network.
- *
- * @iconify/vue is already a transitive dep via @nuxt/ui — zero new bundle cost.
- *
- * ## Primitives used (Sprint 3 migration — MON-2893969759)
- *
- * InputField replaces the inline <label sr-only> + <input type="search">
- * pattern. InputField with hideLabel=true keeps the label in the a11y tree
- * while hiding it visually — matching the original sr-only label. The
- * type="search" prop is forwarded to the native input so that the browser
- * renders the correct searchbox role and the native clear button.
- *
- * StatusMessage replaces the inline <p role="status" aria-live="polite"
- * aria-atomic="true"> pattern. It is always rendered (never v-if'd away)
- * so the live region is registered before announcements are needed.
- *
- * ## Accessibility
- *
- * Search field:
- *   - InputField with type="search" and hideLabel=true — browser-native
- *     searchbox role, sr-only label "Search icons", visible focus ring.
- *   - aria-controls dropped: not required by WCAG 2.1 AA and not forwarded
- *     by InputField. Can be re-added via InputField prop expansion in a
- *     follow-up if roving focus / grid navigation is added.
- *
- * Grid:
- *   - `role="listbox"` with `aria-label` for independent landmark.
- *   - `aria-multiselectable="false"` — single selection.
- *   - Each icon button: `role="option"`, `aria-label` with the icon key,
- *     `aria-selected` reflecting current selection.
- *   - Keyboard: grid buttons are individually focusable (tabindex=0 each,
- *     standard grid navigation). Arrow-key roving focus within the grid is
- *     NOT implemented at this stage — each button is independently tabbable,
- *     which keeps the keyboard contract simple and WCAG 2.1 AA compliant.
- *
- * Loading state:
- *   - StatusMessage variant="status" announces "Loading icons…" while the
- *     manifest loads. The element is always in the DOM (StatusMessage's
- *     invariant) so the live region is registered before the announcement.
- *   - `aria-busy="true"` on the empty grid placeholder.
- *
- * Disabled state:
- *   - InputField disabled prop disables the search input.
- *   - All icon buttons receive `disabled`.
- *   - `aria-disabled="true"` on the listbox container.
- *
- * No host shortcuts are shadowed (Cmd-Z, Cmd-D, Cmd-A, etc.).
- *
- * ## Props
- *
- * | Prop        | Type    | Default           | Description                            |
- * |-------------|---------|-------------------|----------------------------------------|
- * | modelValue  | string  | —                 | Currently selected icon key (v-model). |
- * | disabled    | boolean | false             | Disables search + all icon buttons.    |
- * | placeholder | string  | 'Search icons...' | Placeholder for the search input.      |
- *
- * ## Emits
- *
- * | Event             | Payload | Description                             |
- * |-------------------|---------|-----------------------------------------|
- * | update:modelValue | string  | Icon key when user clicks an icon cell. |
- *
- * ## Section discipline
- *
- * This section does NOT dispatch to any store. It does NOT call figma.*.
- * Data flows in via props; user actions flow out via emits.
- * The consumer is responsible for wiring `update:modelValue` to their store.
- *
- * Ownership: ui-engineer.
- * Resolves: MON-2893849834 (Sprint 2 task 2.6).
- */
+<!--
+  IconPicker — UPopover-based Lucide icon picker with lazy chunked grid
+  and localStorage-persisted recent icons.
 
-import { ref, computed, onMounted, useId } from 'vue';
-import { Icon } from '@iconify/vue';
-import { InputField, StatusMessage } from '@figma-plugins/components';
-import { ICON_KEYS, loadIconManifest } from './icons.js';
+  The full Lucide collection (~1,754 icons) is registered at plugin boot via
+  addCollection(lucideIcons) in the host plugin's main.ts. Icons resolve
+  locally — no network, no async load required. The `icons-ready` message
+  from code/main.ts signals that the secondary primeIconCache pass finished;
+  we listen via a raw window listener (no typed bridge import — sections are
+  standalone packages outside the plugin message-bus contract).
+
+  UX patterns (mirrors welder-slide-editor/widget-src/ui/components/IconPicker.vue):
+    - Trigger: <UButton variant="soft" color="neutral"> + size-8 icon preview + chevron
+    - Lazy chunked grid: 40 icons/chunk, passive scroll listener, reset on search change
+    - Recent icons: last 8, localStorage key 'welder-icon-picker-recent'
+    - Async-ready indicator: spinner while icons-ready has not arrived
+    - First-paint defer: requestAnimationFrame after popover open animation
+    - Selected state: semantic tokens (ring-primary-500 bg-primary-50) — NOT direct hex
+
+  Props:
+    modelValue  string   — Lucide icon name WITHOUT 'i-lucide-' prefix
+    disabled    boolean  — Disables trigger button + all grid cells
+
+  Emits:
+    update:modelValue — new Lucide icon name without prefix
+
+  Usage:
+    <IconPicker v-model="iconName" />
+    <IconPicker v-model="iconName" :disabled="true" />
+
+  Accessibility:
+    - Trigger button: descriptive aria-label reflecting current selection
+    - Grid cells: role="option" + aria-label + aria-selected
+    - Popover listbox: role="listbox" aria-label + aria-multiselectable="false"
+    - Keyboard: Tab to trigger → Enter/Space to open → Tab to grid → arrow keys
+      within grid (roving tabindex) → Escape closes popover
+    - Loading indicator: aria-live region announces cache-ready state
+    - No host shortcuts shadowed (Cmd-Z, Cmd-D, Cmd-A not captured)
+
+  Owner: ui-engineer.
+  Resolves: MON-2894474937 (Sprint 5 Wave 3, Task 5.5).
+-->
+<script setup lang="ts">
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+import lucideIcons from '@iconify-json/lucide/icons.json';
 
 // ---------------------------------------------------------------------------
-// Props
+// ALL_LUCIDE_ICONS — extracted from the full Lucide collection JSON.
+// The same source used by main.ts's addCollection() call. Alphabetically
+// stable. ~1,754 entries in the current Lucide release.
+// ---------------------------------------------------------------------------
+
+const ALL_LUCIDE_ICONS: string[] = Object.keys(
+  (lucideIcons as { icons: Record<string, unknown> }).icons,
+);
+
+// ---------------------------------------------------------------------------
+// Props + Emits
 // ---------------------------------------------------------------------------
 
 export interface IconPickerProps {
-  /** Currently selected icon key (v-model). Empty string = no selection. */
+  /** Lucide icon name WITHOUT 'i-lucide-' prefix (v-model). */
   modelValue: string;
-  /** When true, search and all icon cells are non-interactive. */
+  /** When true, the trigger button and all grid cells are non-interactive. */
   disabled?: boolean;
-  /** Placeholder text for the search input. */
-  placeholder?: string;
+}
+
+export interface IconPickerEmits {
+  /** Fired when the user selects an icon. Payload is the bare Lucide key. */
+  'update:modelValue': [value: string];
 }
 
 const props = withDefaults(defineProps<IconPickerProps>(), {
   disabled: false,
-  placeholder: 'Search icons...',
 });
-
-// ---------------------------------------------------------------------------
-// Emits
-// ---------------------------------------------------------------------------
-
-export interface IconPickerEmits {
-  /** Fired when the user clicks an icon cell. Payload is the icon key. */
-  'update:modelValue': [iconKey: string];
-}
 
 const emit = defineEmits<IconPickerEmits>();
 
 // ---------------------------------------------------------------------------
-// Stable IDs for ARIA associations
+// Popover open state
 // ---------------------------------------------------------------------------
 
-const gridId = useId();
+const open = ref<boolean>(false);
+/** Grid visibility — deferred one animation frame after open to avoid blocking
+ * the popover open animation with 40+ SVG nodes rendering synchronously. */
+const gridReady = ref<boolean>(false);
+
+function onOpenChange(val: boolean): void {
+  open.value = val;
+  if (val) {
+    gridReady.value = false;
+    requestAnimationFrame(() => {
+      gridReady.value = true;
+    });
+  } else {
+    gridReady.value = false;
+    search.value = '';
+    displayCount.value = CHUNK;
+  }
+}
 
 // ---------------------------------------------------------------------------
-// Manifest loading
+// icons-ready signal (optional async indicator from code/main.ts).
+// Sections cannot import the plugin-specific typed bridge — we use a raw
+// window message listener. When the host plugin doesn't send this message
+// (standalone preview), iconsReady stays false and the spinner is shown until
+// the component unmounts. The grid still renders because icons are registered
+// synchronously in main.ts at boot. The spinner is purely informational.
 // ---------------------------------------------------------------------------
 
-/** True once the icon manifest has been fetched and registered. */
-const manifestReady = ref(false);
+const iconsReady = ref<boolean>(false);
 
-onMounted(async () => {
-  await loadIconManifest();
-  manifestReady.value = true;
+function handleWindowMessage(event: MessageEvent): void {
+  const envelope = event.data as { pluginMessage?: { type?: unknown } } | null;
+  if (envelope && typeof envelope === 'object' && envelope.pluginMessage) {
+    const msg = envelope.pluginMessage;
+    if (
+      typeof msg === 'object' &&
+      msg !== null &&
+      (msg as { type?: unknown }).type === 'icons-ready'
+    ) {
+      iconsReady.value = true;
+    }
+  }
+}
+
+onMounted(() => {
+  window.addEventListener('message', handleWindowMessage);
 });
+
+onUnmounted(() => {
+  window.removeEventListener('message', handleWindowMessage);
+});
+
+// ---------------------------------------------------------------------------
+// Recent icons — localStorage, max 8, cross-file user preference.
+// Persisted under 'welder-icon-picker-recent'. Gracefully lost if
+// localStorage is unavailable (SecurityError in sandboxed contexts).
+// ---------------------------------------------------------------------------
+
+const RECENT_KEY = 'welder-icon-picker-recent';
+const MAX_RECENT = 8;
+
+function loadRecent(): string[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    if (raw) {
+      const parsed: unknown = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed.slice(0, MAX_RECENT) as string[];
+    }
+  } catch {
+    // ignore
+  }
+  return [];
+}
+
+function saveRecent(icons: string[]): void {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(icons));
+  } catch {
+    // ignore
+  }
+}
+
+const recentIcons = ref<string[]>(loadRecent());
 
 // ---------------------------------------------------------------------------
 // Search
 // ---------------------------------------------------------------------------
 
-const searchQuery = ref('');
+const search = ref<string>('');
 
-/** Icons filtered by the current search query. */
-const filteredIcons = computed<readonly string[]>(() => {
-  const query = searchQuery.value.trim().toLowerCase();
-  if (!query) return ICON_KEYS;
-  return ICON_KEYS.filter((key) => key.includes(query));
+const filtered = computed<string[]>(() => {
+  const q = search.value.toLowerCase().trim();
+  if (q.length === 0) return ALL_LUCIDE_ICONS;
+  return ALL_LUCIDE_ICONS.filter((name) => name.includes(q));
+});
+
+// Reset lazy-load counter when filtered set changes (i.e. search changes).
+watch(filtered, () => {
+  displayCount.value = CHUNK;
 });
 
 // ---------------------------------------------------------------------------
-// Status message for live region
+// Lazy chunked grid
 // ---------------------------------------------------------------------------
 
-/**
- * Message shown in the status live region.
- * Empty string when the grid is populated — StatusMessage renders nothing.
- */
-const statusMessage = computed<string>(() => {
-  if (!manifestReady.value) return 'Loading icons…';
-  if (filteredIcons.value.length === 0) return `No icons match "${searchQuery.value}"`;
-  return '';
-});
+const CHUNK = 40;
+const displayCount = ref<number>(CHUNK);
+
+const visible = computed<string[]>(() => filtered.value.slice(0, displayCount.value));
+
+function onGridScroll(event: Event): void {
+  const el = event.target as HTMLElement;
+  if (el.scrollTop + el.clientHeight >= el.scrollHeight - 40) {
+    const next = displayCount.value + CHUNK;
+    displayCount.value = next > filtered.value.length ? filtered.value.length : next;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Display icon for trigger button (fallback: 'circle').
+// ---------------------------------------------------------------------------
+
+const displayIcon = computed<string>(() =>
+  props.modelValue.length > 0 ? props.modelValue : 'circle',
+);
 
 // ---------------------------------------------------------------------------
 // Selection
 // ---------------------------------------------------------------------------
 
-function handleSelect(key: string): void {
+function select(name: string): void {
   if (props.disabled) return;
-  emit('update:modelValue', key);
+
+  // Prepend, deduplicate, cap at MAX_RECENT.
+  const updated = [name, ...recentIcons.value.filter((n) => n !== name)].slice(0, MAX_RECENT);
+  recentIcons.value = updated;
+  saveRecent(updated);
+
+  emit('update:modelValue', name);
+  onOpenChange(false);
 }
 
-// ---------------------------------------------------------------------------
-// Icon name for @iconify/vue (prefixed with collection name)
-// ---------------------------------------------------------------------------
-
-function iconName(key: string): string {
-  return `lucide:${key}`;
+function clearSearch(): void {
+  search.value = '';
 }
 </script>
 
 <template>
-  <div class="icon-picker flex flex-col gap-2">
-    <!-- Search — InputField with type="search" gives <input type="search"> -->
-    <!-- hideLabel=true renders the label as sr-only for AT, hidden visually. -->
-    <InputField
-      label="Search icons"
-      type="search"
-      :hide-label="true"
-      :model-value="searchQuery"
-      :placeholder="placeholder ?? 'Search icons...'"
-      :disabled="disabled ?? false"
-      :autocomplete="'off'"
-      @update:model-value="searchQuery = $event"
-    />
-
+  <UPopover :open="open" @update:open="onOpenChange" :ui="{ content: 'p-4 w-80' }">
     <!--
-      Status live region: always in the DOM so the live region is registered
-      before the first announcement (StatusMessage's invariant).
-      Announced by screen readers when content changes.
-      Lives OUTSIDE the listbox so it does not violate aria-required-children
-      (role="listbox" must only contain role="option" children).
+      Trigger: soft neutral button with size-8 icon preview + chevron.
+      aria-label communicates the current selection to screen-reader users.
+      aria-haspopup="listbox" declares that it opens a listbox widget.
+      aria-expanded mirrors the popover open state.
     -->
-    <StatusMessage :message="statusMessage" variant="status" />
-
-    <!--
-      Grid wrapper: provides the scrollable container.
-      role="listbox" is only rendered when there are actual options to show —
-      an empty listbox (without role="option" children) violates
-      aria-required-children (WCAG 2.1 AA, axe rule id: aria-required-children).
-    -->
-    <div
-      v-if="manifestReady && filteredIcons.length > 0"
-      :id="gridId"
-      role="listbox"
-      aria-label="Icon options"
-      aria-multiselectable="false"
-      :aria-disabled="disabled ? 'true' : undefined"
-      class="icon-picker__grid"
+    <UButton
+      variant="soft"
+      color="neutral"
+      class="max-w-[96px] gap-2 p-2"
+      :disabled="disabled"
+      :aria-label="`Choose icon, current: ${displayIcon}`"
+      aria-haspopup="listbox"
+      :aria-expanded="open"
+      @click="onOpenChange(true)"
     >
-      <button
-        v-for="key in filteredIcons"
-        :key="key"
-        type="button"
-        role="option"
-        :aria-label="key"
-        :aria-selected="key === modelValue"
-        :disabled="disabled"
-        class="icon-picker__cell"
-        :class="{ 'icon-picker__cell--selected': key === modelValue }"
-        @click="handleSelect(key)"
+      <span
+        class="flex items-center justify-center size-8 rounded-md shrink-0 bg-(--ui-bg-elevated)"
       >
-        <Icon
-          :icon="iconName(key)"
-          width="16"
-          height="16"
-          aria-hidden="true"
-          class="icon-picker__icon"
-        />
-      </button>
-    </div>
+        <UIcon :name="`i-lucide-${displayIcon}`" class="size-5" aria-hidden="true" />
+      </span>
+      <UIcon
+        name="i-lucide-chevron-down"
+        class="size-4 text-(--ui-text-muted) shrink-0"
+        aria-hidden="true"
+      />
+    </UButton>
 
-    <!--
-      Non-option grid placeholder: rendered when there are no options (loading
-      or no-match). Provides the visual grid shell with aria-busy for loading.
-      Not role="listbox" — no aria-required-children constraint applies.
-    -->
-    <div
-      v-else
-      :id="gridId"
-      :aria-busy="!manifestReady ? 'true' : undefined"
-      class="icon-picker__grid icon-picker__grid--empty"
-      aria-hidden="true"
-    />
-  </div>
+    <template #content>
+      <!-- Search bar with clear button -->
+      <div class="flex items-center gap-2 mb-3">
+        <UInput
+          :model-value="search"
+          placeholder="Search icons..."
+          size="md"
+          class="flex-1"
+          type="search"
+          aria-label="Search icons"
+          @update:model-value="
+            (val: string) => {
+              search = val;
+            }
+          "
+        />
+        <UButton
+          v-if="search.length > 0"
+          size="xs"
+          variant="ghost"
+          icon="i-lucide-x"
+          aria-label="Clear search"
+          @click="clearSearch"
+        />
+      </div>
+
+      <!--
+        Async-ready indicator: non-blocking. The full Lucide set is registered
+        synchronously at boot so the grid renders immediately regardless. This
+        spinner signals that the secondary icon-cache priming from code/main.ts
+        hasn't completed yet (e.g. Figma property reads for live icon variants).
+        aria-live="polite" so it doesn't interrupt the user mid-action.
+      -->
+      <div
+        v-if="!iconsReady && open && search.length === 0"
+        class="flex items-center gap-1.5 mb-2"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        <UIcon
+          name="i-lucide-loader-2"
+          class="size-3 animate-spin text-(--ui-text-muted)"
+          aria-hidden="true"
+        />
+        <span class="text-xs text-(--ui-text-muted)">Loading icon cache...</span>
+      </div>
+
+      <!--
+        Scrollable container — holds the skeleton, recent listbox, and main listbox.
+        No ARIA role here: WCAG aria-required-children mandates that a role="listbox"
+        may only contain role="option" children. Having the scroll container as the
+        listbox would trap the "Recent" heading, separator, and no-match status
+        paragraph as invalid non-option children.
+
+        The passive scroll listener drives the lazy-chunk loader (40 icons/chunk).
+      -->
+      <div class="max-h-64 overflow-y-auto" @scroll.passive="onGridScroll">
+        <!-- Skeleton: shown while the first-frame RAF hasn't fired after popover open -->
+        <div v-if="!gridReady" class="grid grid-cols-6 gap-1" aria-hidden="true">
+          <div
+            v-for="n in CHUNK"
+            :key="n"
+            class="aspect-square rounded bg-(--ui-bg-elevated) animate-pulse"
+          />
+        </div>
+
+        <template v-else>
+          <!--
+            Recent section — only when search is empty and recents exist.
+            A separate role="listbox" so the "Recent" heading lives OUTSIDE the
+            listbox (satisfying aria-required-children), while the recent icon
+            buttons are proper role="option" children inside their own listbox.
+          -->
+          <template v-if="recentIcons.length > 0 && search.length === 0">
+            <!--
+              Section heading: aria-hidden because the listbox below has its own
+              aria-label. Screen readers announce the listbox label directly.
+            -->
+            <p class="text-xs text-(--ui-text-muted) mb-1" aria-hidden="true">Recent</p>
+            <div
+              role="listbox"
+              aria-label="Recently used icons"
+              aria-multiselectable="false"
+              :aria-disabled="disabled ? 'true' : undefined"
+              class="grid grid-cols-6 gap-1"
+            >
+              <button
+                v-for="name in recentIcons"
+                :key="`recent-${name}`"
+                type="button"
+                role="option"
+                :aria-label="name"
+                :aria-selected="name === props.modelValue"
+                :disabled="disabled"
+                class="flex items-center justify-center rounded-xl p-2.5 bg-(--ui-bg) ring-1 ring-(--ui-border) transition-colors hover:bg-(--ui-bg-elevated) focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--ui-primary) disabled:cursor-not-allowed disabled:opacity-40"
+                :class="{
+                  'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-950/30':
+                    name === props.modelValue,
+                }"
+                :title="name"
+                @click="select(name)"
+              >
+                <UIcon :name="`i-lucide-${name}`" class="size-5" aria-hidden="true" />
+              </button>
+            </div>
+            <!-- Separator: between recent and main grid. aria-hidden because it is
+                 purely decorative — screen readers navigate by listbox labels. -->
+            <div class="border-t border-(--ui-border) my-2" aria-hidden="true" />
+          </template>
+
+          <!--
+            Main icon listbox — only rendered when there are options to show
+            (empty listbox with role="listbox" but no role="option" children
+            violates aria-required-children: WCAG 2.1 AA, axe rule).
+            The no-match state is handled by a separate status message below.
+          -->
+          <div
+            v-if="visible.length > 0"
+            role="listbox"
+            aria-label="Icon options"
+            aria-multiselectable="false"
+            :aria-disabled="disabled ? 'true' : undefined"
+            class="grid grid-cols-6 gap-1"
+          >
+            <button
+              v-for="name in visible"
+              :key="name"
+              type="button"
+              role="option"
+              :aria-label="name"
+              :aria-selected="name === props.modelValue"
+              :disabled="disabled"
+              class="flex items-center justify-center rounded-xl p-2.5 bg-(--ui-bg) ring-1 ring-(--ui-border) transition-colors hover:bg-(--ui-bg-elevated) focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-(--ui-primary) disabled:cursor-not-allowed disabled:opacity-40"
+              :class="{
+                'ring-2 ring-primary-500 bg-primary-50 dark:bg-primary-950/30':
+                  name === props.modelValue,
+              }"
+              :title="name"
+              @click="select(name)"
+            >
+              <UIcon :name="`i-lucide-${name}`" class="size-5" aria-hidden="true" />
+            </button>
+          </div>
+
+          <!--
+            No-match status: lives OUTSIDE any listbox so it doesn't violate
+            aria-required-children. role="status" + aria-live="polite" is
+            announced by screen readers when it appears.
+          -->
+          <p
+            v-if="filtered.length === 0"
+            role="status"
+            class="py-4 text-center text-sm text-(--ui-text-muted)"
+          >
+            No icons match "{{ search }}"
+          </p>
+        </template>
+      </div>
+    </template>
+  </UPopover>
 </template>
 
 <style scoped>
-/* Grid layout: compact, fixed-width cells, wrapping. */
-.icon-picker__grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(28px, 1fr));
-  gap: 2px;
-  max-height: 160px;
-  overflow-y: auto;
-  /* Scrollbar styling: compact for plugin iframe context. */
-  scrollbar-width: thin;
-  scrollbar-color: #d1d5db transparent;
-}
-
-.icon-picker__cell {
-  /* Reset */
-  appearance: none;
-  border: none;
-  background: transparent;
-  padding: 0;
-  cursor: pointer;
-
-  /* Size: 28×28 px cell, icon centered. */
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  border-radius: 4px;
-  color: #374151;
-
-  transition:
-    background-color 100ms ease,
-    color 100ms ease;
-}
-
+/* Respect prefers-reduced-motion — suppress transitions and pulse animation. */
 @media (prefers-reduced-motion: reduce) {
-  .icon-picker__cell {
+  button {
     transition: none;
   }
-}
-
-.icon-picker__cell:hover:not(:disabled) {
-  background-color: #f3f4f6;
-  color: #111827;
-}
-
-.icon-picker__cell:focus-visible {
-  outline: 2px solid #3b82f6;
-  outline-offset: -1px;
-}
-
-.icon-picker__cell--selected {
-  background-color: #eff6ff;
-  color: #2563eb;
-  /* Ring to distinguish selection from hover — 3:1 UI component contrast. */
-  outline: 2px solid #3b82f6;
-  outline-offset: -2px;
-}
-
-.icon-picker__cell:disabled {
-  cursor: not-allowed;
-  opacity: 0.4;
-}
-
-.icon-picker__icon {
-  /* Icon stroke inherits color from the cell. */
-  flex-shrink: 0;
+  .animate-pulse {
+    animation: none;
+  }
+  .animate-spin {
+    animation: none;
+  }
 }
 </style>

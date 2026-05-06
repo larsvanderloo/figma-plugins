@@ -2,7 +2,7 @@
   "name": "@figma-plugins/sections-icon-picker",
   "version": "0.1.0",
   "private": true,
-  "description": "IconPicker — Lucide icon picker with on-demand manifest loading. Returns an icon key on selection.",
+  "description": "IconPicker — UPopover + lazy chunked Lucide grid + recent-icons (localStorage).",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -14,7 +14,9 @@
   },
   "dependencies": {
     "vue": "^3.4.0",
+    "@nuxt/ui": "^4.0.0",
     "@iconify/vue": "^5.0.0",
+    "@iconify-json/lucide": "^1.2.0",
     "@figma-plugins/components": "workspace:*"
   },
   "devDependencies": {
