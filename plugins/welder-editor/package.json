@@ -28,6 +28,8 @@
     "@figma-plugins/sections-card-list": "workspace:*",
     "@figma-plugins/sections-card-editor": "workspace:*",
     "@figma-plugins/sections-timeline-editor": "workspace:*",
+    "@figma-plugins/sections-table-editor": "workspace:*",
+    "@figma-plugins/sections-journey-editor": "workspace:*",
     "pinia": "^3",
     "pinia-plugin-persistedstate": "^4",
     "zod": "^3.22.0"

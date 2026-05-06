@@ -343,18 +343,32 @@ describe('App.vue — assembly smoke tests', () => {
       expect(emptyMsg).toBeDefined();
     });
 
-    it('switching to Graphs tab shows the Sprint 4 placeholder text', async () => {
+    it('switching to Graphs tab shows the graphs panel (Sprint 4 — TableEditor visible when tableModel present)', async () => {
       const { pinia, store } = setupPinia();
-      // Graphs is populated so the tab is visible.
-      populateStoreWithSlide(store, SLIDE_A.id, GENERAL_ALL, null, GRAPHS_FIXTURE);
+      // Graphs fixture with a real tableModel so graphsNull=false → tab is visible.
+      const graphsWithTable: GraphItems = {
+        tableModel: {
+          slotId: 'slot-t1',
+          width: 'md',
+          hasColumnHeader: true,
+          textSize: 'md',
+          rows: [{ rowNodeId: 'r1', cells: [{ cellNodeId: 'c1', value: 'Header' }] }],
+        },
+        journeyModel: null,
+      };
+      populateStoreWithSlide(store, SLIDE_A.id, GENERAL_ALL, null, graphsWithTable);
       const { container } = render(App, { global: { plugins: [pinia] } });
       const q = within(container as HTMLElement);
 
       const graphsTab = q.getByRole('tab', { name: /graphs/i });
       await fireEvent.click(graphsTab);
 
-      const placeholder = q.getByText(/graphs editing.*sprint 4/i);
-      expect(placeholder).toBeDefined();
+      // Sprint 4 Task 4.3 — TableEditor renders under a "Table" PropertyPanel.
+      // The placeholder text is gone now that the section is wired.
+      expect(q.queryByText(/graphs editing.*sprint 4/i)).toBeNull();
+      // The table section renders (heading inside the table-editor section).
+      const tableSection = container.querySelector('.table-editor');
+      expect(tableSection).not.toBeNull();
     });
   });
 
