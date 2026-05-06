@@ -39,13 +39,14 @@ retros_board_id = "5095865855"
 capacity_board_id = "5095865859"
 
 [validation]
-# Budgets ratified in ADR-0003. Units: minified-gzipped KB; init in ms.
-# Code-side baseline corrected: ~24 KB gzip after subtracting the external
-# build's embedded ui.html (chunked-text-loader workaround). Monorepo uses
-# figma.showUI(__html__,...) — no embedding — so 60 KB target gives headroom
-# for Zod (+13-21 KB) and packages/figma-api/ wrappers (+3-5 KB).
-code_bundle_kb_budget = 60
-ui_bundle_kb_budget = 250
+# Budgets updated for anti-pattern 0004 (chunked-text-loader architecture).
+# code.js now embeds dist/ui/index.html as ≤60 KB string chunks to bypass
+# Figma's sandbox string-literal parser limit. code.js = ~11 KB code gzip +
+# ~269 KB embedded UI gzip ≈ 280 KB total. 330 KB gives 18% headroom.
+# dist/ui/index.html is still produced but is a secondary artifact; gated at
+# 280 KB (269 KB actual + headroom). Combined download ≤ 330+280 = 610 KB.
+code_bundle_kb_budget = 330
+ui_bundle_kb_budget = 280
 init_paint_ms_budget = 200
 
 [message_bus]
