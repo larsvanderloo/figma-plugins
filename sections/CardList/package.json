@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "vue": "^3.4.0",
-    "@iconify/vue": "^5.0.0",
+    "@nuxt/ui": "^4.0.0",
     "@figma-plugins/components": "workspace:*"
   },
   "devDependencies": {

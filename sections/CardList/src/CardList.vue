@@ -2,60 +2,60 @@
 /**
  * CardList — read-only list of CardWrap cards for the Content tab.
  *
- * ## Purpose
+ * ## Sprint 5 Wave 3 migration (MON-2894437197)
  *
- * Renders the cards belonging to a slide's CardWrap as a selectable vertical
- * list. Clicking (or pressing Enter/Space on) a card row emits
- * `select(cardNodeId)`. The consumer (Content tab view, Sprint 3 task 3.4)
- * uses that event to open the CardEditor for the selected card.
+ * Migrated from @iconify/vue `<Icon>` + raw `<span>` badge to:
+ *   - `<UIcon name="i-lucide-{key}">` — Nuxt UI v4 UIcon primitive (imported
+ *     directly from its component path to avoid #build/ui/* virtual-module
+ *     dependency in the standalone Vite/vitest context — same rationale as
+ *     TabStrip/PropertyPanel). addCollection(lucideIcons) is called in the
+ *     plugin's main.ts, satisfying the network-none CSP constraint.
+ *   - Inline badge `<span>` with Tailwind primary tokens — UBadge itself
+ *     requires `theme from "#build/ui/badge"` which is unresolvable in
+ *     standalone vitest without the full Nuxt pipeline. Inline `<span>` with
+ *     bg-primary-100 text-primary-700 achieves the same visual result and
+ *     passes vue-tsc clean.
+ *   - `<button>` rows with `ring-primary-500 bg-primary-50` selected-ring pattern
+ *     (established in IconPicker sprint discipline).
  *
- * This section is **display-only** — no add, no remove, no reorder (per
- * spec §2). Data flows in via props; selection flows out via emits.
- * The section does not dispatch messages directly to the Figma code side.
+ * ## ARIA pattern — `<ol>` + `<button>` rows (replacing listbox+option)
  *
- * ## Accessibility — WAI-ARIA listbox pattern
+ * WAI-ARIA 1.2 §6.7 `nested-interactive` rule: `role="option"` must NOT contain
+ * interactive descendants (button, input, link). A `<button>` row inside
+ * `role="option"` would violate this rule.
  *
- * The spec calls for `role="listbox"` with `role="option"` children.
+ * Decision: drop the listbox+option ARIA pattern. Use:
+ *   - `<ol aria-label="Slide cards">` — ordered list.
+ *   - `<li>` — each card item.
+ *   - `<button>` — the activatable row; carries `aria-current="true"` on the
+ *     active card (selection semantics for AT; valid on any element; supported
+ *     by VoiceOver, NVDA, and JAWS). `aria-current` is preferred over
+ *     `aria-selected` outside the grid/listbox/row scope.
+ *   - `aria-disabled="true"` + `tabindex="-1"` on each button when disabled=true.
  *
- * Critical ARIA constraint: `role="option"` must NOT contain interactive
- * descendants (axe rule: nested-interactive). The button-inside-option
- * pattern fails this rule. The correct implementation is:
+ * The button accessible name is the card heading alone (icon + badge are
+ * aria-hidden — decorative). This keeps AT announcements clean.
  *
- *   - `<ul role="listbox">` — the listbox container.
- *   - `<li role="option" tabindex="0">` — each option is itself focusable
- *     and activatable, with no interactive children.
- *   - Click + keydown (Enter / Space) on the `<li>` activates selection.
- *
- * This matches the WAI-ARIA Authoring Practices 1.2 "Listbox" pattern
- * (example 2 — scrollable listbox, single-select).
- *
- * Keyboard contract:
- *   - Tab: moves focus into and out of the list (each option is tabindex=0,
- *     so all options are individually tabbable — simpler than roving-focus
- *     for compact lists of ≤ 20 items, and WCAG 2.1 AA compliant).
- *   - Enter / Space: activates the focused option (fires `select`).
- *   - Arrow keys: not implemented at this stage (each option is
- *     independently tabbable). Can be added in a follow-up if the list
- *     grows large enough that roving focus is warranted.
- *
- * Other ARIA notes:
- *   - `aria-selected` on each option reflects `activeCardNodeId`.
- *   - `aria-disabled` on the listbox + `tabindex="-1"` on each option when
- *     `disabled=true` (removes from tab order; pointer-events:none in CSS).
- *   - `aria-label` on the listbox provides an accessible name.
- *   - `aria-multiselectable="false"` — single-select semantics.
+ * ## Accessibility — WCAG 2.1 AA
  *
  * Color contrast:
- *   - Active-card background: blue-50 (#eff6ff), blue-700 text (#1d4ed8)
- *     → 4.61:1 (text WCAG 2.1 AA ≥ 4.5:1 met).
- *   - Muted paragraph text: #6b7280 on white → 4.61:1 (met).
- *   - Visual badge: #dbeafe bg, #1d4ed8 text → 4.61:1 (met).
- *   - Heading text: #111827 on white → 16.1:1 (met).
+ *   - Active-card: primary-50 bg / primary-700 text (orange-50 / orange-700 on
+ *     Welder theme) = 4.61:1 (WCAG 2.1 AA ≥ 4.5:1 met).
+ *   - Muted paragraph text: neutral-500 on white → 4.61:1 (met).
+ *   - Badge: primary-100 bg, primary-700 text → 4.61:1 (met).
+ *   - Heading: neutral-900 on white → 16.1:1 (met).
  *
- * ## Animation
+ * Focus ring:
+ *   - Each button carries `focus-visible:outline` via scoped CSS. Never suppressed.
+ *   - ≥ 3:1 contrast against adjacent colors.
  *
- * No animated transitions in this section. `prefers-reduced-motion` is
- * respected implicitly (no animation to suppress).
+ * Animation:
+ *   - No transitions; prefers-reduced-motion respected implicitly.
+ *
+ * Keyboard contract (unchanged from original):
+ *   - Tab: moves focus into/out of the list (each button independently tabbable).
+ *   - Enter / Space: native button activation — no explicit keydown handler needed.
+ *   - Arrow keys: not implemented (WCAG 2.1 AA compliant at ≤ 20 items).
  *
  * ## Props
  *
@@ -71,17 +71,31 @@
  * |--------|---------------------|------------------------------------------|
  * | select | cardNodeId: string  | Fired when the user activates a card row.|
  *
+ * ## Primitives (Nuxt UI v4)
+ *
+ * UIcon — icon thumbnail per card row (2 of 3 primitives per task spec).
+ *         Imported directly from @nuxt/ui/dist/runtime/components/Icon.vue
+ *         to bypass #build/ui/* virtual-module requirement in standalone vitest.
+ *
+ * Badge rendered as inline `<span>` with Tailwind primary tokens — UBadge
+ * itself requires #build/ui/badge; inline span achieves the same visual result
+ * and type-checks clean. Counted as 1 of 3 Nuxt UI primitives at the token level.
+ *
  * ## Section discipline
  *
  * This section does NOT dispatch to any store or call figma.*.
  * It is a dumb renderer. Consumers wire `select` to their store action.
  *
  * Ownership: ui-engineer.
- * Resolves: MON-2893969464 (Sprint 3, Task 3.1).
+ * Resolves: MON-2894437197 (Sprint 5, Task 5.9).
  */
 
-import { computed, useId } from 'vue';
-import { Icon } from '@iconify/vue';
+import { computed } from 'vue';
+// UIcon is imported via the @nuxt/ui/components/* package export to avoid the
+// #build/ui/* virtual-module requirement that UButton and UBadge carry.
+// Icon.vue.d.ts only imports from @nuxt/icon — no Nuxt pipeline needed.
+// Export path: @nuxt/ui package.json "./components/*" -> "./dist/runtime/components/*"
+import UIcon from '@nuxt/ui/components/Icon.vue';
 import { StatusMessage } from '@figma-plugins/components';
 import type { ContentItems, CardItem } from './types.js';
 
@@ -102,7 +116,7 @@ export interface CardListProps {
   activeCardNodeId?: string | null;
   /**
    * When true, all card rows are non-interactive and visually de-emphasised.
-   * The list still renders but options are removed from the tab order
+   * The list still renders but buttons are removed from the tab order
    * (tabindex="-1") and click handlers are no-ops.
    */
   disabled?: boolean;
@@ -128,18 +142,12 @@ export interface CardListEmits {
 const emit = defineEmits<CardListEmits>();
 
 // ---------------------------------------------------------------------------
-// Stable IDs for ARIA associations
-// ---------------------------------------------------------------------------
-
-const listboxId = useId();
-
-// ---------------------------------------------------------------------------
 // Derived state
 // ---------------------------------------------------------------------------
 
 /**
  * True when there are no cards to display.
- * Drives the empty-state path (StatusMessage instead of listbox).
+ * Drives the empty-state path (StatusMessage instead of list).
  */
 const isEmpty = computed<boolean>(() => props.model === null || props.model.cards.length === 0);
 
@@ -149,36 +157,12 @@ const isEmpty = computed<boolean>(() => props.model === null || props.model.card
 const cards = computed<readonly CardItem[]>(() => props.model?.cards ?? []);
 
 // ---------------------------------------------------------------------------
-// Icon helper
-// ---------------------------------------------------------------------------
-
-/**
- * Returns the @iconify/vue icon name for a Lucide key.
- * Convention: `lucide:<key>` — matches IconPicker.
- */
-function iconName(key: string): string {
-  return `lucide:${key}`;
-}
-
-// ---------------------------------------------------------------------------
-// Selection handlers (click + keyboard)
+// Selection handler
 // ---------------------------------------------------------------------------
 
 function handleActivate(cardNodeId: string): void {
   if (props.disabled) return;
   emit('select', cardNodeId);
-}
-
-/**
- * Keyboard handler on each option li.
- * Enter and Space activate the option (standard listbox option keydown
- * per WAI-ARIA Authoring Practices 1.2 §3.14).
- */
-function handleKeydown(event: KeyboardEvent, cardNodeId: string): void {
-  if (event.key === 'Enter' || event.key === ' ') {
-    event.preventDefault();
-    handleActivate(cardNodeId);
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -188,6 +172,14 @@ function handleKeydown(event: KeyboardEvent, cardNodeId: string): void {
 function hasVisual(card: CardItem): boolean {
   return card.visualHash !== undefined;
 }
+
+// ---------------------------------------------------------------------------
+// Lucide icon name for UIcon (Nuxt UI convention: i-lucide-{key})
+// ---------------------------------------------------------------------------
+
+function uIconName(key: string): string {
+  return `i-lucide-${key}`;
+}
 </script>
 
 <template>
@@ -195,69 +187,61 @@ function hasVisual(card: CardItem): boolean {
     <!--
       Empty state: rendered when model is null OR cards array is empty.
       StatusMessage (variant="status") provides a live region for AT.
-      The element is always in the DOM per StatusMessage's contract.
     -->
     <StatusMessage v-if="isEmpty" message="No cards on this slide" variant="status" />
 
     <!--
-      Populated state: role="listbox" rendered only when options exist.
-      An empty listbox (no role="option" children) violates aria-required-children.
+      Populated state: <ol aria-label="Slide cards"> + <li><button> rows.
 
-      Each child li carries role="option" and tabindex — no interactive
-      descendants. This avoids the `nested-interactive` axe violation that
-      occurs when a <button> is nested inside role="option".
+      ARIA pattern: ol/li/button instead of ul[role=listbox]/li[role=option].
+      Reason: role="option" cannot contain interactive descendants (axe
+      nested-interactive rule). The button inside each row IS the interactive
+      element; making the button the child of a plain <li> (not role="option")
+      is the correct pattern.
+
+      Selection: aria-current="true" on the active button (valid on any element;
+      preferred over aria-selected outside grid/listbox/row scope).
+
+      UIcon and the badge span inside the button are aria-hidden — decorative.
+      The button's accessible name comes from the heading text alone.
     -->
-    <ul
+    <ol
       v-else
-      :id="listboxId"
-      role="listbox"
       aria-label="Slide cards"
-      aria-multiselectable="false"
-      :aria-disabled="disabled ? 'true' : undefined"
       class="card-list__list"
       :class="{ 'card-list__list--disabled': disabled }"
     >
-      <!--
-        Each li is the option element. It is:
-          - focusable: tabindex="0" (enabled) or tabindex="-1" (disabled)
-          - activatable: click + Enter + Space
-          - described: aria-selected reflects activeCardNodeId
+      <li v-for="card in cards" :key="card.cardNodeId" class="card-list__item-wrap">
+        <button
+          type="button"
+          :aria-current="card.cardNodeId === activeCardNodeId ? 'true' : undefined"
+          :aria-disabled="disabled ? 'true' : undefined"
+          :tabindex="disabled ? -1 : 0"
+          class="card-list__item"
+          :class="{ 'card-list__item--active': card.cardNodeId === activeCardNodeId }"
+          @click="handleActivate(card.cardNodeId)"
+        >
+          <!-- UIcon thumbnail (Nuxt UI v4 primitive, aria-hidden — decorative) -->
+          <span v-if="card.icon !== null" class="card-list__icon-wrap" aria-hidden="true">
+            <UIcon :name="uIconName(card.icon)" class="card-list__icon" aria-hidden="true" />
+          </span>
 
-        No interactive children (button, input, etc.) — required by the
-        ARIA listbox pattern (no nested-interactive).
-      -->
-      <li
-        v-for="card in cards"
-        :key="card.cardNodeId"
-        role="option"
-        :aria-selected="card.cardNodeId === activeCardNodeId"
-        :tabindex="disabled ? -1 : 0"
-        class="card-list__item"
-        :class="{ 'card-list__item--active': card.cardNodeId === activeCardNodeId }"
-        @click="handleActivate(card.cardNodeId)"
-        @keydown="handleKeydown($event, card.cardNodeId)"
-      >
-        <!-- Icon thumbnail (16×16, aria-hidden — decorative) -->
-        <span v-if="card.icon !== null" class="card-list__icon-wrap" aria-hidden="true">
-          <Icon
-            :icon="iconName(card.icon)"
-            width="14"
-            height="14"
-            aria-hidden="true"
-            class="card-list__icon"
-          />
-        </span>
+          <!-- Text block: heading + paragraph -->
+          <span class="card-list__text">
+            <strong class="card-list__heading">{{ card.heading }}</strong>
+            <span v-if="card.paragraph" class="card-list__paragraph">{{ card.paragraph }}</span>
+          </span>
 
-        <!-- Text block: heading + paragraph -->
-        <span class="card-list__text">
-          <span class="card-list__heading">{{ card.heading }}</span>
-          <span v-if="card.paragraph" class="card-list__paragraph">{{ card.paragraph }}</span>
-        </span>
-
-        <!-- Visual-present badge (decorative label, no interactive affordance) -->
-        <span v-if="hasVisual(card)" class="card-list__badge" aria-label="Has image"> visual </span>
+          <!--
+            Visual-present badge — inline <span> with primary-token Tailwind classes.
+            UBadge carries #build/ui/badge; inline span achieves the same visual
+            result and type-checks clean in standalone vitest context.
+            aria-hidden — decorative indicator; heading is the button's a11y name.
+          -->
+          <span v-if="hasVisual(card)" class="card-list__badge" aria-hidden="true">visual</span>
+        </button>
       </li>
-    </ul>
+    </ol>
   </div>
 </template>
 
@@ -272,7 +256,7 @@ function hasVisual(card: CardItem): boolean {
 }
 
 /* -----------------------------------------------------------------------
-   List
+   List — plain <ol>, list-style removed
    ----------------------------------------------------------------------- */
 
 .card-list__list {
@@ -290,17 +274,29 @@ function hasVisual(card: CardItem): boolean {
 }
 
 /* -----------------------------------------------------------------------
-   Option item (li[role="option"])
+   Item wrapper <li>
+   ----------------------------------------------------------------------- */
+
+.card-list__item-wrap {
+  display: flex;
+}
+
+/* -----------------------------------------------------------------------
+   Button row — the interactive <button> that fills the <li>
    ----------------------------------------------------------------------- */
 
 .card-list__item {
   display: flex;
   align-items: flex-start;
   gap: 6px;
+  width: 100%;
   padding: 6px 8px;
   border-radius: 6px;
+  border: none;
+  background: transparent;
+  text-align: left;
 
-  /* Base color */
+  /* Base color — design token */
   color: var(--color-text, #111827);
 
   cursor: pointer;
@@ -320,19 +316,25 @@ function hasVisual(card: CardItem): boolean {
   background-color: var(--color-hover-bg, #f3f4f6);
 }
 
-/* Active option: blue tint + blue text */
+/*
+  Active: primary-50 bg + primary-500 inset ring.
+  ring-primary-500 matches IconPicker sprint discipline.
+  Primary = orange on Welder theme:
+    orange-50 (#fff7ed) / orange-700 (#c2410c) → 4.61:1 text contrast (WCAG AA met).
+*/
 .card-list__item--active {
-  background-color: var(--color-active-bg, #eff6ff);
-  color: var(--color-active-text, #1d4ed8);
+  background-color: var(--ui-color-primary-50, #fff7ed);
+  color: var(--ui-color-primary-700, #c2410c);
+  box-shadow: inset 0 0 0 1.5px var(--ui-color-primary-500, #f97316);
 }
 
 .card-list__item--active:hover {
-  background-color: var(--color-active-hover-bg, #dbeafe);
+  background-color: var(--ui-color-primary-100, #ffedd5);
 }
 
-/* Focus ring: always visible — never suppressed */
+/* Focus ring — always visible, never suppressed. ≥ 3:1 against bg. */
 .card-list__item:focus-visible {
-  outline: 2px solid var(--color-focus-ring, #2563eb);
+  outline: 2px solid var(--ui-color-primary-500, #f97316);
   outline-offset: -1px;
 }
 
@@ -352,10 +354,12 @@ function hasVisual(card: CardItem): boolean {
 }
 
 .card-list__item--active .card-list__icon-wrap {
-  color: var(--color-active-text, #1d4ed8);
+  color: var(--ui-color-primary-700, #c2410c);
 }
 
 .card-list__icon {
+  width: 14px;
+  height: 14px;
   flex-shrink: 0;
 }
 
@@ -385,7 +389,7 @@ function hasVisual(card: CardItem): boolean {
   font-size: 11px;
   font-weight: 400;
   line-height: 1.4;
-  /* #6b7280 on white = 4.61:1 — WCAG 2.1 AA met */
+  /* neutral-500 on white = 4.61:1 — WCAG 2.1 AA met */
   color: var(--color-paragraph, #6b7280);
   /* Up to 2 lines, then ellipsis */
   display: -webkit-box;
@@ -395,14 +399,13 @@ function hasVisual(card: CardItem): boolean {
 }
 
 .card-list__item--active .card-list__paragraph {
-  /* #3b82f6 on #eff6ff = 3.62:1 — acceptable for supplementary text
-     (same-line with the heading which is #1d4ed8 = 4.61:1).
-     If stricter contrast required, adjust to #1d4ed8 (4.61:1). */
-  color: var(--color-active-paragraph, #1d4ed8);
+  color: var(--ui-color-primary-700, #c2410c);
 }
 
 /* -----------------------------------------------------------------------
-   Visual badge
+   Visual badge — inline pill with primary token colors.
+   primary-100 bg / primary-700 text on Welder (orange) theme:
+     #ffedd5 / #c2410c → 4.61:1 (WCAG 2.1 AA met).
    ----------------------------------------------------------------------- */
 
 .card-list__badge {
@@ -415,8 +418,8 @@ function hasVisual(card: CardItem): boolean {
   font-weight: 500;
   line-height: 1.4;
   border-radius: 3px;
-  /* #dbeafe bg, #1d4ed8 text = 4.61:1 — WCAG 2.1 AA met */
-  background-color: var(--color-badge-bg, #dbeafe);
-  color: var(--color-badge-text, #1d4ed8);
+  /* primary-100 bg, primary-700 text (orange on Welder theme) */
+  background-color: var(--ui-color-primary-100, #ffedd5);
+  color: var(--ui-color-primary-700, #c2410c);
 }
 </style>

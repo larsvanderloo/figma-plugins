@@ -1,6 +1,7 @@
 // sections/CardList/tests/setup.ts — Vitest global setup for CardList tests.
 //
 // Owner: ui-engineer.
+// Resolves: MON-2894437197 (Sprint 5, Task 5.9).
 //
 // Node 25 localStorage shim — same rationale as IconPicker/tests/setup.ts.
 // Pinia@3 / @vue/devtools-kit calls localStorage.getItem() at module-evaluation
@@ -38,19 +39,26 @@ import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/vue';
 
 // ---------------------------------------------------------------------------
-// Mock @iconify/vue so tests don't depend on actual icon rendering.
-// The Icon component renders a <span data-icon="..."> stub.
+// Mock UIcon from its direct component path.
+//
+// UIcon (Icon.vue) is imported in CardList.vue directly from
+// @nuxt/ui/dist/runtime/components/Icon.vue to avoid the #build/ui/*
+// virtual-module requirement. In jsdom, @nuxt/icon's runtime (which Icon.vue
+// delegates to) requires SVG rendering and requestAnimationFrame that jsdom
+// doesn't support. Mocking at the module level gives us a lightweight stub
+// that renders <span data-icon="{name}"> — sufficient to verify that CardList
+// passes the correct i-lucide-{key} name string and that axe scans clean.
 // ---------------------------------------------------------------------------
 
-vi.mock('@iconify/vue', () => ({
-  Icon: {
-    name: 'Icon',
+vi.mock('@nuxt/ui/components/Icon.vue', () => ({
+  default: {
+    name: 'UIcon',
     props: {
-      icon: { type: String, required: true },
-      width: { type: [String, Number], default: undefined },
-      height: { type: [String, Number], default: undefined },
+      name: { type: String, required: true },
+      mode: { type: String, required: false },
+      size: { type: [String, Number], required: false },
     },
-    template: '<span :data-icon="icon" aria-hidden="true" />',
+    template: '<span :data-icon="name" aria-hidden="true" />',
   },
 }));
 
