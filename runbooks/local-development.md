@@ -90,7 +90,7 @@ The `code` bundle is IIFE (Figma's sandbox doesn't support ES modules). The `ui`
 
 **Code-side debugging**: harder — the sandbox doesn't expose DevTools. Use `console.log` and read the plugin console. Source maps work for column-accurate stack traces.
 
-**Figma desktop logs**: `~/Library/Logs/Figma/` on macOS. Useful for plugin-loading failures that don't surface in the console.
+**Figma desktop logs**: Figma desktop routes stdout/stderr to `/dev/null` on macOS — there is no log file to tail. `~/Library/Logs/Figma/` does not exist. For terminal-based log streaming, use the dev console bridge described in §11.
 
 ## 6. Working across workspace packages
 
@@ -135,3 +135,86 @@ pnpm install
 ```
 
 (`node_modules` removal is rarely needed; pnpm's content-addressable store handles most issues.)
+
+## 11. Dev console bridge — plugin logs in the terminal
+
+By default, `console.log/.warn/.error` from the plugin code sandbox is only visible in `Plugins → Development → Show/Hide Console` inside Figma. This section describes how to stream those logs to your terminal in real time.
+
+**Background:** Figma desktop routes stdout/stderr to `/dev/null` at the Electron process level. There is no log file to tail. Instead, a small code-side interceptor POSTs log entries over HTTP to a local Node.js server (`tools/dev-console-bridge/server.mjs`).
+
+**When to use this:** when you want logs in the terminal alongside `pnpm dev:code`, without switching windows to the Figma console. The Figma in-app console still works in parallel.
+
+### One-time setup
+
+The dev manifest (`manifest.dev.json`) adds `http://localhost:8765` to `allowedDomains` so the code sandbox's `fetch()` can reach the bridge. The production `manifest.json` retains `"allowedDomains": ["none"]`.
+
+You must re-import the manifest in Figma **once** after each manifest swap (Figma caches the manifest from the last import; a re-import picks up the updated `allowedDomains`). The plugin itself does not need to be re-opened after a code rebuild — only after a manifest change.
+
+### Workflow (three terminals)
+
+**Terminal A — build watcher:**
+
+```bash
+pnpm --filter @figma-plugins/welder-editor dev:manifest   # swap to dev manifest
+pnpm --filter @figma-plugins/welder-editor dev:code       # start watch build
+```
+
+**Terminal B — log server:**
+
+```bash
+pnpm --filter @figma-plugins/welder-editor dev:logs
+```
+
+The server prints to stderr:
+
+```
+[dev-console-bridge] listening on http://127.0.0.1:8765
+Waiting for plugin console output from Figma desktop...
+```
+
+**Figma desktop:**
+
+1. `Plugins → Development → Import plugin from manifest…` → select `plugins/welder-editor/manifest.json` (now the dev manifest).
+2. Open the plugin via `Plugins → Development → Welder Editor`.
+3. Plugin console output streams to Terminal B:
+   ```
+   13:42:01.123 LOG   [main] scheduleSlideListUpdate: 3 slides found
+   13:42:01.456 WARN  [main] selectionchange handler failed: Node not found
+   13:42:02.001 ERROR Uncaught: TypeError: Cannot read properties of null
+   ```
+
+### Wrap-up
+
+When you're done with the log bridge session:
+
+```bash
+pnpm --filter @figma-plugins/welder-editor dev:manifest:restore   # restore manifest.json
+```
+
+Then re-import the production manifest in Figma:
+`Plugins → Development → Import plugin from manifest…` → select `plugins/welder-editor/manifest.json` again.
+
+### Troubleshooting
+
+| Problem                                       | Fix                                                                                                                                                                                      |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Port 8765 is already in use`                 | `lsof -ti:8765 \| xargs kill`, then re-run `dev:logs`. Or set `DEV_CONSOLE_PORT=8766` and update `manifest.dev.json` to match.                                                           |
+| No logs appear in terminal                    | Check that you're running `pnpm dev:code` (not `pnpm build`). `import.meta.env.DEV` is only `true` in watch mode. Also verify you re-imported the dev manifest (not the production one). |
+| Figma shows a network-access error            | The dev manifest is not loaded — re-import `manifest.json` in Figma after running `dev:manifest`.                                                                                        |
+| Logs appear in Figma console but not terminal | The bridge server is not running. Start `pnpm dev:logs` in a second terminal.                                                                                                            |
+| `manifest.json` left in a dirty state         | `pnpm --filter @figma-plugins/welder-editor dev:manifest:restore`. CI's `tools/validate_manifest.py` will also flag a `manifest.json` containing localhost in `allowedDomains`.          |
+
+### What is captured
+
+| Stream                      | Source       | Terminal output                             |
+| --------------------------- | ------------ | ------------------------------------------- |
+| `console.log(...)`          | code sandbox | `HH:MM:SS.mmm LOG   <args>`                 |
+| `console.warn(...)`         | code sandbox | `HH:MM:SS.mmm WARN  <args>`                 |
+| `console.error(...)`        | code sandbox | `HH:MM:SS.mmm ERROR <args>`                 |
+| Unhandled promise rejection | code sandbox | `HH:MM:SS.mmm UNHANDLED REJECTION <reason>` |
+
+**Not captured via this bridge:** UI iframe logs (`console.*` from `ui/`). Those are visible in Chromium DevTools (right-click plugin → Inspect Element) or the Figma plugin console.
+
+**ADR:** ADR-0016 documents the decision rationale and the dev/prod manifest split.
+
+**Port:** 8765. Configurable via `DEV_CONSOLE_PORT` env var (also update `manifest.dev.json` to match if you change it).

@@ -18,10 +18,12 @@
 //   - ADR-0004: withAtomic opt-in inside table/journey apply; no commitUndo default.
 //   - ADR-0005: loadNamedVariables + resolveVariableForConsumer (T28.2 pattern).
 //   - ADR-0007: no chart handlers.
+//   - ADR-0016: dev-console-bridge — console interceptor (DEV only, no-op in prod).
 //
 // Owner: figma-api-engineer
 
 import uiHtml from 'virtual:ui-html';
+import { installDevConsole } from './dev-console';
 import {
   createRouter,
   loadNamedVariables,
@@ -742,6 +744,15 @@ function isPersistedStateSetPayload(u: unknown): u is { key: string; value: unkn
 // ---------------------------------------------------------------------------
 
 async function main(): Promise<void> {
+  // ADR-0016: install dev console bridge before anything else so that even
+  // early errors are captured.  installDevConsole() is a no-op in production
+  // (import.meta.env.DEV is replaced with `false` by Vite at build time and
+  // the body is tree-shaken away).  Requires manifest.dev.json in effect
+  // (allowedDomains: ["http://localhost:8765"]) — see runbooks/local-development.md §11.
+  if (import.meta.env.DEV) {
+    installDevConsole();
+  }
+
   // ADR-0002: guard against unsupported editor types.
   const editorType = figma.editorType;
   if (editorType !== 'figma' && editorType !== 'slides') {
