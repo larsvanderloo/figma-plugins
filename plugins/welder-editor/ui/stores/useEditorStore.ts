@@ -432,6 +432,33 @@ export const useEditorStore = defineStore(
       // reconciliation on plugin open. Persisting it would surface stale
       // reconciling/inFlightRequestId flags on warm hydration.
       pick: ['slides', 'activeSlideId', 'general', 'content', 'graphs'],
+
+      // Storage adapter: localStorage is blocked inside Figma's data: URL
+      // iframe ("Storage is disabled inside 'data:' URLs"). Detect that
+      // context and fall back to an in-memory no-op so Vue setup doesn't
+      // throw on plugin load. In the dev:ui localhost preview, real
+      // localStorage is available and used. Hydration becomes a no-op in
+      // Figma; the message bus reconciles state on every plugin run anyway.
+      storage: (() => {
+        try {
+          const probe = '__welder_probe__';
+          window.localStorage.setItem(probe, probe);
+          window.localStorage.removeItem(probe);
+          return window.localStorage;
+        } catch {
+          // Full Storage shape — pinia-plugin-persistedstate only calls
+          // getItem/setItem/removeItem, but the type requires the rest.
+          const noopStorage: Storage = {
+            length: 0,
+            key: () => null,
+            getItem: () => null,
+            setItem: () => undefined,
+            removeItem: () => undefined,
+            clear: () => undefined,
+          };
+          return noopStorage;
+        }
+      })(),
     },
   },
 );
