@@ -117,3 +117,58 @@ altering the public props/emits API of PropertyPanel.
   (future sprint / ADR pending), `UCollapsible` may be re-evaluated as a
   drop-in if it adds meaningful behaviour. The public API of PropertyPanel
   (props, emits, slots) is designed to be forward-compatible with that swap.
+
+---
+
+## Sprint 5 spike reaffirmation (MON-2894437330, 2026-05-05)
+
+**Task:** Sprint 5 Wave 3 task 5.10 — evaluate `<UCollapsible>` with `lazy: true`
+and `unmount-on-hide: true` props (which mitigate Reka's sync-measurement by
+deferring content render until open and unmounting on close).
+
+**Nuxt UI version under test:** `@nuxt/ui@^4.0.0` (resolved in workspace).
+
+**Spike finding — Path A eliminated at the import boundary.**
+
+Inspection of the installed `@nuxt/ui/dist/runtime/components/Collapsible.vue`
+reveals the following at the top of the script block:
+
+```js
+import theme from "#build/ui/collapsible";
+```
+
+and inside `<script setup>`:
+
+```js
+import { useAppConfig } from "#imports";
+```
+
+Both `#build/ui/collapsible` and `#imports` are virtual module aliases emitted
+by the Nuxt Vite plugin (`@nuxt/ui/vite`) during a full Nuxt application build.
+`sections/PropertyPanel/` runs under a standalone Vite config with no Nuxt
+application context; these aliases are unresolvable at both `vitest run` time
+and `vite build` time. Attempting to use `UCollapsible` would produce a module
+resolution error before any toggle could be measured.
+
+This is the identical blocker that precluded `UTabs` in `sections/TabStrip/` and
+that was documented as Blocker 1 in this ADR at initial acceptance. The `lazy`
+and `unmount-on-hide` mitigations for Reka's sync-measurement (Blocker 2) cannot
+be evaluated because Blocker 1 prevents the component from loading at all.
+
+**The perf gate (`pnpm --filter @figma-plugins/sections-table-editor exec vitest
+run tests/perf.test.ts`) was not run against the `UCollapsible` path** because
+`sections/TableEditor` (Sprint 4 scope) does not exist on main at the time of
+this spike; the gate itself cannot be invoked. The gate is recorded here as the
+forward-looking criterion: when `sections/TableEditor` ships, the max toggle
+latency across 10 toggles must remain < 16 ms (one frame at 60 fps).
+
+**Decision:** Path B — custom CSS-grid-rows implementation retained. No code
+change to `sections/PropertyPanel/src/PropertyPanel.vue`. Custom collapsible
+reaffirmed until:
+
+1. `@nuxt/ui/vite` plugin is wired to the standalone section Vite configs
+   (resolving the `#build/*` aliases without a full Nuxt app), AND
+2. A future spike with `sections/TableEditor` in place confirms the UCollapsible
+   toggle max stays below 16 ms across 10 toggles.
+
+**Follow-up:** file a new spike task when (1) lands.
