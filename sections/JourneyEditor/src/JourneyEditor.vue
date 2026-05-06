@@ -81,7 +81,6 @@
  */
 
 import { computed, useId } from 'vue';
-import { UFormField, UInput, UInputNumber, UButton } from '@nuxt/ui';
 import { TitleDescriptionEditor } from '@figma-plugins/sections-title-description-editor';
 import type { TitleDescriptionModel } from '@figma-plugins/sections-title-description-editor';
 import { IconPicker } from '@figma-plugins/sections-icon-picker';
