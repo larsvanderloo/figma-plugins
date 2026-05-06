@@ -666,7 +666,9 @@ describe('6. Concurrent: table and journey optimisticallyApply are slice-indepen
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithGraphs(store, GRAPHS_BOTH);
+    // general: null — GENERAL_MINIMAL renders a "Heading" textbox (General panel)
+    // that causes getByRole('textbox',{name:/heading/i}) to find multiple elements.
+    populateStoreWithGraphs(store, GRAPHS_BOTH, null);
 
     // Mark a request as in-flight (simulates concurrent dispatch state).
     store.recordPendingRequest('corr-concurrent-ui', 'graphs');

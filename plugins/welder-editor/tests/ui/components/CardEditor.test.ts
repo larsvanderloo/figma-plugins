@@ -40,13 +40,15 @@ describe('CardEditor', () => {
 
   it('renders IconPicker when card.icon is non-null', () => {
     render(CardEditor, { props: { card: CARD } });
-    // IconPicker renders search input
-    expect(screen.getByRole('textbox', { name: /search icons/i })).toBeDefined();
+    // IconPicker renders a search input — UInput with type="search" maps to
+    // ARIA role "searchbox", not "textbox".
+    expect(screen.getByRole('searchbox', { name: /search icons/i })).toBeDefined();
   });
 
   it('does not render IconPicker when card.icon is null', () => {
     render(CardEditor, { props: { card: { ...CARD, icon: null } } });
-    expect(screen.queryByRole('textbox', { name: /search icons/i })).toBeNull();
+    // Same: query searchbox role for the IconPicker search input.
+    expect(screen.queryByRole('searchbox', { name: /search icons/i })).toBeNull();
   });
 
   it('does not render ImageEditor when card.visualHash is undefined', () => {

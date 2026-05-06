@@ -11,12 +11,14 @@ import IconPicker from '@/components/IconPicker.vue';
 describe('IconPicker', () => {
   it('renders search input with correct aria-label', () => {
     render(IconPicker, { props: { modelValue: '' } });
-    expect(screen.getByRole('textbox', { name: /search icons/i })).toBeDefined();
+    // UInput with type="search" maps to ARIA role "searchbox", not "textbox".
+    expect(screen.getByRole('searchbox', { name: /search icons/i })).toBeDefined();
   });
 
   it('disables search input when disabled=true', () => {
     render(IconPicker, { props: { modelValue: '', disabled: true } });
-    const input = screen.getByRole('textbox', { name: /search icons/i }) as HTMLInputElement;
+    // UInput with type="search" maps to ARIA role "searchbox", not "textbox".
+    const input = screen.getByRole('searchbox', { name: /search icons/i }) as HTMLInputElement;
     expect(input.disabled).toBe(true);
   });
 

@@ -636,7 +636,10 @@ describe('13. JourneyEditor update:columnHeader → applyJourney dispatched', ()
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithGraphs(store, GRAPHS_JOURNEY_ONLY);
+    // general: null — GENERAL_MINIMAL renders a TitleDescriptionEditor "Heading" input
+    // (General panel) that causes getByRole('textbox',{name:/heading/i}) to find
+    // multiple elements: the slide heading AND the JourneyEditor column heading.
+    populateStoreWithGraphs(store, GRAPHS_JOURNEY_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_JOURNEY_SUCCESS);
     const { container } = render(App, { global: { plugins: [pinia] } });
@@ -833,7 +836,9 @@ describe('17. sync.inFlightRequestId set → disabled propagates to both section
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithGraphs(store, GRAPHS_BOTH);
+    // general: null — GENERAL_MINIMAL renders a "Heading" textbox (General panel)
+    // that causes getByRole('textbox',{name:/heading/i}) to find multiple elements.
+    populateStoreWithGraphs(store, GRAPHS_BOTH, null);
 
     store.recordPendingRequest('req-789', 'graphs');
 

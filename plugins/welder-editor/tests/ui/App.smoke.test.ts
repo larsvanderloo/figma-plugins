@@ -37,10 +37,11 @@ describe('App.vue — @testing-library/vue harness smoke test', () => {
     // Cleanup is handled globally by tests/setup.ts.
     render(App);
 
-    // SlidePicker renders a native <select> (role="combobox").
-    // With an empty store this is the first interactive element in the plugin.
-    const picker = screen.getByRole('combobox');
-    expect(picker).toBeDefined();
+    // USelectMenu renders a <button aria-haspopup="listbox"> trigger (not
+    // role="combobox" on an <input>). Query the trigger button directly.
+    // This is the visible, accessible entry-point to the SlidePicker widget.
+    const picker = document.querySelector('[aria-haspopup="listbox"]');
+    expect(picker).not.toBeNull();
   });
 
   it('renders the empty-state message before a slide is selected', () => {

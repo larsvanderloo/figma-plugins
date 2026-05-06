@@ -194,10 +194,10 @@ describe('App.vue — assembly smoke tests', () => {
     it('renders the slide picker combobox', () => {
       const { pinia } = setupPinia();
       const { container } = render(App, { global: { plugins: [pinia] } });
-      const q = within(container as HTMLElement);
-      // SlidePicker renders a native <select> (role="combobox").
-      const select = q.getByRole('combobox');
-      expect(select).toBeDefined();
+      // USelectMenu renders a <button aria-haspopup="listbox"> trigger (not
+      // role="combobox" on an <input>). Query the trigger button directly.
+      const picker = (container as HTMLElement).querySelector('[aria-haspopup="listbox"]');
+      expect(picker).not.toBeNull();
     });
 
     it('shows empty-state message when no slide is selected', () => {
@@ -232,11 +232,12 @@ describe('App.vue — assembly smoke tests', () => {
       });
 
       const { container } = render(App, { global: { plugins: [pinia] } });
-      const q = within(container as HTMLElement);
 
-      // SlidePicker uses USelectMenu (replaced native <select> — PR #58).
-      // Items are portal-rendered; verify via combobox presence + store state.
-      expect(q.getByRole('combobox')).toBeDefined();
+      // USelectMenu renders a <button aria-haspopup="listbox"> trigger (not
+      // role="combobox" on an <input>). Dropdown items are portal-rendered and
+      // only visible when the listbox is open; verify slide data via store state.
+      const picker = (container as HTMLElement).querySelector('[aria-haspopup="listbox"]');
+      expect(picker).not.toBeNull();
       expect(store.slides.length).toBe(2);
       expect(store.slides[0]!.name).toBe(SLIDE_A.name);
       expect(store.slides[1]!.name).toBe(SLIDE_B.name);

@@ -205,7 +205,9 @@ describe('1. CardList select → CardEditor renders selected card heading', () =
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // general: null — prevents the General panel's TitleDescriptionEditor "Heading"
+    // textbox from rendering, so queryByRole/getByRole on /heading/i is unambiguous.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
@@ -230,7 +232,8 @@ describe('1. CardList select → CardEditor renders selected card heading', () =
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // general: null — same isolation rationale as above.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
@@ -264,7 +267,8 @@ describe('2. CardEditor heading edit → store.content.cards reflects new headin
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // general: null — isolate Content panel so heading queries are unambiguous.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     // Defer bridge resolution so we can inspect the optimistic store state.
     let resolveCard!: (v: unknown) => void;
@@ -305,7 +309,8 @@ describe('2. CardEditor heading edit → store.content.cards reflects new headin
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // general: null — same isolation rationale.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_CARD_SUCCESS);
 
@@ -347,7 +352,10 @@ describe('3. TimelineEditor heading edit → store.content.timelineItems reflect
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_TIMELINE_ONLY);
+    // general: null — without this, getAllByRole('textbox',{name:/heading/i})[0]
+    // returns the TitleDescriptionEditor heading (General panel) instead of the
+    // TimelineEditor Step 1 heading, causing the wrong message type to be dispatched.
+    populateStoreWithContent(store, CONTENT_TIMELINE_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_TIMELINE_SUCCESS);
 
@@ -379,7 +387,8 @@ describe('3. TimelineEditor heading edit → store.content.timelineItems reflect
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_TIMELINE_ONLY);
+    // general: null — same isolation rationale.
+    populateStoreWithContent(store, CONTENT_TIMELINE_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_TIMELINE_SUCCESS);
 
@@ -429,7 +438,11 @@ describe('4. CardEditor edit does not stomp TimelineEditor state', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_BOTH);
+    // general: null — without this, getAllByRole('textbox',{name:/heading/i})[0]
+    // returns the slide TitleDescriptionEditor heading (index 0 in DOM order),
+    // not the CardEditor heading, so the edit dispatches apply-title-description
+    // instead of apply-card and the card heading is never updated.
+    populateStoreWithContent(store, CONTENT_BOTH, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_CARD_SUCCESS);
 
@@ -481,7 +494,8 @@ describe('5. Bridge round-trip: applyCard → store + CardList + CardEditor refl
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // general: null — same isolation rationale.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_CARD_SUCCESS);
 
@@ -522,7 +536,8 @@ describe('5. Bridge round-trip: applyCard → store + CardList + CardEditor refl
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // general: null — same isolation rationale.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_CARD_SUCCESS);
 
@@ -570,7 +585,8 @@ describe('6. Pinia persistedstate: card heading edit produces localStorage write
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // general: null — same isolation rationale.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_CARD_SUCCESS);
 
@@ -744,7 +760,8 @@ describe('8. Error path: bridge error for applyCard → store rolls back → Car
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // general: null — same isolation rationale.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     // Bridge responds with a failure envelope.
     mockPostAndWait.mockResolvedValue(APPLY_CARD_ERROR);
@@ -781,7 +798,8 @@ describe('8. Error path: bridge error for applyCard → store rolls back → Car
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // general: null — same isolation rationale.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_CARD_ERROR);
 

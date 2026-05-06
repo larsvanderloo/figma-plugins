@@ -17,9 +17,10 @@ const SLIDES: SlideSummary[] = [
 describe('SlidePicker', () => {
   it('renders a combobox (USelectMenu)', () => {
     render(SlidePicker, { props: { slides: SLIDES, activeSlideId: null } });
-    // USelectMenu renders a combobox role
-    const combobox = screen.getByRole('combobox');
-    expect(combobox).toBeDefined();
+    // USelectMenu renders a <button aria-haspopup="listbox"> trigger (not
+    // role="combobox" on an <input>). Query by aria-haspopup attribute.
+    const trigger = document.querySelector('[aria-haspopup="listbox"]');
+    expect(trigger).not.toBeNull();
   });
 
   it('shows loading placeholder when loading is true', () => {
