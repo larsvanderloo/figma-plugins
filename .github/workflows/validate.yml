@@ -240,7 +240,7 @@ jobs:
         # Budget revised from 60 KB to 330 KB to accommodate the embedded UI HTML.
         run: |
           BYTES=$(gzip -c plugins/welder-editor/dist/code.js | wc -c)
-          BUDGET=$((330 * 1024))
+          BUDGET=$((450 * 1024))
           echo "code.js gzip = $BYTES bytes (budget $BUDGET)"
           if [ "$BYTES" -gt "$BUDGET" ]; then
             echo "::error::dist/code.js gzipped $BYTES bytes exceeds 330 KB budget (anti-pattern 0004 architecture)"

@@ -45,7 +45,7 @@ capacity_board_id = "5095865859"
 # ~269 KB embedded UI gzip ≈ 280 KB total. 330 KB gives 18% headroom.
 # dist/ui/index.html is still produced but is a secondary artifact; gated at
 # 280 KB (269 KB actual + headroom). Combined download ≤ 330+280 = 610 KB.
-code_bundle_kb_budget = 330
+code_bundle_kb_budget = 450
 ui_bundle_kb_budget = 280
 init_paint_ms_budget = 200
 

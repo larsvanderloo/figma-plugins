@@ -55,12 +55,18 @@ function chunkedUiHtml(): Plugin {
       if (id !== RESOLVED_ID) return;
       const uiPath = resolve(root, 'dist/ui/index.html');
       const html = readFileSync(uiPath, 'utf-8');
+      // Base64-encode before chunking so every chunk is pure ASCII [A-Za-z0-9+/=].
+      // Without encoding, Rollup's string optimiser converts JSON string chunks
+      // to template literals; the HTML contains backticks (inlined Vue/Nuxt UI JS)
+      // which break the outer template literal with "Unexpected token {" at runtime.
+      // atob() is available in Figma's plugin sandbox. (anti-pattern 0004 fix v2)
+      const b64 = Buffer.from(html).toString('base64');
       const CHUNK_SIZE = 60_000;
       const chunks: string[] = [];
-      for (let i = 0; i < html.length; i += CHUNK_SIZE) {
-        chunks.push(JSON.stringify(html.slice(i, i + CHUNK_SIZE)));
+      for (let i = 0; i < b64.length; i += CHUNK_SIZE) {
+        chunks.push(JSON.stringify(b64.slice(i, i + CHUNK_SIZE)));
       }
-      return `export default [\n${chunks.join(',\n')}\n].join('');`;
+      return `export default atob([\n${chunks.join(',\n')}\n].join(''));`;
     },
   };
 }
