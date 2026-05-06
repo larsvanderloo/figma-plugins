@@ -6,6 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite build --watch",
+    "dev:ui": "vite",
     "dev:code": "vite build --config vite.code.config.ts --watch",
     "build": "vite build && vite build --config vite.code.config.ts",
     "typecheck": "vue-tsc --noEmit",
