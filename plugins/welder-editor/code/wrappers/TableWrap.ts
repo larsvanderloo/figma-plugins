@@ -41,9 +41,9 @@ import { resolveVariableForConsumer } from '@figma-plugins/figma-api';
 // ---------------------------------------------------------------------------
 
 const TABLE_WIDTHS: { sm: number; md: number; lg: number } = {
-  sm: 560,
-  md: 800,
-  lg: 1040,
+  sm: 800,
+  md: 1200,
+  lg: 1728,
 };
 
 // Fallback RGB values (only used as fallback when resolveForConsumer is unavailable).
@@ -666,11 +666,18 @@ function applyBodyTruncation(bodyRows: FrameNode[]): void {
       } catch (_e) {
         // silent
       }
-      const textNode = cellFrame.findOne(function (n: SceneNode) {
-        return n.type === 'TEXT';
-      });
-      if (textNode === null || textNode.type !== 'TEXT') continue;
-      const t = textNode as TextNode;
+      // Direct children scan — cells have exactly one TEXT child (no recursion needed).
+      // v0.2.1 reference: iterate children array, not findOne traversal.
+      let textNode: TextNode | null = null;
+      for (let ti = 0; ti < cellFrame.children.length; ti++) {
+        const maybeText = cellFrame.children[ti]!;
+        if (maybeText.type === 'TEXT') {
+          textNode = maybeText as TextNode;
+          break;
+        }
+      }
+      if (textNode === null) continue;
+      const t = textNode;
       try {
         t.textAutoResize = 'NONE';
       } catch (_e) {
