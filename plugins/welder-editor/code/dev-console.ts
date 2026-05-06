@@ -26,7 +26,9 @@
 //
 // Owner: figma-api-engineer
 
-const BRIDGE_URL = 'http://127.0.0.1:8765' as const;
+// Must match manifest.dev.json's devAllowedDomains entry exactly — Figma's
+// CSP treats 'localhost' and '127.0.0.1' as different origins.
+const BRIDGE_URL = 'http://localhost:8765' as const;
 
 /** Coerce an arbitrary console argument to a plain string for JSON transport. */
 function argToString(a: unknown): string {
