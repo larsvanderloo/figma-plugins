@@ -6,7 +6,7 @@
 
 This file documents the shape of the message bus between `plugin-src/code.ts` (Figma sandbox) and `plugin-src/ui/` (Vue 3 iframe) at the time of import (v0.2.1). The canonical schema lives in [`../../plugin-src/types.ts`](../../plugin-src/types.ts) — it is the de-facto contract — because of the layout deviation noted in the import ADR. There is **no `shared/messages.ts`** yet; it will be authored as part of `T_REFACTOR_LAYOUT`.
 
-For full behavioural detail, see the imported product spec at [`../../spec.md`](../../spec.md) §5 ("Communicatie & berichtenstroom").
+For full behavioural detail, see the imported product spec at [`../product/specs/spec.md`](../product/specs/spec.md) §5 ("Communicatie & berichtenstroom").
 
 ## Two-thread model
 
@@ -66,7 +66,7 @@ The discriminated unions are defined in `plugin-src/types.ts`. Summary lifted fr
 
 ## Latency budgets
 
-Carried over from the prior perf investigation (`../../.reviews/perf-investigation-2026-04-26.md`) and `spec.md` §6. These are pre-monorepo numbers and should be re-validated in the canonical `e2e-gauntlet.md` pass before the next release.
+Carried over from the prior perf investigation (`../perf/investigations/perf-investigation-2026-04-26.md`) and `spec.md` §6. These are pre-monorepo numbers and should be re-validated in the canonical `e2e-gauntlet.md` pass before the next release.
 
 | Operation                                       | Budget   |
 | ----------------------------------------------- | -------- |
@@ -86,6 +86,6 @@ Aligning the error taxonomy is a `T_REFACTOR_LAYOUT` follow-up — the `shared/m
 - Discriminated unions: [`../../plugin-src/types.ts`](../../plugin-src/types.ts)
 - Constants (variable keys, library IDs): [`../../plugin-src/constants.ts`](../../plugin-src/constants.ts)
 - Wrapper detection: [`../../plugin-src/slide-machine.ts`](../../plugin-src/slide-machine.ts)
-- Spec §5 (message flow): [`../../spec.md`](../../spec.md)
+- Spec §5 (message flow): [`../product/specs/spec.md`](../product/specs/spec.md)
 - Import ADR (layout deviation): top-level `docs/adr/`
 - Reference threading model in canonical-layout sibling plugin: `plugins/welder-editor/docs/threading/welder-editor.md`

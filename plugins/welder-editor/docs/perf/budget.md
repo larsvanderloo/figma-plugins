@@ -74,13 +74,13 @@ See `../threading/overview.md §"Latency budgets"` for the table. Summary:
 | `update-*` → `target-updated` (single field) | ≤ 500 ms |
 | `upload-image` bytes → `target-updated`      | ≤ 1 s    |
 
-These are pre-monorepo numbers from the prior perf investigation (`../../.reviews/perf-investigation-2026-04-26.md`) and `spec.md` §6. Re-validate in the canonical e2e gauntlet before the next release.
+These are pre-monorepo numbers from the prior perf investigation (`./investigations/perf-investigation-2026-04-26.md`) and `spec.md` §6. Re-validate in the canonical e2e gauntlet before the next release.
 
 ---
 
 ## Hot paths
 
-The dominant ui-side weight at v0.2.1, lifted from the imported `.reviews/perf-investigation-2026-04-26.md` (verify with `rollup-plugin-visualizer` after the layout refactor):
+The dominant ui-side weight at v0.2.1, lifted from the imported `./investigations/perf-investigation-2026-04-26.md` (verify with `rollup-plugin-visualizer` after the layout refactor):
 
 - **Nuxt UI v4 (full bundle)** — primary ui weight; tree-shaking opportunity once components are itemized.
 - **Lucide icon set (`@iconify-json/lucide`)** — full set imported. Manifest-based subset is the welder-editor pattern (ADR-0003 §lever 1) and applies here too.
@@ -117,7 +117,7 @@ Apply these as part of the post-refactor budget ADR; do not apply them piecemeal
 
 ## Pointers
 
-- Imported perf investigation: `../../.reviews/perf-investigation-2026-04-26.md`
+- Imported perf investigation: `./investigations/perf-investigation-2026-04-26.md`
 - Canonical-layout sibling perf budget: `plugins/welder-editor/docs/perf/welder-editor.md`
 - Chunked-text-loader anti-pattern: `learnings/anti-patterns/0002-figma-plugin-load-debugging.md`
 - Top-level perf doctrine: `docs/perf/` (when populated by `figma-api-engineer` / `ui-engineer`)

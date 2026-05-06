@@ -2,7 +2,7 @@
 
 Figma plugin for editing existing Welder-branded slides in Figma Design and Figma Slides. The user picks a slide on the current page from a dropdown, then edits its content across three tabs (General / Content / Graphs) wiring up sub-editors for TitleDescription, Badge, Image, Card list, Chart, Table, and Journey/Timeline. Consolidates the predecessors `welder-table` v0.2.0 (plugin) and `chart-builder` v0.3.0 (widget) — those tags remain in their respective repos as a rollback path.
 
-The full product specification is in [`spec.md`](./spec.md) (Dutch, ~2300 lines). The org bookkeeping (api-spec, threading, perf) is under [`docs/`](./docs/).
+The full product specification is in [`docs/product/specs/spec.md`](./docs/product/specs/spec.md) (Dutch, ~2300 lines). The org bookkeeping (api-spec, threading, perf) is under [`docs/`](./docs/).
 
 ## Imported from external scaffold
 
@@ -28,7 +28,6 @@ welder-editor/
 ├── tsconfig.json        # code-side, ES2017
 ├── tsconfig.ui.json     # ui-side, ES2020
 ├── app.config.ts        # Nuxt UI palette
-├── spec.md              # product spec (Dutch, ~2300 lines)
 ├── plugin-src/          # NON-CANONICAL layout — to be split into code/, ui/, shared/
 │   ├── code.ts          # main-thread bundle entry
 │   ├── types.ts         # message-bus types + domain models (the de-facto contract)
@@ -40,10 +39,10 @@ welder-editor/
 ├── docs/                # org bookkeeping
 │   ├── api-spec/overview.md
 │   ├── threading/overview.md
-│   └── perf/budget.md
-├── tests/               # plugin-tester landing zone
-├── validation/          # plugin-tester landing zone (e2e gauntlet, listening tests, submissions)
-└── .reviews/            # prior perf investigation (carried over from external scaffold)
+│   ├── perf/budget.md
+│   ├── perf/investigations/   # prior perf-investigation reports
+│   └── product/specs/spec.md  # full product spec (Dutch, ~2300 lines)
+└── validation/          # plugin-tester landing zone (e2e gauntlet, listening tests, submissions)
 ```
 
 The agent ownership map from `CLAUDE.md` applies to `plugin-src/` paths during the deviation window: `plugin-src/code.ts` is owned by `figma-api-engineer`; `plugin-src/ui/` by `ui-engineer`; `plugin-src/types.ts` + `plugin-src/constants.ts` + `plugin-src/slide-machine.ts` (the contract) by `figma-api-engineer`. The chart-core CSV parser belongs to `figma-api-engineer` (data shape) with `ui-engineer` consultation when the parser is consumed in the iframe. Editors under `plugin-src/editors/` cross both — touch `code/` paths via `figma-api-engineer`, ui rendering via `ui-engineer`.

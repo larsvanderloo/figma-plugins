@@ -4,7 +4,7 @@
 **Date:** 2026-05-06
 **Owner:** figma-api-engineer
 
-The canonical product spec for this plugin lives in [`../../spec.md`](../../spec.md). It was imported intact from the external scaffold zip and is the authoritative source for v0.2.1 behaviour: feature inventory, wrapper detection rules, persistence model, message-bus contract, and editor-by-editor behaviour. It is written in Dutch (~2300 lines).
+The canonical product spec for this plugin lives in [`../product/specs/spec.md`](../product/specs/spec.md). It was imported intact from the external scaffold zip and is the authoritative source for v0.2.1 behaviour: feature inventory, wrapper detection rules, persistence model, message-bus contract, and editor-by-editor behaviour. It is written in Dutch (~2300 lines).
 
 This file is a stub. As features are touched in the monorepo flow, `figma-api-engineer` should add api-surface notes that follow the org template (see `plugins/welder-editor/docs/api-spec/welder-editor.md` for the canonical shape: purpose statement, manifest constraints, READ / MUTATE / UI bridge / NETWORK / STORAGE inventories, persistence model, risk flags, reuse opportunities, submission gates, measurement gaps).
 
@@ -17,7 +17,7 @@ Do not attempt a one-shot translation of `spec.md`. Increment per feature touche
 - **Per-editor logic** — `../../plugin-src/editors/{general,content,chart,table,journey,shared,_shared}/`.
 - **Domain models + message-bus contract** — `../../plugin-src/types.ts`.
 - **Constants (variable keys, library file IDs, magic strings)** — `../../plugin-src/constants.ts`.
-- **Prior perf investigation** — `../../.reviews/perf-investigation-2026-04-26.md`.
+- **Prior perf investigation** — `../perf/investigations/perf-investigation-2026-04-26.md`.
 
 ## Layout deviation
 

@@ -12,8 +12,8 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `plugin.toml` with slug, name, version (0.2.1), editor types, owner agent, placeholder Monday IDs, placeholder bundle budgets, and `[message_bus] version = 1`.
 - `README.md` with build instructions for the interim npm workflow and explicit onboarding-debt callouts (lockfile migration, layout refactor, Monday folder, gzipped budget re-measure).
 - `CHANGELOG.md` (this file).
-- `docs/api-spec/overview.md`, `docs/threading/overview.md`, `docs/perf/budget.md` — org-bookkeeping pointers; full content lives in `spec.md` and `plugin-src/types.ts` until the layout refactor lands.
-- `tests/` and `validation/` directories with `.gitkeep` markers as plugin-tester landing zones.
+- `docs/api-spec/overview.md`, `docs/threading/overview.md`, `docs/perf/budget.md` — org-bookkeeping pointers; full content lives in `docs/product/specs/spec.md` and `plugin-src/types.ts` until the layout refactor lands.
+- `validation/` directory with a `.gitkeep` marker as a plugin-tester landing zone.
 - ADR in top-level `docs/adr/` documenting the temporary retention of the imported source-tree layout (now under `plugin-src/`) and the planned `T_REFACTOR_LAYOUT` task.
 
 ### Changed
@@ -33,4 +33,4 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ## [0.2.1] — 2026-04-25
 
-Released externally before monorepo onboarding (see `spec.md` for full feature inventory). Predecessors `welder-table` v0.2.0 and `chart-builder` v0.3.0 remain available as rollback. v0.2.2 (T39 responsive table) is in flight in the external scaffold and will be merged into the monorepo flow once onboarding debt is paid down.
+Released externally before monorepo onboarding (see `docs/product/specs/spec.md` for full feature inventory). Predecessors `welder-table` v0.2.0 and `chart-builder` v0.3.0 remain available as rollback. v0.2.2 (T39 responsive table) is in flight in the external scaffold and will be merged into the monorepo flow once onboarding debt is paid down.
