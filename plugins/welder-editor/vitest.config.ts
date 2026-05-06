@@ -1,5 +1,6 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
+import ui from '@nuxt/ui/vite';
 import baseConfig from '../../vitest.config';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -9,12 +10,28 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 export default mergeConfig(
   baseConfig,
   defineConfig({
-    plugins: [vue()],
+    plugins: [
+      vue(),
+      // Nuxt UI v4 Vite plugin — required for plugin-level integration tests
+      // (tests/ui/*) that mount sections rendering UFormField/UInput/etc.
+      // Without this, vitest can't resolve `#build/ui/*` virtual aliases that
+      // Nuxt UI components emit, and `getByRole('textbox', {name:/heading/i})`
+      // queries fail because UFormField's auto-id label association doesn't
+      // execute. Mirrors plugins/welder-editor/vite.config.ts (PR #53 / 5.0).
+      ui({
+        colorMode: false,
+        ui: { colors: { primary: 'orange', secondary: 'blue', neutral: 'neutral' } },
+      }),
+    ],
     resolve: {
       alias: {
         '@': resolve(root, 'ui'),
         '@code': resolve(root, 'code'),
         '@shared': resolve(root, 'shared'),
+        // Nuxt UI's runtime stubs reference vue-router as an optional peer
+        // dep. We don't ship a router; alias to a no-op stub so vitest can
+        // resolve the import. See tests/__stubs__/vue-router.ts.
+        'vue-router': resolve(root, 'tests/__stubs__/vue-router.ts'),
       },
     },
     test: {
