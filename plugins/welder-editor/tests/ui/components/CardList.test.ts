@@ -53,7 +53,7 @@ describe('CardList', () => {
     const { emitted } = render(CardList, { props: { model: CONTENT_WITH_CARDS } });
     const cardAOption = screen.getByRole('option', { name: /card a/i });
     await fireEvent.click(cardAOption);
-    expect(emitted()['select']?.[0]?.[0]).toBe('card-a');
+    expect((emitted() as Record<string, unknown[][]>)['select']?.[0]?.[0]).toBe('card-a');
   });
 
   it('sets aria-selected on active card', () => {

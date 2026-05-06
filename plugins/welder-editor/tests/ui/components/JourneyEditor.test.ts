@@ -4,7 +4,7 @@
 //
 // Owner: ui-engineer. Sprint 5 Task 5.8.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/vue';
 import JourneyEditor from '@/components/JourneyEditor.vue';
 import { createPinia, setActivePinia } from 'pinia';

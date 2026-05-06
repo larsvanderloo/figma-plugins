@@ -34,7 +34,7 @@ describe('PropertyPanel', () => {
   it('emits update:open on toggle', async () => {
     const { emitted } = render(PropertyPanel, { props: { title: 'Settings' } });
     await fireEvent.click(screen.getByRole('button', { name: /settings/i }));
-    expect(emitted()['update:open']?.[0]?.[0]).toBe(false);
+    expect((emitted() as Record<string, unknown[][]>)['update:open']?.[0]?.[0]).toBe(false);
   });
 
   it('renders non-collapsible header as div (not button) when collapsible=false', () => {

@@ -167,8 +167,8 @@ function onCropTransformUpdate(transform: Transform): void {
 
       <UButton
         type="button"
-        :disabled="disabled"
-        :aria-disabled="disabled ? 'true' : undefined"
+        :disabled="disabled ?? false"
+        :aria-disabled="(disabled ?? false) ? 'true' : 'false'"
         :aria-controls="fileInputId"
         aria-label="Replace image — choose a PNG, JPEG, or WebP file"
         variant="outline"
