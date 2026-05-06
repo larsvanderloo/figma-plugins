@@ -292,7 +292,7 @@ plugins/welder-slide-editor/
   esbuild.config.mjs                     — main-thread build, target es2017
   app.config.ts                          — Nuxt UI theme (orange primary)
   dist/                                  — gecommit (code.js, ui.html)
-  widget-src/
+  plugin-src/
     code.ts                              — plugin-main: command-dispatch, slide-scan, 3-tab-payload-builder, message-loop
     types.ts                             — shared types (SlideSummary, PluginView, GeneralSections, ContentItems, GraphItems)
     constants.ts                         — THEMES, FONTS, BADGE_ICON_OPTIONS
@@ -368,13 +368,13 @@ Complexity-label: `[S]` ≤30k tokens, `[M]` 30-60k, `[L]` 60-80k. Elke taak ≤
 
 **T2 — `types.ts` + `constants.ts`** `[M, ~160 LOC]`
 
-- Files: `widget-src/types.ts`, `widget-src/constants.ts`.
+- Files: `plugin-src/types.ts`, `plugin-src/constants.ts`.
 - Acties: definieer `SlideSummary`, `TabId`, `PluginView`, `GeneralSections`, `ContentItems`, `GraphItems`, bridge-message-unions (UI↔plugin). Placeholder `ChartData`/`TableData` als `unknown` tot T12/T14. Constants: `THEMES`, `FONTS`, `BADGE_ICON_OPTIONS` (Lucide-set, hergebruikt uit welder-table).
 - Exit: `tsc --noEmit` clean.
 
 **T3 — `slide-machine.ts` — selectors + setProperties-helper** `[S, ~100 LOC]`
 
-- Files: `widget-src/slide-machine.ts` (nieuw).
+- Files: `plugin-src/slide-machine.ts` (nieuw).
 - Acties: exporteer pure synchrone selectors:
   - `isSlide(n)`, `findSlidesOnPage()`, `slideSummary(slide)`.
   - `findCopyWrap(slide)`, `findBadge(slide)`, `findImageWrap(slide)`, `findCardWrap(slide)`, `findChartWrap(slide)`, `findTableWrap(slide)` — elk retourneert `InstanceNode | null`.
@@ -383,7 +383,7 @@ Complexity-label: `[S]` ≤30k tokens, `[M]` 30-60k, `[L]` 60-80k. Elke taak ≤
 
 **T4 — `code.ts` plugin-main skelet** `[M, ~200 LOC]`
 
-- Files: `widget-src/code.ts`.
+- Files: `plugin-src/code.ts`.
 - Acties: `figma.showUI(__html__, { width: 520, height: 760 })`. `loadFonts()` parallel (Inter Regular/Medium, Instrument Sans SemiBold). Command-dispatch op `figma.command === 'open'`. Message-loop: `ui-ready` → post `init`. `pick-slide` → scan die slide (general/content/graphs) en post `slide-loaded`. `update-*` tijdelijk no-op (ingevuld T8–T13). `figma.on('currentpagechange')` → `page-changed`.
 - Exit: plugin opent UI; UI krijgt `init`; `pick-slide` zoomt + retourneert drie tab-payloads.
 
@@ -411,19 +411,19 @@ Complexity-label: `[S]` ≤30k tokens, `[M]` 30-60k, `[L]` 60-80k. Elke taak ≤
 
 **T8 — `TitleDescriptionEditor.vue` + mutatie-flow** `[M, ~180 LOC]`
 
-- Files: `ui/components/TitleDescriptionEditor.vue`, `widget-src/editors/general/title-description.ts`, `widget-src/code.ts` (message-handler).
+- Files: `ui/components/TitleDescriptionEditor.vue`, `plugin-src/editors/general/title-description.ts`, `plugin-src/code.ts` (message-handler).
 - Acties: UI met UInput voor `heading` + UTextarea voor `paragraph` (alleen als `paragraph !== null`). `update-general`-message met section `titleDescription`. Main muteert descendant text-nodes `Heading` / `Paragraph` in CopyWrap via `text.characters = newVal` na `loadFontAsync`.
 - Exit: wijzig heading in UI → canvas-Heading-text updatet na ~200ms debounce.
 
 **T9 — `BadgeEditor.vue` + mutatie** `[M, ~180 LOC]`
 
-- Files: `ui/components/BadgeEditor.vue`, `widget-src/editors/general/badge.ts`, `widget-src/code.ts` (handler).
+- Files: `ui/components/BadgeEditor.vue`, `plugin-src/editors/general/badge.ts`, `plugin-src/code.ts` (handler).
 - Acties: UInput label + icon-picker (hergebruikt `BADGE_ICON_OPTIONS` + lucide-icons-set uit welder-table). Main muteert label-text-node + icon-child (text-swap of instance-swap, afhankelijk van Slide Machine-pattern — builder bepaalt bij run).
 - Exit: label + icon wisselen op canvas na debounce.
 
 **T10 — `ImageEditor.vue` + fill-replace** `[L, ~200 LOC]`
 
-- Files: `ui/components/ImageEditor.vue`, `widget-src/editors/general/image.ts`, `widget-src/code.ts` (handler + `upload-image`-route).
+- Files: `ui/components/ImageEditor.vue`, `plugin-src/editors/general/image.ts`, `plugin-src/code.ts` (handler + `upload-image`-route).
 - Acties: file-input → `ArrayBuffer` → `postMessage({ type: 'upload-image', targetNodeId, bytes })`. Main doet `figma.createImage(bytes)` → `node.fills = [{ type: 'IMAGE', imageHash, scaleMode: 'FILL' }]` op ImageWrap. **Crop is v0.2.0**.
 - Exit: upload file → canvas-ImageWrap toont het geüploade beeld.
 
@@ -431,7 +431,7 @@ Complexity-label: `[S]` ≤30k tokens, `[M]` 30-60k, `[L]` 60-80k. Elke taak ≤
 
 **T11 — `ContentPanel.vue` + `CardItemEditor.vue` + mutatie** `[M, ~200 LOC]`
 
-- Files: `ui/components/ContentPanel.vue`, `ui/components/CardItemEditor.vue`, `widget-src/editors/content/card.ts`.
+- Files: `ui/components/ContentPanel.vue`, `ui/components/CardItemEditor.vue`, `plugin-src/editors/content/card.ts`.
 - Acties: `ContentPanel` v-for over `content.cards`, rendert `CardItemEditor` per card. Per-card-velden: heading (UInput), paragraph (UTextarea), visual-upload (alleen als `visualHash !== undefined` = slot aanwezig). Main muteert: text-nodes `Heading`+`Paragraph` binnen `Frame 7`; visual via `ImagePaint` op `Frame 6` (of image-slot).
 - Exit: 2+ cards op slide → panel toont 2+ editors → wijziging → canvas updatet correcte card.
 
@@ -445,7 +445,7 @@ Complexity-label: `[S]` ≤30k tokens, `[M]` 30-60k, `[L]` 60-80k. Elke taak ≤
 
 **T13 — Imperatieve chart-renderer (bar + line + pie)** `[L, ~200 LOC]`
 
-- Files: `widget-src/editors/chart/renderer.ts`, `widget-src/editors/chart/bar.ts`, `widget-src/editors/chart/types.ts`. (Line + pie in vervolgtask als budget krap wordt.)
+- Files: `plugin-src/editors/chart/renderer.ts`, `plugin-src/editors/chart/bar.ts`, `plugin-src/editors/chart/types.ts`. (Line + pie in vervolgtask als budget krap wordt.)
 - Acties: `renderChart(data: ChartData): FrameNode` dispatch op `data.type`. v0.1.0: bar + line + pie imperatief; donut/progressbar/radial = placeholder-frame + TODO. Main-handler voor `update-graph` vervangt ChartWrap-content (zelfde positie, `parent.insertChild(idx, fresh)`).
 - Exit: bar-chart met 5 datapoints rendert correct; theme-kleuren kloppen; chart-type-switch werkt.
 - _Splitsingsvoorstel bij overschrijding 80k: T13a = renderer + bar, T13b = line + pie._
@@ -454,7 +454,7 @@ Complexity-label: `[S]` ≤30k tokens, `[M]` 30-60k, `[L]` 60-80k. Elke taak ≤
 
 **T14 — `TableEditor.vue` + table-renderer port + mutatie** `[M, ~200 LOC]`
 
-- Files: `ui/components/TableEditor.vue` (+ kopieer `BadgeCellInput.vue`, `ColumnsEditor.vue`, `TableDataEditor.vue`, `TextSizePicker.vue` onveranderd), `widget-src/editors/table/renderer.ts` (cp uit welder-table), `widget-src/editors/table/types.ts`.
+- Files: `ui/components/TableEditor.vue` (+ kopieer `BadgeCellInput.vue`, `ColumnsEditor.vue`, `TableDataEditor.vue`, `TextSizePicker.vue` onveranderd), `plugin-src/editors/table/renderer.ts` (cp uit welder-table), `plugin-src/editors/table/types.ts`.
 - Acties: afhankelijk van user-answer op §12 Q1: ofwel `TableEditor` mount onder Graphs-tab (naast ChartEditor), ofwel onder nieuwe `TablesPanel` met 4e tab "Tables" in `Tabs.vue`. Renderer 1-op-1 geport uit welder-table v0.2.0.
 - Exit: table-target openen → editor vol → wijziging → table regenereert op zelfde positie.
 
@@ -633,9 +633,9 @@ Oplossingsrichting (builder kiest binnen scope): **lokaal bundelen via Nuxt UI's
 
 **Root cause.** `setTextCharacters` bestaat als **broken duplicate** in drie editor-files:
 
-- `widget-src/editors/general/title-description.ts:51-64`
-- `widget-src/editors/general/badge.ts:95-106`
-- `widget-src/editors/content/card.ts:165-176`
+- `plugin-src/editors/general/title-description.ts:51-64`
+- `plugin-src/editors/general/badge.ts:95-106`
+- `plugin-src/editors/content/card.ts:165-176`
 
 Alle drie detecteren `node.fontName === figma.mixed` en laden vervolgens **alleen het font op char-index 0** via `getRangeFontName(0, 1)` — niet alle fonts die in de styled-range voorkomen. Daarna wordt `node.characters = value` aangeroepen. Figma's runtime truncate-t silent bij de positie waar een niet-geladen font in de bestaande range begint → alle characters vanaf dat punt verdwijnen uit de node.
 
@@ -647,7 +647,7 @@ Alle drie detecteren `node.fontName === figma.mixed` en laden vervolgens **allee
 
 **Fix — refactor-route (user-approved option b).**
 
-1. **Nieuw bestand `widget-src/editors/_shared/fonts.ts`** — exporteert twee helpers:
+1. **Nieuw bestand `plugin-src/editors/_shared/fonts.ts`** — exporteert twee helpers:
    - `loadAllFontsForNode(node: TextNode): Promise<void>` — canonical: loopt `getStyledTextSegments(['fontName'])`, laadt elk uniek font.
    - `setTextCharactersSafe(node: TextNode, value: string): Promise<void>` — `await loadAllFontsForNode(node); node.characters = value;` (FIG-FONT-01).
 2. **Replace lokale `setTextCharacters`-duplicates** in:
@@ -673,7 +673,7 @@ Alle drie detecteren `node.fontName === figma.mixed` en laden vervolgens **allee
 
 **Exit-criteria.**
 
-- `grep -rn "setTextCharacters" widget-src/editors/` retourneert alleen import-regels + 1 definitie in `_shared/fonts.ts`.
+- `grep -rn "setTextCharacters" plugin-src/editors/` retourneert alleen import-regels + 1 definitie in `_shared/fonts.ts`.
 - Geen lokale `if (fontName === figma.mixed)`-branches meer in `editors/general/title-description.ts`, `editors/general/badge.ts`, `editors/content/card.ts` die alleen char-0's font laden.
 - Mixed-font heading-edit (bv. template met "Doel van [emphasis]vandaag") behoudt alle characters na elke UI-edit — geen silent truncatie meer.
 - `npm run build` clean, geen nieuwe TS-errors.
@@ -694,7 +694,7 @@ Alle drie detecteren `node.fontName === figma.mixed` en laden vervolgens **allee
 **Hypotheses (builder pickt één op basis van snelle trace).**
 
 - **(a)** `BadgeEditor.vue` stuurt geen `icon`-veld mee in de `update-badge`-payload (of emit-path naar `usePluginBridge.post`).
-- **(b)** `widget-src/code.ts` main-handler voor `update-badge` leest het `icon`-veld niet, of negeert het als de waarde gelijk is aan de preview-state.
+- **(b)** `plugin-src/code.ts` main-handler voor `update-badge` leest het `icon`-veld niet, of negeert het als de waarde gelijk is aan de preview-state.
 - **(c)** `editors/general/badge.ts` doet de icon-mutatie verkeerd: ofwel wordt de juiste Slide Machine variant-property-naam niet getroffen door `setInstanceProperty(badge, 'Icon', value)`, ofwel moet het een child-instance-swap zijn (niet een property-swap), ofwel is de propertynaam in Slide Machine iets anders dan `'Icon'` (bv. `'Type'` of een Lucide-key-reeks).
 
 **Files.**
@@ -841,7 +841,7 @@ Root-oorzaken die de library-route fragile maken (niet in volgorde):
   > **Budget-check.** Drie files in scope (icon-swap.ts delete telt als 1), plus een nieuw micro-bestand `icon-normalize.ts`. Dat is 4 bestanden. Als builder het split wil: T26c1 (delete + new util) / T26c2 (code.ts readers + main.ts dev-mock). Eerst proberen als één run — het is bulk-delete + search-replace op 3 imports.
 
 - **Exit.**
-  - `grep -r "icon-swap"` vindt geen matches in `widget-src/` behalve historische commits.
+  - `grep -r "icon-swap"` vindt geen matches in `plugin-src/` behalve historische commits.
   - `grep -r "icons-ready"` vindt geen matches.
   - `grep -r "primeIconCache"` vindt geen matches.
   - `grep -r "prefValueCache"` vindt geen matches.
@@ -986,7 +986,7 @@ feat(welder-slide-editor): accent-ranges via Text Dimmer variable in heading/par
 
 > **Herstart van T28.** T28 werd 2026-04-24 gereverteerd na een UX-blocker: `<UPopover>` + `<UInput>` in dezelfde scope maken het input-veld unresponsief (bewezen via diagnostic-strip, commit `05b4ec3`). T30 herneemt dezelfde feature-scope (heading-only) via een fundamenteel nieuwe UI-architectuur die de popover-component volledig vermijdt: **inline always-visible word-chips** direct onder de Koptekst-input. Zie research-rapport `.archive/T30-accent-heading-research-2026-04-24.md` (route A′, §3).
 >
-> **Relatie tot T28.2 write-path.** De bewezen main-thread-code uit T28.2 (`loadAccentVars` + `readDimRanges` + `applyAccentRanges` + `resolveForConsumer` fallback-pre-resolve + visible-toggle render-cache-flush) wordt **gerestoreerd**, maar geheel gestript van alle paragraph-branches. Dit is een nieuwe schone commit — **geen** `git revert fe3d331` (dat zou paragraph-code meenemen). Voor reconstructie van wat T28-revert weghaalde: zie `git show fe3d331 -- widget-src/code.ts`.
+> **Relatie tot T28.2 write-path.** De bewezen main-thread-code uit T28.2 (`loadAccentVars` + `readDimRanges` + `applyAccentRanges` + `resolveForConsumer` fallback-pre-resolve + visible-toggle render-cache-flush) wordt **gerestoreerd**, maar geheel gestript van alle paragraph-branches. Dit is een nieuwe schone commit — **geen** `git revert fe3d331` (dat zou paragraph-code meenemen). Voor reconstructie van wat T28-revert weghaalde: zie `git show fe3d331 -- plugin-src/code.ts`.
 
 **Probleem.** Welder-slides gebruiken een dim-accent-patroon: een deel van een heading wordt gerenderd in de `Text Dimmer`-library-variable (`#ffc78f` in orange-mode), de rest in de `Text`-library-variable (`#fff4ea`). Netto-effect: niet-gedimde woorden springen visueel naar voren als accent. De huidige plugin heeft geen UX om dit per woord te bewerken; elke character-edit in de textarea slaat de range-styling bovendien plat. User wil copywriters zonder Figma-text-skills het accent in-plugin kunnen verschuiven.
 
@@ -1035,7 +1035,7 @@ Geen `paragraphDim`. Scan-output in `code.ts` levert `headingDim`; paragraph-sca
    - **Geen** `paragraphDim`. **Geen** `field: 'heading' | 'paragraph'`-discriminator — de message is permanent heading-only.
 
 2. **`plugins/welder-slide-editor/widget-src/code.ts`** (~+85 LOC)
-   - **Restore uit gereverteerde T28.2-code** (reconstrueerbaar via `git show fe3d331 -- widget-src/code.ts`):
+   - **Restore uit gereverteerde T28.2-code** (reconstrueerbaar via `git show fe3d331 -- plugin-src/code.ts`):
      - Constants `TEXT_KEY`, `TEXT_DIMMER_KEY`, `TEXT_DIMMER_RGB`, `DIMMER_HEX_TOLERANCE`.
      - Helper `loadAccentVars()` — module-level Promise-cache: `let varsPromise: Promise<{ text, dimmer }> | null = null; if (!varsPromise) varsPromise = importBoth(); return varsPromise;` (ES2017-compat: geen `??=`).
      - Helper `readDimRanges(textNode)` — `getStyledTextSegments(['fills','boundVariables'])`, detecteer Text-Dimmer-binding OR raw `#ffc78f` binnen tolerance, merge aaneengesloten segmenten tot canonical ranges.
@@ -1047,7 +1047,7 @@ Geen `paragraphDim`. Scan-output in `code.ts` levert `headingDim`; paragraph-sca
        (e) Render-cache-flush via `node.visible = !prev; node.visible = prev;`.
    - **Scan-uitbreiding** in de CopyWrap-scanner: heading-text-node → `readDimRanges()` → include als `headingDim` in `general`-payload. Silent-fail: als `loadAccentVars` faalt, emit `headingDim: null`. **Geen paragraph-branch.**
    - **Handler `update-accent`**: locate slide → heading-text-node via bestaande `findCopyWrap`-helper → `applyAccentRanges(headingNode, dimRanges)`. Geen `field`-switch, geen paragraph-pad.
-   - **Strip alle paragraph-branches** bij reconstructie. Zie `git show fe3d331 -- widget-src/code.ts` — de oude code had paragraph-paden in `readDimRanges`-caller, scan-emit, en `update-accent`-handler; al die moeten NIET terug.
+   - **Strip alle paragraph-branches** bij reconstructie. Zie `git show fe3d331 -- plugin-src/code.ts` — de oude code had paragraph-paden in `readDimRanges`-caller, scan-emit, en `update-accent`-handler; al die moeten NIET terug.
 
 3. **`plugins/welder-slide-editor/widget-src/ui/components/TitleDescriptionEditor.vue`** (~+60 LOC)
    - Onder de bestaande `<UFormField label="Koptekst">` een nieuw blokje renderen met label **"Accent"**, conditioneel op `v-if="modelValue.headingDim !== null"` (library-fallback-guard).
@@ -1065,7 +1065,7 @@ Geen `paragraphDim`. Scan-output in `code.ts` levert `headingDim`; paragraph-sca
 **Acties (ordered).**
 
 1. **Types.** Breid `TitleDescriptionSection` uit met `headingDim`. Voeg `update-accent` (heading-only payload-shape) toe aan `UIToPluginMessage`.
-2. **Main-restore.** Herstel in `code.ts` de T28.2 helpers (`TEXT_KEY`/`TEXT_DIMMER_KEY` constants, `loadAccentVars` Promise-cache, `readDimRanges`, `applyAccentRanges` met `resolveForConsumer` + visible-toggle + `loadAllFontsForNode`-preflight). Reconstrueer uit `git show fe3d331 -- widget-src/code.ts`. **Strip alle paragraph-branches** (scan-emit, caller, handler).
+2. **Main-restore.** Herstel in `code.ts` de T28.2 helpers (`TEXT_KEY`/`TEXT_DIMMER_KEY` constants, `loadAccentVars` Promise-cache, `readDimRanges`, `applyAccentRanges` met `resolveForConsumer` + visible-toggle + `loadAllFontsForNode`-preflight). Reconstrueer uit `git show fe3d331 -- plugin-src/code.ts`. **Strip alle paragraph-branches** (scan-emit, caller, handler).
 3. **Scan-wire.** CopyWrap-scanner roept `readDimRanges(headingNode)` aan. Silent-fail: `headingDim: null` als `loadAccentVars()` faalt.
 4. **Handler-wire.** `update-accent`-handler: locate heading → `applyAccentRanges(node, dimRanges)`. Geen paragraph-pad.
 5. **UI — tokeniser + mappers.** Inline in `TitleDescriptionEditor.vue`: `heading.split(/(\s+)/)` tokeniser, char→word-index-mapper (mount/hydrate), word→char-range-builder (emit) met canonical merge.
@@ -1120,7 +1120,7 @@ feat(welder-slide-editor): T30 heading-accent via inline word-chips
 >
 > **Niet-scope (expliciet).** Zie §2 niet-doelen: geen timeline-item toevoegen/verwijderen, geen reorder via plugin. Alleen edit van heading/paragraph (+ visual of icon indien slot aanwezig) op bestaande items.
 
-**Probleem.** `findTableWrap` in `widget-src/slide-machine.ts:205-213` matcht `name ∈ {'TableWrap', 'TimelineWrap'}` → een slide met alleen een TimelineWrap wordt als table-instance aan `scanGraphs` aangeboden, waarna TableEditor probeert te renderen terwijl er geen `TableData`-pluginData op de node staat. User-intent: **TimelineWrap moet zich gedragen als CardWrap** — een TimelineWrap is een container met per-item editors (heading + paragraph per timeline-item), niet een tabel. Het hoort dus thuis op de Content-tab, niet op de Graphs-en-tabellen-tab.
+**Probleem.** `findTableWrap` in `plugin-src/slide-machine.ts:205-213` matcht `name ∈ {'TableWrap', 'TimelineWrap'}` → een slide met alleen een TimelineWrap wordt als table-instance aan `scanGraphs` aangeboden, waarna TableEditor probeert te renderen terwijl er geen `TableData`-pluginData op de node staat. User-intent: **TimelineWrap moet zich gedragen als CardWrap** — een TimelineWrap is een container met per-item editors (heading + paragraph per timeline-item), niet een tabel. Het hoort dus thuis op de Content-tab, niet op de Graphs-en-tabellen-tab.
 
 **Route-overwegingen (architect, knopen doorgehakt).**
 
@@ -1160,12 +1160,12 @@ Items uit zowel CardWrap als TimelineWrap worden geprepareerd tot `CardItem[]`-s
 
 **Geen wijzigingen aan:**
 
-- `widget-src/ui/components/CardItemEditor.vue` (blijft identiek — rendert op `CardItem`-shape ongeacht herkomst)
-- `widget-src/ui/components/ContentPanel.vue` (blijft identiek — v-for over `content.cards`)
-- `widget-src/ui/components/GraphsPanel.vue` (wordt zelfs minder breed: geen TimelineWrap-hits meer)
-- `widget-src/ui/components/TableEditor.vue` (ongewijzigd)
-- `widget-src/types.ts` (`CardItem`- en `ContentItems`-shapes zijn reeds compatibel)
-- `widget-src/editors/table/**` (ongewijzigd)
+- `plugin-src/ui/components/CardItemEditor.vue` (blijft identiek — rendert op `CardItem`-shape ongeacht herkomst)
+- `plugin-src/ui/components/ContentPanel.vue` (blijft identiek — v-for over `content.cards`)
+- `plugin-src/ui/components/GraphsPanel.vue` (wordt zelfs minder breed: geen TimelineWrap-hits meer)
+- `plugin-src/ui/components/TableEditor.vue` (ongewijzigd)
+- `plugin-src/types.ts` (`CardItem`- en `ContentItems`-shapes zijn reeds compatibel)
+- `plugin-src/editors/table/**` (ongewijzigd)
 - `bridge-messages` — `update-card` blijft de enige mutatie-route voor beide wrapper-types
 
 **Acties (ordered).**
@@ -1185,7 +1185,7 @@ Items uit zowel CardWrap als TimelineWrap worden geprepareerd tot `CardItem[]`-s
 - Slide met alleen TableWrap: Graphs-en-tabellen-tab toont TableEditor ongewijzigd.
 - Edit van een timeline-item heading in de UI → canvas-Heading-text-node update binnen debounce-window (~200ms) identiek aan card-edit.
 - `npm run build` clean, geen TS-errors, `dist/code.js` blijft ES2017-compat.
-- `grep -rn "TimelineWrap" widget-src/` toont de nieuwe selector + scan-call; géén matches meer in `findTableWrap`.
+- `grep -rn "TimelineWrap" plugin-src/` toont de nieuwe selector + scan-call; géén matches meer in `findTableWrap`.
 
 **Failure-mode → T31.1 (Route B, contingency-split).**
 
@@ -1218,7 +1218,7 @@ fix(welder-slide-editor): T31 — TimelineWrap routering Graphs → Content
 
 **Aanleiding.** Gebruikerstest op slide met variant `Tabel=Alt Timeline` toonde "No cards on this slide." — plugin UI vond geen timeline-items. Oorzaak: `findTimelineWrap` matchte exact op de string `'TimelineWrap'`, maar de werkelijke `instance.name` op canvas is de variant-naam `'Tabel=Alt Timeline'` (Slide Machine gebruikt component-variant-syntax als instance-naam). Analoog risico bij `findTableWrap`.
 
-**Fix (1 file, ~20 LOC).** `widget-src/slide-machine.ts`:
+**Fix (1 file, ~20 LOC).** `plugin-src/slide-machine.ts`:
 
 - `findTimelineWrap`: matcht nu elke instance met `'Timeline'` in de naam (incl. legacy `'TimelineWrap'` en `'Tabel=Alt Timeline'`).
 - `findTableWrap`: matcht legacy `'TableWrap'` plus instances waarvan naam begint met `'Tabel='` of `'Table='` zonder `'Timeline'` erin.
@@ -1252,13 +1252,13 @@ De scan in T31/T31.1 liep alleen `wrap.children` (directe children) en filterde 
 
 **Fix (3 files, ~80 LOC delta).**
 
-1. `widget-src/code.ts` — `scanTimelineItems` vervangen door twee helpers:
+1. `plugin-src/code.ts` — `scanTimelineItems` vervangen door twee helpers:
    - `extractCards(scope)`: `scope.findAll(n => n.type === 'INSTANCE' && n.name === 'Card')` — bounded tot wrapper-subtree (FIG-TRAVERSE-01). Cards gaan naar `content.cards` zodat icon-picker en visual-upload werken.
    - `extractCopyWrapItems(scope)`: `scope.findAll(n => n.type === 'INSTANCE' && n.name === 'CopyWrap')` — bounded tot wrapper-subtree. CopyWraps gaan naar `content.timelineItems`.
    - `scanContent` refactored: CardWrap gebruikt `extractCards`; TimelineWrap gebruikt beide helpers (polymorphic).
    - `update-timeline-item` handler: gebruikt nu `slide.findOne(n.id === copyWrapNodeId)` i.p.v. wrapper-scoped loop — vindt ook genestede CopyWraps.
 
-2. `widget-src/editors/content/card.ts` — `applyCard` en `applyCardVisual`:
+2. `plugin-src/editors/content/card.ts` — `applyCard` en `applyCardVisual`:
    - Beide gebruiken nu `slide.findOne(n.type === 'INSTANCE' && n.name === 'Card' && n.id === id)` i.p.v. `findCardWrap + findCardById` — wrapper-agnostisch, vindt Cards in CardWrap én TimelineWrap.
    - `findCardById` helper verwijderd (obsoleet).
 
@@ -1288,17 +1288,17 @@ fix(welder-slide-editor): T31.2 — TimelineWrap polymorphic scan (recursive des
 
 **Fix (4 files, ~25 LOC).** Zelfde visibility-pattern als T19 (paragraph-hide) en `dc2eb2e` (badge-section-hide).
 
-1. `widget-src/types.ts` — `CardItem.icon` van `string` naar `string | null`. `null` = icon-instance afwezig of `visible === false`; picker verborgen in UI.
+1. `plugin-src/types.ts` — `CardItem.icon` van `string` naar `string | null`. `null` = icon-instance afwezig of `visible === false`; picker verborgen in UI.
 
-2. `widget-src/code.ts` — `readCardIcon(card, slide): string | null` (Optie A):
+2. `plugin-src/code.ts` — `readCardIcon(card, slide): string | null` (Optie A):
    - Accepteert nu `slide: InstanceNode` voor `isEffectivelyVisible`-call.
    - Elke strategie (A/B/C) returnt `null` i.p.v. `''` wanneer geen icon gevonden.
    - Wanneer icon-instance gevonden maar niet-zichtbaar: `null`.
    - `extractCards(scope, slide)` krijgt `slide`-parameter mee; call-sites in `scanContent` bijgewerkt.
 
-3. `widget-src/ui/components/CardItemEditor.vue` — `v-if="modelValue.icon !== null"` op de icon-`UFormField`. `localIcon` init + watch vallen terug op `''` wanneer prop `null` is.
+3. `plugin-src/ui/components/CardItemEditor.vue` — `v-if="modelValue.icon !== null"` op de icon-`UFormField`. `localIcon` init + watch vallen terug op `''` wanneer prop `null` is.
 
-4. `widget-src/ui/components/ContentPanel.vue` — `icon`-veld in `update-card`-payload wordt weggelaten wanneer `value.icon === null` (main-thread silent-skip op ontbrekend icon-veld).
+4. `plugin-src/ui/components/ContentPanel.vue` — `icon`-veld in `update-card`-payload wordt weggelaten wanneer `value.icon === null` (main-thread silent-skip op ontbrekend icon-veld).
 
 **Exit-criteria.**
 
@@ -1413,7 +1413,7 @@ T34.2 + T34.3 zijn kandidaten voor specialist-direct-dispatch
 
 **Exit.**
 
-- Grep op `ThemePicker` / `set-variable-mode` / `lucide-icons` in `widget-src/` is leeg.
+- Grep op `ThemePicker` / `set-variable-mode` / `lucide-icons` in `plugin-src/` is leeg.
 - `npm run build` clean. TypeScript errors op call-sites van de oude renderer-functies mogen blijven — T34.2 fixt die.
 
 ---
@@ -1750,7 +1750,7 @@ Slide 277:2823          1920×1080
    per rij. Bij rowCount=6 levert font-matrix `{ heading: 26, body: 20 }`,
    tekst-blokken passen comfortabel binnen 105px-rij.
 
-**Bron 3 — bestaand-renderer-bewijs.** [renderer.ts:306-308](./widget-src/editors/table/renderer.ts:306)
+**Bron 3 — bestaand-renderer-bewijs.** [renderer.ts:306-308](./plugin-src/editors/table/renderer.ts:306)
 doet `slot.resize(desiredWidth, slot.height)` zonder fout in v0.2.1. Slot
 accepteert resize-calls, dus is niet HUG-from-content.
 
@@ -1972,7 +1972,7 @@ opgeschoond.
 **Exit.**
 
 - `npm run build` clean. Geen TypeScript-errors over ontbrekende `textSize`-veld.
-- Grep `textSize` in `widget-src/` is leeg behalve in renderer-comments
+- Grep `textSize` in `plugin-src/` is leeg behalve in renderer-comments
   ("`textSize` weg per T39") en eventueel scan-helper waar `getPluginData('textSize')`
   als legacy-no-op wordt overgeslagen.
 - TableEditor.vue mist de TextSize-picker. Width-picker + rows/cols-controls
@@ -2085,7 +2085,7 @@ events op een tijdlijn.
 Verticale dividers spannen over header + pill-area. Horizontale divider
 alleen onder de subheader-row (niet onder body, niet boven pills).
 
-**A. Data-model wijzigingen (`widget-src/types.ts`).**
+**A. Data-model wijzigingen (`plugin-src/types.ts`).**
 
 ```ts
 /**
@@ -2112,7 +2112,7 @@ export interface JourneyWrapModel {
 
 Geen breaking change op `JourneyItemModel`; pills-veld blijft ongewijzigd.
 
-**B. Constants (`widget-src/constants.ts`).**
+**B. Constants (`plugin-src/constants.ts`).**
 
 ```ts
 /** Min/max aantal kolomheaders (T46). */
@@ -2146,7 +2146,7 @@ export const JOURNEY_DIVIDER_WEIGHT = 1;
 
 Bestaande `JOURNEY_*` constants (WIDTH/PADDING/POS\_\*) blijven ongewijzigd.
 
-**C. Renderer (`widget-src/editors/journey/renderer.ts`).**
+**C. Renderer (`plugin-src/editors/journey/renderer.ts`).**
 
 Public API ongewijzigd (`scanJourneySlot` + `applyJourney`); intern komt
 er een nieuwe header-render-fase bij.
@@ -2212,7 +2212,7 @@ er een nieuwe header-render-fase bij.
 4. Pluginata `v` lezen voor diagnostiek (log "T46 legacy v=6 detected"
    wanneer geen header-FRAME, vergelijkbaar met T34.4 legacy-detection).
 
-**E. UI (`widget-src/ui/components/JourneyEditor.vue`).**
+**E. UI (`plugin-src/ui/components/JourneyEditor.vue`).**
 
 Nieuwe sectie `<section>` BOVEN de bestaande "Items"-sectie binnen
 hetzelfde rounded-card. Pattern mirror van bestaande Items-sectie:
@@ -2269,7 +2269,7 @@ zo onafhankelijk mogelijk.
 
 #### T46.1 — Data-model + constants `[S, 2 files, ~50 LOC]`
 
-**Files.** `widget-src/types.ts`, `widget-src/constants.ts`.
+**Files.** `plugin-src/types.ts`, `plugin-src/constants.ts`.
 
 **Changes.**
 
@@ -2289,7 +2289,7 @@ geen UI). Of `builder` als specialist niet beschikbaar.
 
 #### T46.2 — Scan-helper voor columns (backward-compat) `[S, 1 file, ~50 LOC]`
 
-**Files.** `widget-src/editors/journey/renderer.ts` (alleen `scanJourneySlot` aanpassen).
+**Files.** `plugin-src/editors/journey/renderer.ts` (alleen `scanJourneySlot` aanpassen).
 
 **Changes.**
 
@@ -2309,7 +2309,7 @@ kolommen in de UI (na T46.4) of in console-log.
 
 #### T46.3 — Renderer: header-render + dividers + pluginData v=7 `[L, 1 file, ~180 LOC]`
 
-**Files.** `widget-src/editors/journey/renderer.ts` (alleen `applyJourney`
+**Files.** `plugin-src/editors/journey/renderer.ts` (alleen `applyJourney`
 
 - nieuwe helpers).
 
@@ -2348,7 +2348,7 @@ loop met validator-pas; renderer-changes raken theme-vars + tree-mutaties
 
 #### T46.4 — UI Kolommen-sectie in JourneyEditor.vue `[M, 1 file, ~150 LOC]`
 
-**Files.** `widget-src/ui/components/JourneyEditor.vue`.
+**Files.** `plugin-src/ui/components/JourneyEditor.vue`.
 
 **Changes.**
 
@@ -2428,7 +2428,7 @@ De `ThemePicker` in `GeneralPanel.vue` is verwijderd (UI-section + listener +
 `onThemeSelect` + `unsubTheme`). Main-thread blijft `detectAndSendThemeModes`
 uitvoeren en `slide-theme` posten; UI negeert het bericht stil.
 
-- **Restanten in codebase:** `widget-src/ui/components/ThemePicker.vue` (unused),
+- **Restanten in codebase:** `plugin-src/ui/components/ThemePicker.vue` (unused),
   `detectAndSendThemeModes` in `code.ts`, `set-variable-mode` in
   `UIToPluginMessage` types, `slide-theme` in `PluginToUIMessage` types.
 - **Terughalen:** herstel de ThemePicker-sectie in `GeneralPanel.vue` + de
@@ -2462,10 +2462,10 @@ strakker. Functionaliteit werkt; dit is polish.
   SlideNodes een slide-list-rebuild (name-wijziging, notes, etc.) — correct
   maar licht wasteful. Check of `NodeChangeProperty`-type `isSkippedSlide`
   bevat in de huidige plugin-typings.
-- **Files:** `widget-src/code.ts` (`set-slide-skipped`-handler rond regel
+- **Files:** `plugin-src/code.ts` (`set-slide-skipped`-handler rond regel
   1068, `documentchange`-handler rond regel 1155, `slideListSignature`
-  rond regel 580), `widget-src/ui/App.vue` (`toggleSkip` + `currentSummary`),
-  evt. `widget-src/ui/composables/usePluginView.ts` voor de optimistic
+  rond regel 580), `plugin-src/ui/App.vue` (`toggleSkip` + `currentSummary`),
+  evt. `plugin-src/ui/composables/usePluginView.ts` voor de optimistic
   store-patch.
 
 ### B3 — v0.1.x polish-tasks on-hold tot na T28 `[RESOLVED 2026-04-24]`

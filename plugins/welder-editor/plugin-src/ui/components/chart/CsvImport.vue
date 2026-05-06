@@ -13,7 +13,7 @@
     7. Foutenlijst: validator-errors + niet-fatale warnings.
     8. Auto-apply: muteert store.state.csvDataPoints direct.
 
-  Pure CSV-modules uit `widget-src/csv/` worden direct geïmporteerd.
+  Pure CSV-modules uit `plugin-src/chart-core/csv/` worden direct geïmporteerd.
   Ze blijven UI-onafhankelijk; deze component doet alleen presentatie
   en reactieve glue.
 

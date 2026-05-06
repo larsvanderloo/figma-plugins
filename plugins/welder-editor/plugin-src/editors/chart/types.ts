@@ -2,7 +2,7 @@
 // editors/chart/types.ts
 //
 // Chart-renderer-specifieke types. `ChartData`, `ChartType`, `DataPoint`
-// leven in widget-src/types.ts (gedeeld met UI-iframe) — hier alleen
+// leven in plugin-src/types.ts (gedeeld met UI-iframe) — hier alleen
 // renderer-lokale types.
 //
 // Zie spec.md §9-T13.

@@ -4,7 +4,7 @@
 **Date:** 2026-05-06
 **Owner:** figma-api-engineer
 
-This file documents the shape of the message bus between `widget-src/code.ts` (Figma sandbox) and `widget-src/ui/` (Vue 3 iframe) at the time of import (v0.2.1). The canonical schema lives in [`../../widget-src/types.ts`](../../widget-src/types.ts) — it is the de-facto contract — because of the layout deviation noted in the import ADR. There is **no `shared/messages.ts`** yet; it will be authored as part of `T_REFACTOR_LAYOUT`.
+This file documents the shape of the message bus between `plugin-src/code.ts` (Figma sandbox) and `plugin-src/ui/` (Vue 3 iframe) at the time of import (v0.2.1). The canonical schema lives in [`../../plugin-src/types.ts`](../../plugin-src/types.ts) — it is the de-facto contract — because of the layout deviation noted in the import ADR. There is **no `shared/messages.ts`** yet; it will be authored as part of `T_REFACTOR_LAYOUT`.
 
 For full behavioural detail, see the imported product spec at [`../../spec.md`](../../spec.md) §5 ("Communicatie & berichtenstroom").
 
@@ -17,7 +17,7 @@ Per `CLAUDE.md` §"Plugin-thread rules (non-negotiable)", the plugin runtime has
 │  Figma desktop / web                                                         │
 │                                                                              │
 │  ┌───────────────────────────────────┐    postMessage     ┌───────────────┐ │
-│  │  widget-src/code.ts  (sandbox)    │ ─────────────────▶ │ widget-src/ui │ │
+│  │  plugin-src/code.ts  (sandbox)    │ ─────────────────▶ │ plugin-src/ui │ │
 │  │                                   │                    │   (iframe)    │ │
 │  │  figma.*  ✓                       │ ◀───────────────── │               │ │
 │  │  DOM      ✗                       │    postMessage     │ Vue 3         │ │
@@ -31,7 +31,7 @@ Per `CLAUDE.md` §"Plugin-thread rules (non-negotiable)", the plugin runtime has
 │  │                                   │                    │ composables/  │ │
 │  └───────────────────────────────────┘                    └───────────────┘ │
 │                                                                              │
-│       widget-src/types.ts — the contract (owned by figma-api-engineer)      │
+│       plugin-src/types.ts — the contract (owned by figma-api-engineer)      │
 └──────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -39,7 +39,7 @@ The chunked-text-loader pattern (see `../perf/budget.md` and the import ADR) mea
 
 ## Message types (v0.2.1)
 
-The discriminated unions are defined in `widget-src/types.ts`. Summary lifted from `spec.md` §5:
+The discriminated unions are defined in `plugin-src/types.ts`. Summary lifted from `spec.md` §5:
 
 ### UI → plugin (sandbox)
 
@@ -62,7 +62,7 @@ The discriminated unions are defined in `widget-src/types.ts`. Summary lifted fr
 | `target-updated` | varies                              | Response to `update-*` / `upload-image` — confirms the canvas mutation |
 | `page-changed`   | `{ slides[] }`                      | User navigated to a different page; iframe refreshes the picker        |
 
-`spec.md` §5 has the full per-type payload table and reference flow walkthroughs. The on-disk source of truth is `widget-src/types.ts` — match the implementation, not the spec, when they disagree.
+`spec.md` §5 has the full per-type payload table and reference flow walkthroughs. The on-disk source of truth is `plugin-src/types.ts` — match the implementation, not the spec, when they disagree.
 
 ## Latency budgets
 
@@ -77,15 +77,15 @@ Carried over from the prior perf investigation (`../../.reviews/perf-investigati
 
 ## Error taxonomy
 
-Inherited from the external scaffold; not yet aligned with `welder-editor`'s `WelderError` discriminated union. The current `widget-src/code.ts` reports failures as `target-updated` payloads carrying an error string; failure modes are not categorized into the canonical `NOT_FOUND` / `INVALID_INPUT` / `LIBRARY_VAR_MISSING` / `NODE_TYPE_MISMATCH` / `MUTATION_FAILED` / `TIMEOUT` codes that `welder-editor` uses.
+Inherited from the external scaffold; not yet aligned with `welder-editor`'s `WelderError` discriminated union. The current `plugin-src/code.ts` reports failures as `target-updated` payloads carrying an error string; failure modes are not categorized into the canonical `NOT_FOUND` / `INVALID_INPUT` / `LIBRARY_VAR_MISSING` / `NODE_TYPE_MISMATCH` / `MUTATION_FAILED` / `TIMEOUT` codes that `welder-editor` uses.
 
 Aligning the error taxonomy is a `T_REFACTOR_LAYOUT` follow-up — the `shared/messages.ts` extraction is the natural place to introduce typed errors with `Result<T, WelderError>` envelopes.
 
 ## Pointers
 
-- Discriminated unions: [`../../widget-src/types.ts`](../../widget-src/types.ts)
-- Constants (variable keys, library IDs): [`../../widget-src/constants.ts`](../../widget-src/constants.ts)
-- Wrapper detection: [`../../widget-src/slide-machine.ts`](../../widget-src/slide-machine.ts)
+- Discriminated unions: [`../../plugin-src/types.ts`](../../plugin-src/types.ts)
+- Constants (variable keys, library IDs): [`../../plugin-src/constants.ts`](../../plugin-src/constants.ts)
+- Wrapper detection: [`../../plugin-src/slide-machine.ts`](../../plugin-src/slide-machine.ts)
 - Spec §5 (message flow): [`../../spec.md`](../../spec.md)
 - Import ADR (layout deviation): top-level `docs/adr/`
 - Reference threading model in canonical-layout sibling plugin: `plugins/welder-editor/docs/threading/welder-editor.md`

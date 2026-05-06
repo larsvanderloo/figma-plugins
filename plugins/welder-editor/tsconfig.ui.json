@@ -14,17 +14,17 @@
     "resolveJsonModule": true,
     "verbatimModuleSyntax": true,
     "paths": {
-      "@/*": ["./widget-src/ui/*"]
+      "@/*": ["./plugin-src/ui/*"]
     }
   },
   "include": [
-    "widget-src/ui/**/*.ts",
-    "widget-src/ui/**/*.tsx",
-    "widget-src/ui/**/*.vue",
-    "widget-src/ui/shims-vue.d.ts",
-    "widget-src/types.ts",
-    "widget-src/constants.ts",
-    "widget-src/chart-core/**/*.ts"
+    "plugin-src/ui/**/*.ts",
+    "plugin-src/ui/**/*.tsx",
+    "plugin-src/ui/**/*.vue",
+    "plugin-src/ui/shims-vue.d.ts",
+    "plugin-src/types.ts",
+    "plugin-src/constants.ts",
+    "plugin-src/chart-core/**/*.ts"
   ],
   "exclude": ["node_modules", "dist", "vite.config.ts", "app.config.ts", "esbuild.config.mjs"]
 }

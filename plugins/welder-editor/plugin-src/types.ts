@@ -1,8 +1,8 @@
 // ============================================================
 // Welder Slide Editor — Shared Types
 //
-// Consumed by both main-thread (widget-src/code.ts, slide-machine.ts,
-// editors/**) en UI-iframe (widget-src/ui/**). Deze types zijn de
+// Consumed by both main-thread (plugin-src/code.ts, slide-machine.ts,
+// editors/**) en UI-iframe (plugin-src/ui/**). Deze types zijn de
 // single-source-of-truth voor het plugin-datamodel en de bridge-
 // messages tussen UI en main-thread.
 //

@@ -18,8 +18,8 @@ In `welder-editor` the team chose to drop the chunked loader and use `vite-plugi
 
 How the loader works in this plugin:
 
-- `vite.config.ts` builds `widget-src/ui/index.html` into a single-file `dist/ui.html` (~1.577 MB raw at v0.2.1).
-- `esbuild.config.mjs` bundles `widget-src/code.ts` to `dist/code.js`, then a `chunkedTextLoader` plugin reads `dist/ui.html`, splits it into ~60 KB string chunks, and inlines those chunks into `dist/code.js` (~1.756 MB raw at v0.2.1).
+- `vite.config.ts` builds `plugin-src/ui/index.html` into a single-file `dist/ui.html` (~1.577 MB raw at v0.2.1).
+- `esbuild.config.mjs` bundles `plugin-src/code.ts` to `dist/code.js`, then a `chunkedTextLoader` plugin reads `dist/ui.html`, splits it into ~60 KB string chunks, and inlines those chunks into `dist/code.js` (~1.756 MB raw at v0.2.1).
 - At runtime, `dist/code.js` reassembles the chunks and passes the concatenated HTML to `figma.showUI(html, opts)`.
 
 Reason for the 60 KB chunk size: Figma's plugin sandbox parser has a string-literal size limit; literals beyond ~64 KB cause "Syntax error" failures. Splitting at 60 KB keeps each literal under the limit with safety margin.

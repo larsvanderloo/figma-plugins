@@ -6,12 +6,12 @@ The full product specification is in [`spec.md`](./spec.md) (Dutch, ~2300 lines)
 
 ## Imported from external scaffold
 
-This plugin was imported from an external zip carrying the working v0.2.1 Welder Editor build, then fitted with the canonical org bookkeeping non-destructively. The original `widget-src/` layout is retained pending a follow-up refactor to the canonical `code/` + `ui/` + `shared/` split — see the import ADR in the top-level `docs/adr/` for the rationale and the planned `T_REFACTOR_LAYOUT` task.
+This plugin was imported from an external zip carrying the working v0.2.1 Welder Editor build, then fitted with the canonical org bookkeeping non-destructively. The original `plugin-src/` layout is retained pending a follow-up refactor to the canonical `code/` + `ui/` + `shared/` split — see the import ADR in the top-level `docs/adr/` for the rationale and the planned `T_REFACTOR_LAYOUT` task.
 
 Onboarding debt that still needs to be paid down:
 
 - **Lockfile migration.** The zip ships `package-lock.json` (npm) and the `name` field in `package.json` is `welder-editor` — neither matches the org's pnpm workspace + `@figma-plugins/...` naming convention. Until migrated, build with `npm install && npm run build` from inside this folder. TODO(project-pm + ui-engineer): migrate to pnpm workspace member, rename to `@figma-plugins/welder-editor`, drop `package-lock.json`. The `pnpm-workspace.yaml` `plugins/*` glob already picks this folder up; only the per-plugin `package.json` and lockfile need to change.
-- **Layout refactor.** Move `widget-src/code.ts` → `code/main.ts`, `widget-src/ui/` → `ui/`, `widget-src/{types,constants,slide-machine}.ts` → `shared/`, and rewire `vite.config.ts` + `esbuild.config.mjs`. See the import ADR for scope.
+- **Layout refactor.** Move `plugin-src/code.ts` → `code/main.ts`, `plugin-src/ui/` → `ui/`, `plugin-src/{types,constants,slide-machine}.ts` → `shared/`, and rewire `vite.config.ts` + `esbuild.config.mjs`. See the import ADR for scope.
 - ~~**Monday folder + Scrum Team boards.**~~ Done — folder `placeholder-plugin team` (id 2996351) with the standard Scrum Team boards is wired in `plugin.toml [monday]`. Sync targets the Tasks board (id 5095985440) on PR events that carry `Resolves MON-<id>`.
 - **Real (gzipped) bundle budgets.** The numbers in `plugin.toml` `[validation]` are raw-byte placeholders pulled from the imported zip. A measured gzipped pass is required before the next release; see `docs/perf/budget.md`.
 
@@ -23,13 +23,13 @@ welder-editor/
 ├── manifest.json        # Figma plugin manifest (editorType: figma + slides; documentAccess: dynamic-page)
 ├── package.json         # npm-managed today; TODO migrate to pnpm workspace
 ├── package-lock.json    # npm — TODO drop after pnpm migration
-├── vite.config.ts       # builds widget-src/ui/ → dist/ui.html (single-file)
-├── esbuild.config.mjs   # builds widget-src/code.ts → dist/code.js (chunked-text-loader inlines dist/ui.html)
+├── vite.config.ts       # builds plugin-src/ui/ → dist/ui.html (single-file)
+├── esbuild.config.mjs   # builds plugin-src/code.ts → dist/code.js (chunked-text-loader inlines dist/ui.html)
 ├── tsconfig.json        # code-side, ES2017
 ├── tsconfig.ui.json     # ui-side, ES2020
 ├── app.config.ts        # Nuxt UI palette
 ├── spec.md              # product spec (Dutch, ~2300 lines)
-├── widget-src/          # NON-CANONICAL layout — to be split into code/, ui/, shared/
+├── plugin-src/          # NON-CANONICAL layout — to be split into code/, ui/, shared/
 │   ├── code.ts          # main-thread bundle entry
 │   ├── types.ts         # message-bus types + domain models (the de-facto contract)
 │   ├── constants.ts
@@ -46,7 +46,7 @@ welder-editor/
 └── .reviews/            # prior perf investigation (carried over from external scaffold)
 ```
 
-The agent ownership map from `CLAUDE.md` applies to `widget-src/` paths during the deviation window: `widget-src/code.ts` is owned by `figma-api-engineer`; `widget-src/ui/` by `ui-engineer`; `widget-src/types.ts` + `widget-src/constants.ts` + `widget-src/slide-machine.ts` (the contract) by `figma-api-engineer`. The chart-core CSV parser belongs to `figma-api-engineer` (data shape) with `ui-engineer` consultation when the parser is consumed in the iframe. Editors under `widget-src/editors/` cross both — touch `code/` paths via `figma-api-engineer`, ui rendering via `ui-engineer`.
+The agent ownership map from `CLAUDE.md` applies to `plugin-src/` paths during the deviation window: `plugin-src/code.ts` is owned by `figma-api-engineer`; `plugin-src/ui/` by `ui-engineer`; `plugin-src/types.ts` + `plugin-src/constants.ts` + `plugin-src/slide-machine.ts` (the contract) by `figma-api-engineer`. The chart-core CSV parser belongs to `figma-api-engineer` (data shape) with `ui-engineer` consultation when the parser is consumed in the iframe. Editors under `plugin-src/editors/` cross both — touch `code/` paths via `figma-api-engineer`, ui rendering via `ui-engineer`.
 
 ## Dev loop (interim — npm)
 
@@ -67,7 +67,7 @@ After the pnpm migration the canonical commands will be `pnpm --filter @figma-pl
 ```bash
 npm run typecheck:ui     # vue-tsc --noEmit -p tsconfig.ui.json
 # Code-side typecheck and unit tests are TODO — they require the layout refactor
-# (no shared/ or tests/ wiring exists in widget-src/ yet).
+# (no shared/ or tests/ wiring exists in plugin-src/ yet).
 ```
 
 Before tagging, run the e2e gauntlet per `runbooks/e2e-gauntlet.md` in each enabled editor type (Figma Design + Figma Slides) on Figma desktop.
@@ -78,4 +78,4 @@ This plugin's `manifest.json` declares `["figma", "slides"]`. FigJam is excluded
 
 ## Workflow
 
-See `CLAUDE.md` (repo root) for the agent ownership map, validation thresholds, and plugin-thread rules. See the import ADR in `docs/adr/` for the deviation window covering the `widget-src/` layout.
+See `CLAUDE.md` (repo root) for the agent ownership map, validation thresholds, and plugin-thread rules. See the import ADR in `docs/adr/` for the deviation window covering the `plugin-src/` layout.

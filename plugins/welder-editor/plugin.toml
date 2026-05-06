@@ -80,7 +80,7 @@ ui_bundle_kb_budget = 1700     # placeholder: raw, not gzipped — see note
 init_paint_ms_budget = 200
 
 [message_bus]
-# v1 — schema is currently encoded in widget-src/types.ts (UIMessage and
+# v1 — schema is currently encoded in plugin-src/types.ts (UIMessage and
 # pluginMessage discriminated unions). There is no shared/messages.ts
 # yet because of the layout deviation documented in the import ADR.
 # Bump and ship a migration when the schema changes.

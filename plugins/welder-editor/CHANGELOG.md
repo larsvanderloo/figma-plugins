@@ -12,9 +12,9 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `plugin.toml` with slug, name, version (0.2.1), editor types, owner agent, placeholder Monday IDs, placeholder bundle budgets, and `[message_bus] version = 1`.
 - `README.md` with build instructions for the interim npm workflow and explicit onboarding-debt callouts (lockfile migration, layout refactor, Monday folder, gzipped budget re-measure).
 - `CHANGELOG.md` (this file).
-- `docs/api-spec/overview.md`, `docs/threading/overview.md`, `docs/perf/budget.md` — org-bookkeeping pointers; full content lives in `spec.md` and `widget-src/types.ts` until the layout refactor lands.
+- `docs/api-spec/overview.md`, `docs/threading/overview.md`, `docs/perf/budget.md` — org-bookkeeping pointers; full content lives in `spec.md` and `plugin-src/types.ts` until the layout refactor lands.
 - `tests/` and `validation/` directories with `.gitkeep` markers as plugin-tester landing zones.
-- ADR in top-level `docs/adr/` documenting the temporary retention of `widget-src/` layout and the planned `T_REFACTOR_LAYOUT` task.
+- ADR in top-level `docs/adr/` documenting the temporary retention of the imported source-tree layout (now under `plugin-src/`) and the planned `T_REFACTOR_LAYOUT` task.
 
 ### Changed
 
@@ -27,7 +27,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 ### Onboarding debt (tracked, not yet paid)
 
 - `package-lock.json` (npm) → migrate to pnpm workspace + `@figma-plugins/welder-editor` rename.
-- `widget-src/` → split into canonical `code/` + `ui/` + `shared/` (`T_REFACTOR_LAYOUT` per import ADR).
+- `plugin-src/` → split into canonical `code/` + `ui/` + `shared/` (`T_REFACTOR_LAYOUT` per import ADR).
 - ~~`[monday]` placeholders~~ Done — folder `placeholder-plugin team` (id 2996351) created from the standard Scrum Team template, IDs filled in `plugin.toml`, `enabled = true`. Tasks board id 5095985440.
 - `[validation]` budgets → run gzipped re-measurement and ratify in a budget ADR (model after ADR-0003 / ADR-0014, both scoped to the deleted scaffold but still applicable per ADR-0018).
 

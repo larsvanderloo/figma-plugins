@@ -2,7 +2,7 @@
 // Chart-editor constants — 1-op-1 overgenomen uit chart-builder
 // v0.3.0 (widgets/chart-builder/widget-src/constants.ts).
 //
-// Theme-tokens staan al in widget-src/constants.ts (THEMES); hier
+// Theme-tokens staan al in plugin-src/constants.ts (THEMES); hier
 // houden we alleen de chart-specifieke defaults + helper-functies
 // zodat UI-components en main-thread (T13) dezelfde bron gebruiken.
 // ============================================================

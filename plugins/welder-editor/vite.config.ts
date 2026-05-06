@@ -12,7 +12,7 @@ import ui from '@nuxt/ui/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 /**
- * Vite's input is widget-src/ui/index.html; plugin-side esbuild importeert
+ * Vite's input is plugin-src/ui/index.html; plugin-side esbuild importeert
  * via `import uiHtml from './dist/ui.html'`. Deze plugin hernoemt de HTML-
  * output van `index.html` naar `ui.html` in de post-write stap.
  *
@@ -41,7 +41,7 @@ function renameIndexToUi(): Plugin {
 }
 
 export default defineConfig({
-  root: fileURLToPath(new URL('./widget-src/ui', import.meta.url)),
+  root: fileURLToPath(new URL('./plugin-src/ui', import.meta.url)),
   plugins: [
     vue(),
     ui({
@@ -61,7 +61,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./widget-src/ui', import.meta.url)),
+      '@': fileURLToPath(new URL('./plugin-src/ui', import.meta.url)),
     },
   },
   build: {
