@@ -34,20 +34,21 @@ import { withAtomic, loadAllFontsForNode } from '@figma-plugins/figma-api';
 import { trySwapViaInstanceProperty, swapComponentByName } from '../icon-swap';
 
 // ---------------------------------------------------------------------------
-// Constants (ported from widget-src/constants.ts)
+// Constants (ported from widget-src/constants.ts — v0.2.1 values)
 // ---------------------------------------------------------------------------
 
-const JOURNEY_WIDTH = 1600;
+const JOURNEY_WIDTH = 1728;
 const JOURNEY_POS_MIN_PCT = 0;
-const JOURNEY_POS_MAX_PCT = 95;
+const JOURNEY_POS_MAX_PCT = 100;
 const JOURNEY_POS_MIN_SPAN = 5;
 const JOURNEY_CONTAINER_PADDING = 24;
 const JOURNEY_DEFAULT_COLUMN_COUNT = 6;
 const JOURNEY_DEFAULT_COLUMN: JourneyColumnModel = { header: '', subheader: '' };
-const JOURNEY_MAX_COLUMNS = 12;
-const JOURNEY_HEADER_HEIGHT = 80;
-const JOURNEY_HEADER_FONT_PX = 20;
-const JOURNEY_SUBHEADER_FONT_PX = 14;
+const JOURNEY_MIN_COLUMNS = 0;
+const JOURNEY_MAX_COLUMNS = 7;
+const JOURNEY_HEADER_HEIGHT = 140;
+const JOURNEY_HEADER_FONT_PX = 32;
+const JOURNEY_SUBHEADER_FONT_PX = 20;
 const JOURNEY_DIVIDER_WEIGHT = 1;
 const PILL_HEIGHT = 90;
 const PILL_GAP = 12;
@@ -481,7 +482,7 @@ function persistItemPluginData(instance: InstanceNode, item: JourneyItemModel): 
 }
 
 // ---------------------------------------------------------------------------
-// Header render
+// Header render (v0.2.1 — NONE-layout absolute-positioned cells)
 // ---------------------------------------------------------------------------
 
 async function applyJourneyHeader(
@@ -490,148 +491,210 @@ async function applyJourneyHeader(
   contentWidth: number,
   containerH: number,
 ): Promise<void> {
-  // Load fonts.
-  // @figma-direct: figma.loadFontAsync.
-  await figma.loadFontAsync({ family: 'Inter', style: 'SemiBold' });
-  await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
+  let n = columns.length;
+  if (n < JOURNEY_MIN_COLUMNS) n = JOURNEY_MIN_COLUMNS;
+  if (n > JOURNEY_MAX_COLUMNS) n = JOURNEY_MAX_COLUMNS;
 
-  // Remove existing header frame and dividers.
-  for (let i = container.children.length - 1; i >= 0; i--) {
-    const ch = container.children[i]!;
-    if (
-      (ch.type === 'FRAME' && ch.name === 'WelderJourneyHeader') ||
-      (ch.type === 'RECTANGLE' && ch.name === 'JourneyDivider')
-    ) {
-      try {
-        ch.remove();
-      } catch (_e) {
-        // silent
-      }
+  // n === 0 path: create 1px marker FRAME for persistence.
+  if (n === 0) {
+    // @figma-direct: figma.createFrame
+    const markerFrame = figma.createFrame();
+    markerFrame.name = 'WelderJourneyHeader';
+    markerFrame.layoutMode = 'NONE';
+    markerFrame.fills = [];
+    markerFrame.strokes = [];
+    markerFrame.clipsContent = false;
+    container.appendChild(markerFrame);
+    try {
+      markerFrame.resize(contentWidth, 1);
+    } catch (_e) {
+      // silent
+    }
+    markerFrame.x = JOURNEY_CONTAINER_PADDING;
+    markerFrame.y = JOURNEY_CONTAINER_PADDING;
+    return;
+  }
+
+  // Truncate or pad columns to n.
+  const safeColumns: JourneyColumnModel[] = [];
+  for (let ic = 0; ic < n; ic++) {
+    if (ic < columns.length) {
+      safeColumns.push(columns[ic]!);
+    } else {
+      safeColumns.push({ header: '', subheader: '' });
     }
   }
 
-  if (columns.length === 0) return;
+  const colWidth = contentWidth / n;
 
-  // @figma-direct: figma.createFrame — header frame creation.
+  // Vertical dividers (N-1): RECT in container, full height.
+  const dividerHeight = containerH - JOURNEY_CONTAINER_PADDING * 2;
+  const safeDividerH = dividerHeight < 1 ? 1 : dividerHeight;
+
+  for (let di = 0; di < n - 1; di++) {
+    const divX = JOURNEY_CONTAINER_PADDING + (di + 1) * colWidth - JOURNEY_DIVIDER_WEIGHT / 2;
+    // @figma-direct: figma.createRectangle
+    const rect = figma.createRectangle();
+    rect.name = 'JourneyVDivider-' + String(di);
+    rect.fills = [{ type: 'SOLID', color: { r: 0.6, g: 0.7, b: 0.85 }, opacity: 0.5 }];
+    container.appendChild(rect);
+    try {
+      rect.resize(JOURNEY_DIVIDER_WEIGHT, safeDividerH);
+    } catch (_e) {
+      // silent
+    }
+    rect.x = divX;
+    rect.y = JOURNEY_CONTAINER_PADDING;
+  }
+
+  // WelderJourneyHeader FRAME: NONE layout, absolute-positioned.
+  // @figma-direct: figma.createFrame
   const headerFrame = figma.createFrame();
   headerFrame.name = 'WelderJourneyHeader';
-  headerFrame.layoutMode = 'HORIZONTAL';
-  headerFrame.primaryAxisSizingMode = 'FIXED';
-  headerFrame.counterAxisSizingMode = 'FIXED';
+  headerFrame.layoutMode = 'NONE';
   headerFrame.fills = [];
   headerFrame.strokes = [];
-  headerFrame.paddingLeft = JOURNEY_CONTAINER_PADDING;
-  headerFrame.paddingRight = JOURNEY_CONTAINER_PADDING;
-  headerFrame.x = 0;
-  headerFrame.y = 0;
+  headerFrame.clipsContent = false;
+  container.appendChild(headerFrame);
   try {
-    headerFrame.resize(JOURNEY_WIDTH, JOURNEY_HEADER_HEIGHT);
+    headerFrame.resize(contentWidth, JOURNEY_HEADER_HEIGHT);
   } catch (_e) {
     // silent
   }
+  headerFrame.x = JOURNEY_CONTAINER_PADDING;
+  headerFrame.y = JOURNEY_CONTAINER_PADDING;
 
-  const colWidth = contentWidth / columns.length;
+  // Render cells (absolute-positioned inside header frame).
+  await applyHeaderCells(headerFrame, safeColumns, colWidth);
 
-  for (let i = 0; i < columns.length; i++) {
-    const col = columns[i]!;
-    // @figma-direct: figma.createFrame — cell creation.
-    const cellFrame = figma.createFrame();
-    cellFrame.name = 'JourneyHeaderCell-' + String(i);
-    cellFrame.layoutMode = 'VERTICAL';
-    cellFrame.primaryAxisAlignItems = 'CENTER';
-    cellFrame.counterAxisAlignItems = 'CENTER';
-    cellFrame.primaryAxisSizingMode = 'FIXED';
-    cellFrame.counterAxisSizingMode = 'FIXED';
-    cellFrame.fills = [];
-    cellFrame.strokes = [];
-    try {
-      cellFrame.resize(colWidth, JOURNEY_HEADER_HEIGHT);
-    } catch (_e) {
-      // silent
-    }
-
-    const tHeader = figma.createText();
-    tHeader.name = 'JourneyHeader-h';
-    tHeader.fontName = { family: 'Inter', style: 'SemiBold' };
-    tHeader.fontSize = JOURNEY_HEADER_FONT_PX;
-    tHeader.characters = col.header;
-    tHeader.textAlignHorizontal = 'CENTER';
-    tHeader.textAutoResize = 'HEIGHT';
-    cellFrame.appendChild(tHeader);
-    try {
-      tHeader.layoutSizingHorizontal = 'FILL';
-    } catch (_e) {
-      // silent
-    }
-
-    const tSub = figma.createText();
-    tSub.name = 'JourneyHeader-sub';
-    tSub.fontName = { family: 'Inter', style: 'Regular' };
-    tSub.fontSize = JOURNEY_SUBHEADER_FONT_PX;
-    tSub.characters = col.subheader;
-    tSub.textAlignHorizontal = 'CENTER';
-    tSub.textAutoResize = 'HEIGHT';
-    cellFrame.appendChild(tSub);
-    try {
-      tSub.layoutSizingHorizontal = 'FILL';
-    } catch (_e) {
-      // silent
-    }
-
-    headerFrame.appendChild(cellFrame);
-    try {
-      cellFrame.layoutSizingHorizontal = 'FILL';
-    } catch (_e) {
-      // silent
-    }
-    try {
-      cellFrame.layoutSizingVertical = 'FILL';
-    } catch (_e) {
-      // silent
-    }
-
-    // Divider lines between columns.
-    if (i < columns.length - 1) {
-      // @figma-direct: figma.createRectangle — no wrapper covers shape creation.
-      const divider = figma.createRectangle();
-      divider.name = 'JourneyDivider';
-      divider.fills = [{ type: 'SOLID', color: { r: 0.6, g: 0.6, b: 0.6 }, opacity: 0.4 }];
-      divider.x = JOURNEY_CONTAINER_PADDING + (i + 1) * colWidth;
-      divider.y = 0;
-      try {
-        divider.resize(JOURNEY_DIVIDER_WEIGHT, containerH);
-      } catch (_e) {
-        // silent
-      }
-      container.appendChild(divider);
-    }
+  // Horizontal divider at bottom of header section.
+  const hDividerY = JOURNEY_HEADER_HEIGHT - JOURNEY_DIVIDER_WEIGHT;
+  // @figma-direct: figma.createRectangle
+  const hDivider = figma.createRectangle();
+  hDivider.name = 'JourneyHDivider';
+  hDivider.fills = [{ type: 'SOLID', color: { r: 0.6, g: 0.7, b: 0.85 }, opacity: 0.5 }];
+  headerFrame.appendChild(hDivider);
+  try {
+    hDivider.resize(contentWidth, JOURNEY_DIVIDER_WEIGHT);
+  } catch (_e) {
+    // silent
   }
+  hDivider.x = 0;
+  hDivider.y = hDividerY;
+}
 
-  container.appendChild(headerFrame);
+async function applyHeaderCells(
+  headerFrame: FrameNode,
+  columns: JourneyColumnModel[],
+  colWidth: number,
+): Promise<void> {
+  for (let ci = 0; ci < columns.length; ci++) {
+    const col = columns[ci]!;
+    // @figma-direct: figma.createFrame
+    const cell = figma.createFrame();
+    cell.name = 'JourneyHeaderCell-' + String(ci);
+    cell.layoutMode = 'NONE';
+    cell.fills = [];
+    cell.strokes = [];
+    cell.clipsContent = false;
+    headerFrame.appendChild(cell);
+    try {
+      cell.resize(colWidth, JOURNEY_HEADER_HEIGHT);
+    } catch (_e) {
+      // silent
+    }
+    cell.x = ci * colWidth;
+    cell.y = 0;
+
+    await renderHeaderTextNodes(cell, col, colWidth);
+  }
+}
+
+async function renderHeaderTextNodes(
+  cell: FrameNode,
+  col: JourneyColumnModel,
+  colWidth: number,
+): Promise<void> {
+  // Heading text node.
+  // @figma-direct: figma.createText
+  const tnH = figma.createText();
+  tnH.name = 'JourneyHeader-h';
+  cell.appendChild(tnH);
+  tnH.fontName = { family: 'Inter', style: 'Medium' };
+  tnH.fontSize = JOURNEY_HEADER_FONT_PX;
+  tnH.textAlignHorizontal = 'CENTER';
+  tnH.textAlignVertical = 'TOP';
+  tnH.fills = [{ type: 'SOLID', color: { r: 0.17, g: 0.5, b: 1.0 } }];
+  tnH.characters = col.header;
+  tnH.textAutoResize = 'HEIGHT';
+  try {
+    tnH.resize(colWidth, 50);
+  } catch (_e) {
+    // silent
+  }
+  tnH.x = 0;
+  tnH.y = 0;
+
+  // Subheading text node.
+  // @figma-direct: figma.createText
+  const tnSub = figma.createText();
+  tnSub.name = 'JourneyHeader-sub';
+  cell.appendChild(tnSub);
+  tnSub.fontName = { family: 'Inter', style: 'Medium' };
+  tnSub.fontSize = JOURNEY_SUBHEADER_FONT_PX;
+  tnSub.textAlignHorizontal = 'CENTER';
+  tnSub.textAlignVertical = 'TOP';
+  tnSub.fills = [{ type: 'SOLID', color: { r: 0.17, g: 0.5, b: 1.0 } }];
+  tnSub.characters = col.subheader;
+  tnSub.textAutoResize = 'HEIGHT';
+  try {
+    tnSub.resize(colWidth, 30);
+  } catch (_e) {
+    // silent
+  }
+  tnSub.x = 0;
+  tnSub.y = 60;
 }
 
 // ---------------------------------------------------------------------------
-// Bootstrap error fallback
+// Bootstrap error fallback (v0.2.1 structure)
 // ---------------------------------------------------------------------------
 
 async function renderBootstrapError(slot: FrameNode): Promise<void> {
   // @figma-direct: figma.loadFontAsync, figma.createFrame, figma.createText.
+  const errorFrame = figma.createFrame();
+  errorFrame.name = 'JourneyBootstrapError';
+  errorFrame.layoutMode = 'HORIZONTAL';
+  errorFrame.primaryAxisAlignItems = 'CENTER';
+  errorFrame.counterAxisAlignItems = 'CENTER';
+  errorFrame.fills = [{ type: 'SOLID', color: { r: 1, g: 0.95, b: 0.85 } }];
+  errorFrame.strokes = [{ type: 'SOLID', color: { r: 1, g: 0.47, b: 0 } }];
+  errorFrame.strokeWeight = 2;
+  errorFrame.strokeAlign = 'INSIDE';
+  errorFrame.cornerRadius = 16;
   try {
-    await figma.loadFontAsync({ family: 'Inter', style: 'Regular' });
-    const frame = figma.createFrame();
-    frame.name = 'WelderJourneyError';
-    frame.fills = [{ type: 'SOLID', color: { r: 1, g: 0.9, b: 0.8 } }];
-    const t = figma.createText();
-    t.fontName = { family: 'Inter', style: 'Regular' };
-    t.fontSize = 14;
-    t.characters =
-      'JourneyWrap: place one JourneyItem component from the Welder library on this page, then re-apply.';
-    t.textAutoResize = 'HEIGHT';
-    frame.appendChild(t);
-    slot.appendChild(frame);
+    errorFrame.resize(JOURNEY_WIDTH, 120);
   } catch (_e) {
-    // silent — best-effort only
+    // silent
   }
+
+  const msg = figma.createText();
+  msg.fontName = { family: 'Inter', style: 'Regular' };
+  msg.fontSize = 24;
+  msg.characters =
+    'JourneyItem-bootstrap vereist: plaats eerst 1 JourneyItem uit de Welder-library ' +
+    'op een slide, sla dan opnieuw op.';
+  msg.fills = [{ type: 'SOLID', color: { r: 0.6, g: 0.25, b: 0 } }];
+  msg.textAutoResize = 'WIDTH_AND_HEIGHT';
+
+  errorFrame.appendChild(msg);
+  try {
+    msg.layoutSizingHorizontal = 'FILL';
+  } catch (_e) {
+    // silent
+  }
+
+  slot.appendChild(errorFrame);
 }
 
 // ---------------------------------------------------------------------------
