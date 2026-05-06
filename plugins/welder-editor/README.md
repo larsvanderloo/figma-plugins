@@ -60,7 +60,7 @@ npm run watch                                        # parallel watch mode (conc
 # Plugin appears under Plugins → Development → Welder Editor
 ```
 
-After the pnpm migration the canonical commands will be `pnpm --filter @figma-plugins/welder-editor build` etc., matching `welder-editor`.
+After the pnpm migration the canonical commands will be `pnpm --filter @figma-plugins/welder-editor build` etc.
 
 ## Validation
 
@@ -74,7 +74,7 @@ Before tagging, run the e2e gauntlet per `runbooks/e2e-gauntlet.md` in each enab
 
 ## Editor types
 
-This plugin's `manifest.json` declares `["figma", "slides"]`. FigJam is excluded — the Slide Machine library components are not hostable in FigJam (same rationale as ADR-0002 for `welder-editor`). Narrowing scope after launch requires an ADR.
+This plugin's `manifest.json` declares `["figma", "slides"]`. FigJam is excluded — the Slide Machine library components are not hostable in FigJam (same rationale as ADR-0002, scoped to the deleted scaffold but still applicable per ADR-0018). Narrowing scope after launch requires an ADR.
 
 ## Workflow
 

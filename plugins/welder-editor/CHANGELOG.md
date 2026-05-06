@@ -29,7 +29,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 - `package-lock.json` (npm) → migrate to pnpm workspace + `@figma-plugins/welder-editor` rename.
 - `widget-src/` → split into canonical `code/` + `ui/` + `shared/` (`T_REFACTOR_LAYOUT` per import ADR).
 - ~~`[monday]` placeholders~~ Done — folder `placeholder-plugin team` (id 2996351) created from the standard Scrum Team template, IDs filled in `plugin.toml`, `enabled = true`. Tasks board id 5095985440.
-- `[validation]` budgets → run gzipped re-measurement and ratify in a budget ADR (model after ADR-0003 / ADR-0014 for `welder-editor`).
+- `[validation]` budgets → run gzipped re-measurement and ratify in a budget ADR (model after ADR-0003 / ADR-0014, both scoped to the deleted scaffold but still applicable per ADR-0018).
 
 ## [0.2.1] — 2026-04-25
 

@@ -37,6 +37,13 @@ You do NOT have veto authority on releases — that's `plugin-tester`'s. You imp
 
 **Component library base**: Nuxt UI v4. Use Nuxt UI primitives wherever a fit exists. Theme overrides live in a per-plugin `app.config.ts` derived from the shared `components/tokens/`. Don't reinvent components Nuxt UI ships — `UButton`, `UInput`, `USelect`, `UTabs`, `UModal`, etc., are the defaults. When a Nuxt UI component doesn't fit, build a wrapper in `components/` that composes it; don't fork it.
 
+**Nuxt UI tooling — consult before designing.** Don't design a Nuxt UI component from memory. Before adding a component or wrapper, run a lookup:
+
+- **`nuxt-ui-remote` MCP** (registered for this project) — `search-components` to find what fits, `get-component` for the full API, `get-component-metadata` for slots/props at a glance, `get-example` and `list-examples` for canonical usage, `search-icons` for the Iconify name, `search-documentation` / `get-documentation-page` for theming and composition guidance, `search-composables` for `useToast`, `useOverlay`, etc., `get-template` / `list-templates` when scaffolding a layout. `get-migration-guide` when porting v3 patterns.
+- **`/nuxt-ui` skill** (at `~/.claude/skills/nuxt-ui/`) — invoke when the question is "which component for this pattern?" rather than "what props does this component take?". The skill maps user intents (form, dashboard, chat, docs) to the right Nuxt UI composition.
+
+Hard requirement: if a PR adds a new wrapper in `components/` over a Nuxt UI primitive, the wrapper rationale in the README must reference the specific Nuxt UI component it wraps and why a wrapper was needed. "Couldn't find one" without a `search-components` lookup is not a rationale.
+
 **State**: Vue's reactivity (`ref`, `reactive`, `computed`) for component-local state. Pinia stores in `ui/stores/` for cross-component state inside a plugin. **No client-side `localStorage`** — persisted plugin state lives via the message bus → `code/` → `figma.clientStorage` or `setPluginData`. The ui is a render of message-bus-derived state, not a parallel store.
 
 **Styling**: Tailwind CSS via Nuxt UI's preset. Custom CSS in scoped `<style>` blocks only when Tailwind doesn't fit. Design tokens (color, spacing, typography) live in `components/tokens/` and are surfaced as Tailwind utilities and Nuxt UI theme overrides — never inlined as hex codes in components.
