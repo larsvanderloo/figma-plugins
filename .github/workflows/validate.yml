@@ -202,25 +202,23 @@ jobs:
     env:
       PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
     #
-    # Budgets:
-    #   code-side  dist/code.js  ≤ 60 KB gzipped   (ADR-0003; unchanged)
-    #   ui-side    dist/ui.js    ≤ 320 KB gzipped   (ADR-0014; revised from 250 KB)
+    # Budgets (anti-pattern 0004 architecture: code.js embeds ui HTML as chunks):
+    #   code-side  dist/code.js        ≤ 330 KB gzipped  (was 60 KB; revised for embedded UI)
+    #   ui-side    dist/ui/index.html  ≤ 280 KB gzipped  (secondary artifact; was gating non-existent dist/ui.js)
     #
-    # ADR-0014 revision context: Sprint 5 Wave 1 adds Nuxt UI v4 + Tailwind v4
-    # + full Lucide offline + vue-picture-cropper. The v0.2.1 reference build
-    # benchmarks at ~280 KB gzip; 320 KB provides 14% headroom.
-    # If the post-rewire build exceeds 320 KB, apply lazy-load mitigations
-    # (vue-picture-cropper + Lucide subset) before revising the budget again.
+    # Architecture note (anti-pattern 0004): Figma's plugin sandbox has a
+    # string-literal parser limit. Our 1.2 MB ui.html exceeds it when Figma
+    # tries to inject it as the __html__ constant. Fix: embed ui/index.html
+    # in code.js as ≤60 KB string chunks (chunked-text-loader pattern from
+    # v0.2.1 reference build). code.js now carries ~11 KB code + ~269 KB
+    # embedded UI HTML ≈ 280 KB gzip. 330 KB budget gives 18% headroom.
+    # dist/ui/index.html is still produced by the build but is a secondary
+    # artifact; Figma no longer needs to download it separately.
     #
-    # ARTIFACT NOTE: ADR-0003 and the perf doc originally referenced
-    # dist/ui.html as the ui artifact (Vite single-file inline HTML).  The
-    # Vite multi-entry config produces dist/ui.js (JS bundle) +
-    # dist/ui/index.html (HTML shell, ~255 bytes).  The JS bundle
-    # dist/ui.js is the correct artifact to gate against the budget;
-    # dist/ui/index.html is a trivially-small shell that is not the deliverable.
-    #
-    # manifest.json was corrected to "ui": "dist/ui/index.html" in PR #22
-    # (BDEV-2893950198).  The path discrepancy is resolved.
+    # Combined budget: 330 KB + 280 KB = 610 KB (was 60 KB + 320 KB = 380 KB).
+    # The increase reflects the dual-copy architecture. A future optimisation
+    # is to remove manifest.ui entirely once we confirm Figma accepts showUI()
+    # without the field, eliminating the 280 KB secondary download.
     #
     steps:
       - name: Checkout
@@ -238,24 +236,28 @@ jobs:
         run: pnpm build
 
       - name: Bundle-size gate (code-side)
+        # code.js now embeds ui/index.html as ≤60 KB string chunks (anti-pattern 0004).
+        # Budget revised from 60 KB to 330 KB to accommodate the embedded UI HTML.
         run: |
           BYTES=$(gzip -c plugins/welder-editor/dist/code.js | wc -c)
-          BUDGET=$((60 * 1024))
+          BUDGET=$((330 * 1024))
           echo "code.js gzip = $BYTES bytes (budget $BUDGET)"
           if [ "$BYTES" -gt "$BUDGET" ]; then
-            echo "::error::dist/code.js gzipped $BYTES bytes exceeds 60 KB budget per ADR-0003"
+            echo "::error::dist/code.js gzipped $BYTES bytes exceeds 330 KB budget (anti-pattern 0004 architecture)"
             exit 1
           fi
 
       - name: Bundle-size gate (ui-side)
-        # Gates dist/ui.js — the actual JS bundle produced by the Vite build.
-        # Budget revised to 320 KB per ADR-0014 (was 250 KB per ADR-0003).
+        # Gates dist/ui/index.html — the singlefile-inlined UI bundle (secondary
+        # artifact in the chunked-text-loader architecture; primary is code.js).
+        # Was incorrectly gating the non-existent dist/ui.js. Fixed in this PR.
+        # Budget 280 KB (269 KB actual gzip + ~4% headroom).
         run: |
-          BYTES=$(gzip -c plugins/welder-editor/dist/ui.js | wc -c)
-          BUDGET=$((320 * 1024))
-          echo "ui.js gzip = $BYTES bytes (budget $BUDGET)"
+          BYTES=$(gzip -c plugins/welder-editor/dist/ui/index.html | wc -c)
+          BUDGET=$((280 * 1024))
+          echo "ui/index.html gzip = $BYTES bytes (budget $BUDGET)"
           if [ "$BYTES" -gt "$BUDGET" ]; then
-            echo "::error::dist/ui.js gzipped $BYTES bytes exceeds 320 KB budget per ADR-0014"
+            echo "::error::dist/ui/index.html gzipped $BYTES bytes exceeds 280 KB budget"
             exit 1
           fi
 

@@ -24,14 +24,49 @@
 // Bundle visualizer is intentionally omitted here; it runs on the ui build
 // (vite.config.ts) which is the larger artifact.
 
-import { defineConfig } from 'vite';
+import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vite';
+import type { Plugin } from 'vite';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
+/**
+ * Vite plugin: exposes dist/ui/index.html as a virtual module
+ * 'virtual:ui-html' whose default export is the full HTML string,
+ * assembled from ≤60 KB chunks to stay under Figma's sandbox
+ * string-literal parser limit (anti-pattern 0004).
+ *
+ * Build order dependency: vite build (ui side) must run before
+ * vite build --config vite.code.config.ts (code side) so that
+ * dist/ui/index.html exists when this plugin reads it.
+ * The package.json build script already enforces this order.
+ */
+function chunkedUiHtml(): Plugin {
+  const VIRTUAL_ID = 'virtual:ui-html';
+  const RESOLVED_ID = '\0' + VIRTUAL_ID;
+  return {
+    name: 'welder-chunked-ui-html',
+    resolveId(id) {
+      if (id === VIRTUAL_ID) return RESOLVED_ID;
+    },
+    load(id) {
+      if (id !== RESOLVED_ID) return;
+      const uiPath = resolve(root, 'dist/ui/index.html');
+      const html = readFileSync(uiPath, 'utf-8');
+      const CHUNK_SIZE = 60_000;
+      const chunks: string[] = [];
+      for (let i = 0; i < html.length; i += CHUNK_SIZE) {
+        chunks.push(JSON.stringify(html.slice(i, i + CHUNK_SIZE)));
+      }
+      return `export default [\n${chunks.join(',\n')}\n].join('');`;
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [],
+  plugins: [chunkedUiHtml()],
   resolve: {
     alias: {
       '@code': resolve(root, 'code'),

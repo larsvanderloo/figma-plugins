@@ -21,6 +21,7 @@
 //
 // Owner: figma-api-engineer
 
+import uiHtml from 'virtual:ui-html';
 import {
   createRouter,
   loadNamedVariables,
@@ -753,7 +754,7 @@ async function main(): Promise<void> {
 
   // Show UI per api-spec brief.
   // @figma-direct: figma.showUI — no wrapper covers showUI.
-  figma.showUI(__html__, { width: 520, height: 760, themeColors: true });
+  figma.showUI(uiHtml, { width: 520, height: 760, themeColors: true });
 
   // ADR-0005 / Wave 1 handoff: pre-warm named variables before first handler dispatch.
   const vars = await loadNamedVariables(WELDER_VARIABLE_KEYS);
