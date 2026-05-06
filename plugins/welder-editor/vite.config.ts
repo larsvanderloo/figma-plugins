@@ -1,6 +1,6 @@
 // Vite config for the Figma plugin UI entry (iframe side only).
 //
-//   ui/index.html → dist/ui.html (single self-contained HTML file)
+//   ui/index.html → dist/ui/index.html (single self-contained HTML file)
 //
 // KEY CONSTRAINT: Figma's plugin runtime loads manifest.ui as a self-contained
 // HTML string (__html__ global). The string is injected into a sandboxed iframe
@@ -10,7 +10,7 @@
 // crash: the iframe tried to evaluate an incomplete script tag.
 //
 // Fix: use vite-plugin-singlefile to inline ALL JS and CSS into a single
-// dist/ui.html. Figma then receives a fully self-contained HTML string.
+// dist/ui/index.html. Figma then receives a fully self-contained HTML string.
 //
 // The code-side entry (code/main.ts → dist/code.js) is built by a separate
 // config — vite.code.config.ts — because Figma's plugin runtime requires a
@@ -20,12 +20,12 @@
 // line 1: Unexpected token".
 //
 // Build script (package.json): `vite build && vite build --config vite.code.config.ts`
-//   1. This config clears dist/ (emptyOutDir: true) and writes ui.html.
+//   1. This config clears dist/ (emptyOutDir: true) and writes dist/ui/index.html.
 //   2. vite.code.config.ts appends dist/code.js without clearing.
 //
 // Output structure:
-//   dist/ui.html   — single-file bundle (JS + CSS inlined)
-//   dist/code.js   — IIFE plugin code (written by vite.code.config.ts)
+//   dist/ui/index.html — single-file bundle (JS + CSS inlined)
+//   dist/code.js       — IIFE plugin code (written by vite.code.config.ts)
 //
 // Bundle visualizer: active only during production builds (`pnpm build`).
 // Outputs dist/bundle-stats.html — use it to check against the ADR-0014 budget.
