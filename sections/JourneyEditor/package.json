@@ -2,7 +2,7 @@
   "name": "@figma-plugins/sections-journey-editor",
   "version": "0.1.0",
   "private": true,
-  "description": "JourneyEditor — section for editing a JourneyWrap: column headers + pill items (label, icon, range).",
+  "description": "JourneyEditor \u2014 section for editing a JourneyWrap: column headers + pill items (label, icon, range).",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -35,6 +35,7 @@
     "typescript": "^5.4.0",
     "vue-tsc": "^2.0.0",
     "vitest": "^1.5.0",
-    "vite": "^5.0.0"
+    "vite": "^5.0.0",
+    "vue-router": "^4.5.1"
   }
 }
