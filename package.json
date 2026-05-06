@@ -28,6 +28,7 @@
     "lefthook": "^2.1.6",
     "prettier": "^3.2.0",
     "typescript": "^5.4.0",
+    "vue-router": "^4.5.1",
     "vue-tsc": "^2.0.0"
   }
 }
