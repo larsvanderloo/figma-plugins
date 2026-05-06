@@ -33,6 +33,8 @@ Thumbs.db
 # Regenerated on every build; not human-authored.
 plugins/*/auto-imports.d.ts
 plugins/*/components.d.ts
+sections/*/auto-imports.d.ts
+sections/*/components.d.ts
 
 # Test / coverage
 coverage/
