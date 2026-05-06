@@ -32,8 +32,13 @@
 import { describe, it, expect } from 'vitest';
 import { nextTick } from 'vue';
 import { render, screen, fireEvent } from '@testing-library/vue';
+import ui from '@nuxt/ui/vue-plugin';
 import TableEditor from '../src/TableEditor.vue';
 import type { TableWrapModel, TableRowModel } from '../src/TableEditor.vue';
+
+// Nuxt UI plugin — required for UButton, UInput, USwitch etc. to resolve
+// in the jsdom environment (same as TableEditor.test.ts).
+const globalPlugins = { plugins: [ui] };
 
 // ---------------------------------------------------------------------------
 // 50-row × 6-col fixture
@@ -65,6 +70,7 @@ describe('TableEditor — frame-trace perf gate (R1)', () => {
   it('10 PropertyPanel collapsible toggles each complete in < 16 ms', async () => {
     render(TableEditor, {
       props: { tableData: make50x6Model() },
+      global: globalPlugins,
     });
 
     // Find a PropertyPanel toggle button (the Cells panel header is a button)

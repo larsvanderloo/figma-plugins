@@ -2,62 +2,70 @@
 /**
  * TableEditor — section for editing a TableWrap's content.
  *
- * ## Composition
+ * ## Composition (Sprint 5 Wave 3 — MON-2894506892)
  *
- * TableEditor composes PropertyPanel (collapsible wrappers) and
- * StatusMessage (CSV error display) to render controls for:
- *   1. Width toggle (sm / md / lg)
- *   2. Text size toggle (sm / md / lg)
- *   3. Column header switch
- *   4. Row count +/− buttons
- *   5. Column count +/− buttons
- *   6. Body rows editable cell grid
- *   7. CSV import (paste + parse)
+ * TableEditor composes PropertyPanel (collapsible wrappers) and Nuxt UI v4
+ * primitives (UFormField, UButton, USwitch, UInput, UTextarea, UAlert) to
+ * render controls for:
+ *   1. Width toggle (sm / md / lg) — UButton toggle group inside UFormField
+ *   2. Text size toggle (sm / md / lg) — UButton toggle group inside UFormField
+ *   3. Column header switch — USwitch inside UFormField
+ *   4. Row count +/− buttons — UButton variant="ghost" icon="i-lucide-plus/minus"
+ *   5. Column count +/− buttons — UButton variant="ghost" icon="i-lucide-plus/minus"
+ *   6. Body rows editable cell grid — UInput per cell
+ *   7. CSV import (paste + parse) — UTextarea + UButton + UAlert for errors
  *
- * ## T42.21 perf fixes
+ * ## T42.21 perf fixes — PRESERVED
  *
  * **Finding 1 — offset-based stable bodyRows reference:**
  * The visible body rows are never derived via `.slice()` on a reactive array
  * (which creates a new array reference every render, forcing Reka's sync
- * measurement → v-for re-key → frame jank). Instead, `visibleBodyRows` is a
- * computed that reads directly from `props.tableData.rows` with explicit index
- * bounds. The array reference is stable: Reka's getBoundingClientRect() is
- * never triggered because we use PropertyPanel (CSS grid-rows collapse, zero
- * JS measurement).
+ * measurement → v-for re-key → frame jank). Instead, `bodyRows` is a
+ * computed that reads directly from `props.tableData.rows`. The array
+ * reference is stable: no new array reference is created on each render cycle.
  *
  * **Finding 3 — memoized truncation flags:**
- * `estimateRowTruncation` is replaced by a computed `truncationFlags` map keyed
- * by row index. The computed only re-evaluates when `tableData.rows` or the
- * column count changes — not on every toggle event.
+ * `truncationFlags` is a computed Map keyed by row index. The computed only
+ * re-evaluates when `tableData.rows` or the column count changes — not on
+ * every toggle event.
  *
  * ## Section discipline
  *
  * - Pure renderer of `tableData` prop, emits typed events.
  * - NO store imports, NO bridge imports, NO figma.* calls.
- * - Parent (App.vue, task 4.3) wires emits → useEditorActions.applyTable*.
+ * - Parent (App.vue) wires emits → useEditorActions.applyTable*.
  *
  * ## Accessibility
  *
  * - The outer <section> is aria-labelledby the heading element.
- * - Each PropertyPanel collapsible group uses the ARIA APG Accordion pattern
- *   (implemented in PropertyPanel itself — button + aria-expanded + aria-controls).
+ * - Each PropertyPanel collapsible group uses the ARIA APG Accordion pattern.
  * - The cell grid is a table with role="grid" so screen readers understand the
- *   row/column structure. Each input has an aria-label.
- * - Toggle groups are <div role="group" aria-labelledby> with <button> children.
- * - Row/col count controls use aria-label on buttons and aria-live for the count
- *   value so AT announces updates.
- * - The column header switch is a native <input type="checkbox"> with a paired <label>.
- * - CSV errors surface in a <ul role="list" aria-live="assertive"> region.
+ *   row/column structure. Each UInput has an aria-label.
+ * - Width and Text Size toggle groups are <div role="group" aria-labelledby>.
+ * - USwitch (column header) renders with role="switch" (Reka SwitchRoot).
+ * - Row/col count controls use aria-label on UButton and aria-live for count.
+ * - CSV errors surface in a role="alert" aria-live="assertive" region.
+ *
+ * ## Nuxt UI primitives map
+ *
+ * | Before                        | After                                            |
+ * | ----------------------------- | ------------------------------------------------ |
+ * | native <button> (width)       | <UButton variant="solid|subtle"> in UFormField   |
+ * | native <button> (textSize)    | <UButton variant="solid|subtle"> in UFormField   |
+ * | <input type="checkbox">       | <USwitch> in UFormField label="First row…"       |
+ * | native <button> +/- row/col   | <UButton variant="ghost" icon="i-lucide-…">      |
+ * | <input type="text"> cell      | <UInput> with aria-label="Row X, column Y"       |
+ * | <textarea> CSV paste          | <UTextarea> rows="3" placeholder="Name,Role…"    |
+ * | hand-rolled error div         | <UAlert color="error" variant="subtle">           |
  *
  * ## Ownership
  *
  * Owner: ui-engineer.
- * Resolves: MON-2894038365 (Sprint 4, Task 4.1).
+ * Resolves: MON-2894506892 (Sprint 5, Task 5.7).
  */
 
 import { ref, computed, useId } from 'vue';
 import { PropertyPanel } from '@figma-plugins/sections-property-panel';
-import { StatusMessage } from '@figma-plugins/components';
 import { parseCsv, DEFAULT_CSV_PARSE_CONFIG } from './csv-schema.js';
 import type { TableRow, CsvParseError } from './csv-schema.js';
 
@@ -113,7 +121,7 @@ const props = withDefaults(defineProps<TableEditorProps>(), {
 
 // ---------------------------------------------------------------------------
 // Emits — mirror useEditorActions.applyTable* per-field payload shapes exactly.
-// The parent (App.vue, task 4.3) wires each emit to the corresponding action.
+// The parent (App.vue) wires each emit to the corresponding action.
 // ---------------------------------------------------------------------------
 
 export interface TableEditorEmits {
@@ -201,9 +209,8 @@ const colCount = computed<number>(() => {
  *
  * Truncation heuristic: any cell whose value length exceeds
  * (colCount > 0 ? Math.floor(120 / colCount) : 120) characters is flagged.
- * The threshold mirrors the v0.2.1 estimateRowTruncation logic scaled to
- * a 320px plugin width. This is informational only (drives aria-label
- * tooltip text); the renderer handles visual truncation.
+ * This is informational only (drives aria-label tooltip text); the renderer
+ * handles visual truncation.
  */
 const truncationFlags = computed<Map<number, boolean>>(() => {
   const flags = new Map<number, boolean>();
@@ -237,9 +244,8 @@ function onTextSizeChange(textSize: 'sm' | 'md' | 'lg'): void {
   emit('update:textSize', { slotId: props.tableData.slotId, textSize });
 }
 
-function onHeaderToggle(event: Event): void {
-  const checked = (event.target as HTMLInputElement).checked;
-  emit('update:hasColumnHeader', { slotId: props.tableData.slotId, hasColumnHeader: checked });
+function onHeaderToggle(value: boolean): void {
+  emit('update:hasColumnHeader', { slotId: props.tableData.slotId, hasColumnHeader: value });
 }
 
 function onRowIncrease(): void {
@@ -262,8 +268,7 @@ function onColDecrease(): void {
   emit('update:colCount', { slotId: props.tableData.slotId, delta: -1 });
 }
 
-function onCellInput(rowIndex: number, colIndex: number, event: Event): void {
-  const value = (event.target as HTMLInputElement).value;
+function onCellInput(rowIndex: number, colIndex: number, value: string): void {
   emit('update:cell', {
     slotId: props.tableData.slotId,
     row: rowIndex,
@@ -310,95 +315,101 @@ function onCsvParse(): void {
     <p :id="sectionLabelId" class="table-editor__heading">Table</p>
 
     <!-- ======================================================================
-         1. Width
+         1. Width — UButton toggle group inside UFormField
          ====================================================================== -->
     <PropertyPanel title="Width">
-      <div role="group" :aria-labelledby="widthGroupId" class="table-editor__toggle-group">
-        <span :id="widthGroupId" class="sr-only">Column width preset</span>
-        <button
-          v-for="opt in ['sm', 'md', 'lg'] as const"
-          :key="opt"
-          type="button"
-          class="table-editor__toggle-btn"
-          :class="{ 'table-editor__toggle-btn--active': tableData.width === opt }"
-          :aria-pressed="tableData.width === opt"
-          :disabled="disabled"
-          @click="onWidthChange(opt)"
-        >
-          {{ opt }}
-        </button>
-      </div>
+      <UFormField name="table-width" class="table-editor__form-field">
+        <div role="group" :aria-labelledby="widthGroupId" class="table-editor__toggle-group">
+          <span :id="widthGroupId" class="sr-only">Column width preset</span>
+          <UButton
+            v-for="opt in ['sm', 'md', 'lg'] as const"
+            :key="opt"
+            color="neutral"
+            size="sm"
+            :variant="tableData.width === opt ? 'solid' : 'subtle'"
+            :aria-pressed="tableData.width === opt"
+            :disabled="disabled"
+            class="table-editor__toggle-btn"
+            @click="onWidthChange(opt)"
+          >
+            {{ opt }}
+          </UButton>
+        </div>
+      </UFormField>
     </PropertyPanel>
 
     <!-- ======================================================================
-         2. Text size
+         2. Text size — UButton toggle group inside UFormField
          ====================================================================== -->
     <PropertyPanel title="Text Size">
-      <div role="group" :aria-labelledby="textSizeGroupId" class="table-editor__toggle-group">
-        <span :id="textSizeGroupId" class="sr-only">Text size preset</span>
-        <button
-          v-for="opt in ['sm', 'md', 'lg'] as const"
-          :key="opt"
-          type="button"
-          class="table-editor__toggle-btn"
-          :class="{ 'table-editor__toggle-btn--active': tableData.textSize === opt }"
-          :aria-pressed="tableData.textSize === opt"
-          :disabled="disabled"
-          @click="onTextSizeChange(opt)"
-        >
-          {{ opt }}
-        </button>
-      </div>
+      <UFormField name="table-text-size" class="table-editor__form-field">
+        <div role="group" :aria-labelledby="textSizeGroupId" class="table-editor__toggle-group">
+          <span :id="textSizeGroupId" class="sr-only">Text size preset</span>
+          <UButton
+            v-for="opt in ['sm', 'md', 'lg'] as const"
+            :key="opt"
+            color="neutral"
+            size="sm"
+            :variant="tableData.textSize === opt ? 'solid' : 'subtle'"
+            :aria-pressed="tableData.textSize === opt"
+            :disabled="disabled"
+            class="table-editor__toggle-btn"
+            @click="onTextSizeChange(opt)"
+          >
+            {{ opt }}
+          </UButton>
+        </div>
+      </UFormField>
     </PropertyPanel>
 
     <!-- ======================================================================
-         3. Column header
+         3. Column header — USwitch with built-in label prop.
+         USwitch renders a Reka SwitchRoot (<button role="switch">) + a Reka
+         Label (via its own `label` prop). NOT wrapped in UFormField, which
+         would inject a `name` and create a hidden <input> with no associated
+         label — causing an axe WCAG violation (critical: label).
          ====================================================================== -->
     <PropertyPanel title="Column Header">
-      <div class="table-editor__switch-row">
-        <label class="table-editor__switch-label" :for="`${sectionLabelId}-header-chk`">
-          First row is a header
-        </label>
-        <input
-          :id="`${sectionLabelId}-header-chk`"
-          type="checkbox"
-          class="table-editor__checkbox"
-          :checked="tableData.hasColumnHeader"
+      <div class="table-editor__switch-field">
+        <USwitch
+          :model-value="tableData.hasColumnHeader"
           :disabled="disabled"
-          @change="onHeaderToggle"
+          size="sm"
+          label="First row is a header"
+          @update:model-value="onHeaderToggle"
         />
       </div>
     </PropertyPanel>
 
     <!-- ======================================================================
-         4 + 5. Row count and Column count
+         4 + 5. Row count and Column count — UButton ghost +/-
          ====================================================================== -->
     <PropertyPanel title="Dimensions">
       <!-- Row count -->
       <div class="table-editor__counter-row">
         <span :id="rowCountLabelId" class="table-editor__counter-label">Rows</span>
         <div class="table-editor__counter-controls" :aria-labelledby="rowCountLabelId">
-          <button
-            type="button"
-            class="table-editor__counter-btn"
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-minus"
+            size="xs"
             aria-label="Remove row"
             :disabled="disabled || bodyRows.length <= 1"
             @click="onRowDecrease"
-          >
-            −
-          </button>
+          />
           <span class="table-editor__counter-value" aria-live="polite" aria-atomic="true">{{
             bodyRows.length
           }}</span>
-          <button
-            type="button"
-            class="table-editor__counter-btn"
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-plus"
+            size="xs"
             aria-label="Add row"
             :disabled="disabled || bodyRows.length >= MAX_ROWS"
             @click="onRowIncrease"
-          >
-            +
-          </button>
+          />
         </div>
       </div>
 
@@ -406,38 +417,38 @@ function onCsvParse(): void {
       <div class="table-editor__counter-row">
         <span :id="colCountLabelId" class="table-editor__counter-label">Columns</span>
         <div class="table-editor__counter-controls" :aria-labelledby="colCountLabelId">
-          <button
-            type="button"
-            class="table-editor__counter-btn"
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-minus"
+            size="xs"
             aria-label="Remove column"
             :disabled="disabled || colCount <= 1"
             @click="onColDecrease"
-          >
-            −
-          </button>
+          />
           <span class="table-editor__counter-value" aria-live="polite" aria-atomic="true">{{
             colCount
           }}</span>
-          <button
-            type="button"
-            class="table-editor__counter-btn"
+          <UButton
+            color="neutral"
+            variant="ghost"
+            icon="i-lucide-plus"
+            size="xs"
             aria-label="Add column"
             :disabled="disabled || colCount >= MAX_COLS"
             @click="onColIncrease"
-          >
-            +
-          </button>
+          />
         </div>
       </div>
     </PropertyPanel>
 
     <!-- ======================================================================
-         6. Body rows editable cell grid
+         6. Body rows editable cell grid — UInput per cell
          ====================================================================== -->
     <PropertyPanel title="Cells">
       <!--
         role="grid" communicates the row/column structure to AT.
-        Each cell input has an aria-label describing its position.
+        Each cell UInput has an aria-label describing its position.
         T42.21 Finding 1: bodyRows is a computed reading props.tableData.rows
         directly — no slice(), stable reference, no v-for re-key on toggle.
       -->
@@ -477,13 +488,13 @@ function onCsvParse(): void {
             role="gridcell"
             class="table-editor__grid-cell"
           >
-            <input
-              type="text"
-              class="table-editor__cell-input"
-              :value="cell.value"
+            <UInput
+              :model-value="cell.value"
               :disabled="disabled"
+              size="sm"
               :aria-label="`Row ${rowIdx + 1}, column ${colIdx + 1}${truncationFlags.get(rowIdx) ? ' — content may be truncated' : ''}`"
-              @input="onCellInput(rowIdx, colIdx, $event)"
+              class="table-editor__cell-input"
+              @update:model-value="(v: string) => onCellInput(rowIdx, colIdx, v)"
             />
           </div>
         </div>
@@ -491,57 +502,75 @@ function onCsvParse(): void {
     </PropertyPanel>
 
     <!-- ======================================================================
-         7. CSV import
+         7. CSV import — UTextarea + UButton + UAlert for errors
          ====================================================================== -->
     <PropertyPanel title="CSV Import" :default-open="false">
       <div class="table-editor__csv">
+        <!--
+          CSV textarea — explicit label association via for/id pattern.
+          UFormField's inject-based id wiring is unreliable in standalone
+          vitest/jsdom (no Nuxt app context). A native <label>+id pattern
+          gives testing-library the accessible name it needs.
+        -->
         <label :for="csvTextareaId" class="table-editor__csv-label">
           Paste CSV (first row = header)
         </label>
-        <textarea
+        <UTextarea
           :id="csvTextareaId"
           v-model="csvInput"
-          class="table-editor__csv-textarea"
           :disabled="disabled"
-          :aria-describedby="csvErrors.length > 0 ? csvErrorsId : undefined"
-          rows="6"
+          :rows="3"
           placeholder="Name,Role,City&#10;Alice,Engineer,Amsterdam"
+          :aria-describedby="csvErrors.length > 0 ? csvErrorsId : undefined"
+          class="table-editor__csv-textarea"
         />
-        <button
-          type="button"
-          class="table-editor__csv-parse-btn"
+
+        <UButton
+          color="neutral"
+          variant="subtle"
+          size="sm"
           :disabled="disabled || csvInput.trim().length === 0"
+          class="table-editor__csv-parse-btn"
           @click="onCsvParse"
         >
           Parse &amp; Apply
-        </button>
+        </UButton>
 
         <!--
           CSV errors — assertive live region so AT immediately announces
           parse failures. The element is always in the DOM to avoid the
           "live region not registered" AT miss.
+          UAlert renders a <div>; the role="alert" + aria-live are added
+          on the wrapper so the assertive region is always present.
         -->
         <div
-          v-if="csvErrors.length > 0"
           :id="csvErrorsId"
-          class="table-editor__csv-errors"
           role="alert"
           aria-live="assertive"
           aria-atomic="true"
+          class="table-editor__csv-errors"
         >
-          <ul class="table-editor__csv-error-list">
-            <li v-for="(err, i) in csvErrors" :key="i" class="table-editor__csv-error-item">
-              <StatusMessage :message="err.message" variant="alert" />
-            </li>
-          </ul>
+          <template v-if="csvErrors.length > 0">
+            <UAlert
+              v-for="(err, i) in csvErrors"
+              :key="i"
+              color="error"
+              variant="subtle"
+              :description="err.message"
+              class="table-editor__csv-error-item"
+            />
+          </template>
         </div>
 
         <!-- Success status (polite) — rendered when last parse succeeded -->
-        <StatusMessage
+        <p
           v-if="csvParsed && csvErrors.length === 0"
-          message="CSV imported successfully."
-          variant="status"
-        />
+          role="status"
+          aria-live="polite"
+          class="table-editor__csv-success"
+        >
+          CSV imported successfully.
+        </p>
       </div>
     </PropertyPanel>
   </section>
@@ -573,83 +602,32 @@ function onCsvParse(): void {
 }
 
 /* ---------------------------------------------------------------------------
-   Toggle group (width / text size)
+   Form field wrappers
+   --------------------------------------------------------------------------- */
+
+.table-editor__form-field {
+  padding: 6px 10px;
+}
+
+.table-editor__switch-field {
+  padding: 6px 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ---------------------------------------------------------------------------
+   Toggle group (width / text size) — UButton rows
    --------------------------------------------------------------------------- */
 
 .table-editor__toggle-group {
   display: flex;
   gap: 4px;
-  padding: 6px 10px;
 }
 
 .table-editor__toggle-btn {
   flex: 1;
-  appearance: none;
-  border: 1px solid var(--color-border, #d1d5db);
-  border-radius: 4px;
-  background: var(--color-btn-bg, transparent);
-  color: var(--color-text, #374151);
-  font-size: 11px;
-  font-weight: 500;
-  padding: 3px 6px;
-  cursor: pointer;
-  transition:
-    background-color 100ms ease,
-    border-color 100ms ease;
   min-height: 24px;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .table-editor__toggle-btn {
-    transition: none;
-  }
-}
-
-.table-editor__toggle-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.table-editor__toggle-btn--active {
-  background: var(--color-btn-active-bg, #1d4ed8);
-  border-color: var(--color-btn-active-bg, #1d4ed8);
-  color: var(--color-btn-active-text, #ffffff);
-}
-
-.table-editor__toggle-btn:focus-visible {
-  outline: 2px solid var(--color-focus-ring, #2563eb);
-  outline-offset: 1px;
-}
-
-/* ---------------------------------------------------------------------------
-   Switch row (column header)
-   --------------------------------------------------------------------------- */
-
-.table-editor__switch-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 6px 10px;
-}
-
-.table-editor__switch-label {
-  font-size: 11px;
-  color: var(--color-text, #374151);
-  cursor: pointer;
-  user-select: none;
-}
-
-.table-editor__checkbox {
-  cursor: pointer;
-  width: 14px;
-  height: 14px;
-  accent-color: var(--color-btn-active-bg, #1d4ed8);
-}
-
-.table-editor__checkbox:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
 }
 
 /* ---------------------------------------------------------------------------
@@ -674,44 +652,6 @@ function onCsvParse(): void {
   display: flex;
   align-items: center;
   gap: 6px;
-}
-
-.table-editor__counter-btn {
-  appearance: none;
-  width: 22px;
-  height: 22px;
-  border: 1px solid var(--color-border, #d1d5db);
-  border-radius: 4px;
-  background: var(--color-btn-bg, transparent);
-  color: var(--color-text, #374151);
-  font-size: 14px;
-  line-height: 1;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  transition: background-color 100ms ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .table-editor__counter-btn {
-    transition: none;
-  }
-}
-
-.table-editor__counter-btn:disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
-}
-
-.table-editor__counter-btn:not(:disabled):hover {
-  background: var(--color-panel-header-hover, rgba(0, 0, 0, 0.04));
-}
-
-.table-editor__counter-btn:focus-visible {
-  outline: 2px solid var(--color-focus-ring, #2563eb);
-  outline-offset: 1px;
 }
 
 .table-editor__counter-value {
@@ -761,30 +701,6 @@ function onCsvParse(): void {
 .table-editor__cell-input {
   width: 100%;
   min-width: 0;
-  font-size: 11px;
-  padding: 3px 5px;
-  border: 1px solid var(--color-border, #e5e7eb);
-  border-radius: 3px;
-  background: var(--color-input-bg, #ffffff);
-  color: var(--color-text, #374151);
-  line-height: 1.4;
-  /* Prevent the input from overflowing its cell when content is long */
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  box-sizing: border-box;
-}
-
-.table-editor__cell-input:disabled {
-  opacity: 0.45;
-  background: var(--color-disabled-bg, #f9fafb);
-  cursor: not-allowed;
-}
-
-.table-editor__cell-input:focus {
-  outline: 2px solid var(--color-focus-ring, #2563eb);
-  outline-offset: -1px;
-  border-color: transparent;
 }
 
 /* ---------------------------------------------------------------------------
@@ -798,6 +714,10 @@ function onCsvParse(): void {
   padding: 6px 10px 10px;
 }
 
+.table-editor__csv-field {
+  width: 100%;
+}
+
 .table-editor__csv-label {
   font-size: 11px;
   color: var(--color-text, #374151);
@@ -806,80 +726,27 @@ function onCsvParse(): void {
 
 .table-editor__csv-textarea {
   width: 100%;
-  font-size: 11px;
   font-family: monospace;
-  padding: 5px 6px;
-  border: 1px solid var(--color-border, #d1d5db);
-  border-radius: 4px;
-  background: var(--color-input-bg, #ffffff);
-  color: var(--color-text, #374151);
-  resize: vertical;
-  box-sizing: border-box;
-  line-height: 1.5;
-}
-
-.table-editor__csv-textarea:disabled {
-  opacity: 0.45;
-  background: var(--color-disabled-bg, #f9fafb);
-  cursor: not-allowed;
-}
-
-.table-editor__csv-textarea:focus {
-  outline: 2px solid var(--color-focus-ring, #2563eb);
-  outline-offset: -1px;
-  border-color: transparent;
 }
 
 .table-editor__csv-parse-btn {
-  appearance: none;
   align-self: flex-start;
-  border: 1px solid var(--color-border, #d1d5db);
-  border-radius: 4px;
-  background: var(--color-btn-bg, transparent);
-  color: var(--color-text, #374151);
-  font-size: 11px;
-  font-weight: 500;
-  padding: 4px 10px;
-  cursor: pointer;
-  min-height: 26px;
-  transition: background-color 100ms ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .table-editor__csv-parse-btn {
-    transition: none;
-  }
-}
-
-.table-editor__csv-parse-btn:disabled {
-  opacity: 0.45;
-  cursor: not-allowed;
-}
-
-.table-editor__csv-parse-btn:not(:disabled):hover {
-  background: var(--color-panel-header-hover, rgba(0, 0, 0, 0.04));
-}
-
-.table-editor__csv-parse-btn:focus-visible {
-  outline: 2px solid var(--color-focus-ring, #2563eb);
-  outline-offset: 1px;
 }
 
 .table-editor__csv-errors {
-  /* No extra padding — StatusMessage items provide their own */
-}
-
-.table-editor__csv-error-list {
-  margin: 0;
-  padding: 0;
-  list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 4px;
 }
 
 .table-editor__csv-error-item {
-  display: flex;
+  width: 100%;
+}
+
+.table-editor__csv-success {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-success, #16a34a);
 }
 
 /* ---------------------------------------------------------------------------
