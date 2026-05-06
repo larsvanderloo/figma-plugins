@@ -85,7 +85,6 @@ import { TitleDescriptionEditor } from '@figma-plugins/sections-title-descriptio
 import type { TitleDescriptionModel } from '@figma-plugins/sections-title-description-editor';
 import { IconPicker } from '@figma-plugins/sections-icon-picker';
 import { ImageEditor } from '@figma-plugins/sections-image-editor';
-import type { ImageModel } from '@figma-plugins/sections-image-editor';
 import type { CardItem } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -178,13 +177,11 @@ const titleDescriptionModel = computed<TitleDescriptionModel>(() => ({
 const hasIcon = computed<boolean>(() => props.card.icon !== null);
 
 /**
- * ImageModel shim — ImageEditor needs an imageWrapId and imageHash.
- * We map card.cardNodeId → imageWrapId (informational; for ImageEditor's
- * aria-label only — the parent resolves the actual ImageWrap node).
- * visualHash (string | null | undefined) aligns with imageHash (string | null).
+ * ImageEditor modelValue shim — maps card's visualHash to the new
+ * { hasImage, imageHash } shape expected by ImageEditor v0.2.0.
  */
-const imageModel = computed<ImageModel>(() => ({
-  imageWrapId: props.card.cardNodeId,
+const imageModelValue = computed<{ hasImage: boolean; imageHash: string | null }>(() => ({
+  hasImage: props.card.visualHash != null,
   imageHash: props.card.visualHash ?? null,
 }));
 
@@ -229,7 +226,7 @@ function onIconUpdate(iconKey: string): void {
 }
 
 /**
- * ImageEditor emits `update:image` with raw Uint8Array bytes.
+ * ImageEditor emits `upload` with raw Uint8Array bytes (v0.2.0 contract).
  * Wrap into { cardNodeId, bytes } for the parent.
  */
 function onVisualUpdate(bytes: Uint8Array): void {
@@ -288,9 +285,12 @@ function onVisualUpdate(bytes: Uint8Array): void {
     <!-- ------------------------------------------------------------------ -->
     <div v-if="hasVisual" class="card-editor__sub-section">
       <ImageEditor
-        :model="imageModel"
+        :model-value="imageModelValue"
+        :preview-url="null"
+        :fill-w="null"
+        :fill-h="null"
         :disabled="disabled ?? false"
-        @update:image="onVisualUpdate"
+        @upload="onVisualUpdate"
       />
     </div>
   </section>

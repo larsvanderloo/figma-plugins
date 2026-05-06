@@ -1,8 +1,8 @@
 {
   "name": "@figma-plugins/sections-image-editor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "ImageEditor — section for replacing image fills and adjusting crop transforms on an ImageWrap.",
+  "description": "ImageEditor — section for replacing image fills and cropping via vue-picture-cropper.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -15,7 +15,8 @@
   "dependencies": {
     "vue": "^3.4.0",
     "@nuxt/ui": "^4.0.0",
-    "pinia": "^3",
+    "cropperjs": "^1.x",
+    "vue-picture-cropper": "^1.x",
     "@figma-plugins/components": "workspace:*"
   },
   "devDependencies": {

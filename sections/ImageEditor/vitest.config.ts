@@ -13,6 +13,9 @@ export default mergeConfig(
     resolve: {
       alias: {
         '@': resolve(root, 'src'),
+        // Mock cropperjs CSS import — jsdom does not process stylesheets and
+        // cropperjs/dist/cropper.css causes a parse error in the test runner.
+        'cropperjs/dist/cropper.css': resolve(root, 'tests/__mocks__/cropper.css.ts'),
       },
     },
     test: {

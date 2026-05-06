@@ -1,63 +1,42 @@
 <script setup lang="ts">
 /**
- * ImageEditor — section for editing a single ImageWrap fill slot.
+ * ImageEditor — section for editing a single image fill slot.
  *
- * ## Responsibilities
+ * ## Architecture
  *
- * Two functions:
+ * Replaces the hand-rolled CropperCanvas (ADR-0006 Option B) with
+ * vue-picture-cropper (Wave 1 PR #53). ADR-0006 is superseded.
  *
- * 1. **Replace image fill** — a file picker (<input type="file">) styled via
- *    a visible <button> proxy. When the user selects a file the raw bytes are
- *    read as ArrayBuffer → Uint8Array and emitted as `update:image`. The
- *    consuming plugin view wires this to `actions.applyImage(bytes)` which
- *    posts the `apply-image` message to the code side, which calls
- *    `figma.createImage(bytes)`.
+ * Two states:
+ *   - thumbnail  — shows the current image preview + Crop / Upload buttons
+ *   - cropper    — shows CropperComponent from useCropper() + Apply / Cancel buttons
  *
- * 2. **Crop transform** — a <CropperCanvas> component rendered when
- *    `imageDataUrl` is provided. User drag/keyboard adjustments emit
- *    `update:cropTransform` (debounced 300 ms inside CropperCanvas). The
- *    consuming plugin view wires this to an `apply-crop` action (v0.2.0).
+ * ## Apply flow
+ *
+ * 1. useCropper provides CropperComponent (renders cropperjs) + cropperApi.
+ * 2. applyCrop() calls cropperApi.getBlob() → arrayBuffer() → Uint8Array.
+ * 3. Emits `upload` with raw bytes — same as the file-upload path.
+ * 4. Main thread treats this as a normal upload-image message; no transform math.
  *
  * ## Section discipline
  *
- * - Emits only — does NOT dispatch messages directly. App.vue wires events.
- * - Does NOT fetch data. Data flows in via props (model + imageDataUrl).
- * - Sections accept `loading` and `error` in their props contract; this
- *   section surfaces a `loading` state (spinner placeholder while the code
- *   side retrieves image bytes) and an `error` state (file type / size
- *   validation failures).
+ * - Emits only — does NOT dispatch messages directly.
+ * - Does NOT fetch data. Data flows in via props.
+ * - Local refs only for UI state (isUploading, isCropOpen, etc.) — no Pinia store.
  *
  * ## Accessibility
  *
- * - The hidden <input type="file"> is associated with the visible trigger
- *   button via `aria-controls`.
- * - The trigger button has an explicit aria-label.
- * - When `model.imageHash` is null the crop section is hidden entirely
- *   (no image to crop) and a helper text is shown.
- * - When `disabled` is true the button and CropperCanvas are both inert.
- * - An aria-live="polite" region announces async status updates (upload
- *   success / error).
+ * - Hidden file input triggered via visible UButton (not aria-hidden).
+ * - aria-live region announces upload status.
+ * - Status row with UIcon + text label for image state.
+ * - All interactive elements keyboard-reachable via Nuxt UI defaults.
  *
- * ## File validation (client-side, pre-emit)
- *
- * Accepted MIME types: image/png, image/jpeg, image/webp.
- * Maximum file size: 10 MB (client-side guard; code side re-validates).
- * Out-of-range files set `uploadError` and do not emit.
- *
- * Ownership: ui-engineer.
+ * Owner: ui-engineer. Resolves MON-2894451805.
  */
 
-import { ref, computed, useId, useTemplateRef } from 'vue';
-import type { Transform, ImageModel } from './types.js';
-import CropperCanvas from './CropperCanvas.vue';
-import type { CropperCanvasProps } from './CropperCanvas.vue';
-
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
-const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
+import { ref, computed } from 'vue';
+import { useCropper } from 'vue-picture-cropper';
+import 'cropperjs/dist/cropper.css';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -65,46 +44,38 @@ const ACCEPTED_TYPES = ['image/png', 'image/jpeg', 'image/webp'];
 
 export interface ImageEditorProps {
   /**
-   * The current ImageWrap state. Drives the crop section visibility and
-   * provides the imageHash for the crop UI.
+   * Current image state: whether an image is set and its hash.
    */
-  model: ImageModel;
+  modelValue: {
+    hasImage: boolean;
+    imageHash: string | null;
+  };
   /**
-   * Data URL (or object URL) for the current image fill.
-   * Provided by App.vue after the image-upload:result round-trip.
-   * When undefined the crop section shows a loading skeleton.
+   * Base64 data-URL (e.g. `data:image/png;base64,...`) of the current fill bytes.
+   * null = no preview yet. Fed by the parent via the image-upload:result message.
    */
-  imageDataUrl?: string;
+  previewUrl: string | null;
   /**
-   * Optional aspect-ratio lock for the crop box.
-   * - number — width / height (e.g. 16/9).
-   * - null   — unlocked (default).
-   * @default null
+   * Width of the Figma image slot in pixels.
+   * null = unknown; falls back to a fixed-height preview box.
+   * Together with fillH, determines the aspect ratio of the preview and the
+   * locked aspect ratio of the crop rect.
    */
-  aspectRatio?: number | null;
+  fillW: number | null;
   /**
-   * When true the file picker and crop handles are disabled.
+   * Height of the Figma image slot in pixels.
+   * null = unknown; falls back to a fixed-height preview box.
+   */
+  fillH: number | null;
+  /**
+   * When true, the file picker and crop buttons are disabled.
    * @default false
    */
   disabled?: boolean;
-  /**
-   * When true shows a loading skeleton in the crop area.
-   * Used while App.vue is awaiting the image-upload:result response.
-   * @default false
-   */
-  loading?: boolean;
-  /**
-   * An error string to display in the section (e.g. from a failed
-   * apply-image:result). When set, the error is shown in the aria-live
-   * region and inline below the file picker.
-   */
-  error?: string;
 }
 
 const props = withDefaults(defineProps<ImageEditorProps>(), {
-  aspectRatio: null,
   disabled: false,
-  loading: false,
 });
 
 // ---------------------------------------------------------------------------
@@ -113,365 +84,278 @@ const props = withDefaults(defineProps<ImageEditorProps>(), {
 
 export interface ImageEditorEmits {
   /**
-   * Emitted when the user picks a new image file.
+   * Emitted when the user picks a new image file or applies a crop.
    * Carries raw image bytes as Uint8Array.
-   * App.vue wires this to actions.applyImage({ imageWrapId, bytes }).
+   * Parent wires this to actions.applyImage({ imageWrapId, bytes }).
    */
-  'update:image': [bytes: Uint8Array];
-  /**
-   * Emitted (debounced 300 ms, from CropperCanvas) when the crop box changes.
-   * App.vue wires this to the apply-crop action (v0.2.0).
-   */
-  'update:cropTransform': [transform: Transform];
+  upload: [bytes: Uint8Array];
 }
 
 const emit = defineEmits<ImageEditorEmits>();
 
 // ---------------------------------------------------------------------------
-// IDs for accessibility wiring
+// Local UI state — no Pinia (per section discipline)
 // ---------------------------------------------------------------------------
 
-const fileInputId = useId();
-const statusRegionId = useId();
+const fileInput = ref<HTMLInputElement | null>(null);
+const isUploading = ref<boolean>(false);
+const isCropOpen = ref<boolean>(false);
+const cropSourceUrl = ref<string | null>(null);
+const sizeWarning = ref<string | null>(null);
 
 // ---------------------------------------------------------------------------
-// Template refs
+// Cropper setup (vue-picture-cropper)
 // ---------------------------------------------------------------------------
-
-const fileInputEl = useTemplateRef<HTMLInputElement>('fileInput');
-
-// ---------------------------------------------------------------------------
-// Local state
-// ---------------------------------------------------------------------------
-
-/** Client-side validation error (file type / size). Cleared on next pick. */
-const uploadError = ref<string | null>(null);
-
-/** Status message announced via aria-live (success / transient error). */
-const statusMessage = ref<string>('');
-
-// ---------------------------------------------------------------------------
-// Computed
-// ---------------------------------------------------------------------------
-
-/** True when an image is available for cropping. */
-const hasImage = computed<boolean>(() => props.model.imageHash !== null);
-
-/** Combined error: prop-level external error or local upload validation error. */
-const displayError = computed<string | null>(() => props.error ?? uploadError.value);
 
 /**
- * Props forwarded to CropperCanvas. We use v-bind so that optional props
- * that are undefined are simply absent (not bound as `undefined`), which
- * satisfies exactOptionalPropertyTypes on CropperCanvas's prop contract.
+ * Reactive cropperjs options. aspectRatio derived from Figma slot dimensions:
+ * - finite number when both fillW + fillH are known and positive
+ * - NaN = free aspect ratio (cropperjs treats NaN as free)
+ *
+ * viewMode: 1 — clamp crop rect to image boundaries.
+ * background: false — hide checkerboard pattern.
+ * autoCrop: true — initialise crop box on mount.
  */
-const cropperProps = computed<Partial<CropperCanvasProps>>(() => {
-  const p: Partial<CropperCanvasProps> = {
-    aspectRatio: props.aspectRatio,
-    disabled: props.disabled,
+const cropperOptions = computed(() => {
+  const aspect =
+    props.fillW !== null && props.fillH !== null && props.fillW > 0 && props.fillH > 0
+      ? props.fillW / props.fillH
+      : NaN;
+  return {
+    viewMode: 1 as const,
+    aspectRatio: aspect,
+    autoCrop: true,
+    background: false,
   };
-  if (props.imageDataUrl !== undefined) {
-    p.imageDataUrl = props.imageDataUrl;
-  }
-  if (props.model.cropTransform !== undefined) {
-    p.cropTransform = props.model.cropTransform;
-  }
-  return p;
+});
+
+/**
+ * Reactive props object passed to useCropper. Re-evaluated when cropSourceUrl
+ * or cropperOptions changes so the cropper reacts to a new source image.
+ */
+const cropperProps = computed(() => ({
+  img: cropSourceUrl.value ?? '',
+  options: cropperOptions.value,
+}));
+
+/**
+ * useCropper returns a [Component, api] tuple.
+ * - CropperComponent — the Vue component to render in the template.
+ * - cropperApi — getBlob / getDataURL / getFile, thin wrapper over cropperjs.
+ */
+const [CropperComponent, cropperApi] = useCropper(cropperProps);
+
+// ---------------------------------------------------------------------------
+// Preview box layout
+// ---------------------------------------------------------------------------
+
+/**
+ * Inline style for the preview/cropper box. Sets aspect-ratio CSS property
+ * when slot dimensions are known and within a reasonable range (0.4–3.0).
+ * Outside that range we fall back to a fixed height so extreme panorama or
+ * portrait fills don't produce unusably tiny or oversized thumbnails.
+ */
+const previewBoxStyle = computed<Record<string, string>>(() => {
+  if (props.fillW === null || props.fillH === null) return {};
+  if (props.fillW <= 0 || props.fillH <= 0) return {};
+  const ratio = props.fillW / props.fillH;
+  if (ratio < 0.4 || ratio > 3.0) return {};
+  return { aspectRatio: String(ratio) };
+});
+
+/**
+ * True when no aspect-ratio is derivable — the box uses a fixed h-36 / h-64
+ * class instead of inline aspect-ratio.
+ */
+const useFixedHeight = computed<boolean>(() => Object.keys(previewBoxStyle.value).length === 0);
+
+// ---------------------------------------------------------------------------
+// Status label
+// ---------------------------------------------------------------------------
+
+const SOFT_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
+
+const statusLabel = computed<string>(() => {
+  if (isUploading.value) return 'Uploading…';
+  if (props.modelValue.hasImage) return 'Image set';
+  return 'No image';
 });
 
 // ---------------------------------------------------------------------------
 // File picker handlers
 // ---------------------------------------------------------------------------
 
-function onPickerClick(): void {
+function triggerFileInput(): void {
   if (props.disabled) return;
-  uploadError.value = null;
-  fileInputEl.value?.click();
+  fileInput.value?.click();
 }
 
-async function onFileChange(event: Event): Promise<void> {
+async function onFileSelected(event: Event): Promise<void> {
   const input = event.target as HTMLInputElement;
-  const file = input.files?.[0];
-  if (!file) return;
+  const files = input.files;
+  if (files === null || files.length === 0) return;
 
-  // Reset input so the same file can be re-picked after an error.
-  input.value = '';
+  const file: File | undefined = files[0];
+  if (file === undefined) return;
 
-  // Validate MIME type.
-  if (!ACCEPTED_TYPES.includes(file.type)) {
-    uploadError.value = `Unsupported file type: ${file.type || 'unknown'}. Use PNG, JPEG, or WebP.`;
-    statusMessage.value = uploadError.value;
-    return;
+  sizeWarning.value = null;
+
+  if (file.size > SOFT_MAX_BYTES) {
+    const mb = (file.size / (1024 * 1024)).toFixed(1);
+    sizeWarning.value = `Large file (${mb} MB) — upload may take a moment.`;
   }
 
-  // Validate size.
-  if (file.size > MAX_FILE_BYTES) {
-    uploadError.value = `File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Maximum is 10 MB.`;
-    statusMessage.value = uploadError.value;
-    return;
-  }
-
-  // Read bytes.
+  isUploading.value = true;
   try {
     const buffer = await file.arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    uploadError.value = null;
-    statusMessage.value = `Image "${file.name}" selected.`;
-    emit('update:image', bytes);
-  } catch {
-    uploadError.value = 'Failed to read the selected file. Please try again.';
-    statusMessage.value = uploadError.value;
+    emit('upload', bytes);
+  } finally {
+    isUploading.value = false;
+    input.value = '';
   }
 }
 
 // ---------------------------------------------------------------------------
-// Crop transform relay
+// Crop handlers
 // ---------------------------------------------------------------------------
 
-function onCropTransformUpdate(transform: Transform): void {
-  emit('update:cropTransform', transform);
+/** Opens the crop panel, loading the current preview as source. */
+function openCrop(): void {
+  if (props.previewUrl === null || props.disabled) return;
+  cropSourceUrl.value = props.previewUrl;
+  isCropOpen.value = true;
+}
+
+/** Cancels the crop panel without emitting. */
+function cancelCrop(): void {
+  isCropOpen.value = false;
+  cropSourceUrl.value = null;
+}
+
+/**
+ * Applies the crop: extracts the cropped region as a PNG blob, converts to
+ * Uint8Array, and emits `upload`. The parent treats this identically to a
+ * file upload — main thread re-registers the image via figma.createImage().
+ */
+async function applyCrop(): Promise<void> {
+  try {
+    const blob = await cropperApi.getBlob({ imageSmoothingQuality: 'high' });
+    if (blob === null) return;
+    const buffer = await blob.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    emit('upload', bytes);
+  } finally {
+    isCropOpen.value = false;
+    cropSourceUrl.value = null;
+  }
 }
 </script>
 
 <template>
-  <section class="image-editor" :aria-label="'Image editor for ' + model.imageWrapId">
-    <!-- ------------------------------------------------------------------ -->
-    <!-- aria-live region — announces upload status / errors asynchronously  -->
-    <!-- ------------------------------------------------------------------ -->
-    <div :id="statusRegionId" role="status" aria-live="polite" aria-atomic="true" class="sr-only">
-      {{ statusMessage }}
+  <div class="space-y-2">
+    <!-- aria-live region for upload status announcements -->
+    <div role="status" aria-live="polite" aria-atomic="true" class="sr-only">
+      {{ statusLabel }}
     </div>
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- File picker                                                          -->
-    <!-- ------------------------------------------------------------------ -->
-    <div class="image-editor__picker-row">
-      <!-- Hidden native file input -->
-      <input
-        :id="fileInputId"
-        ref="fileInput"
-        type="file"
-        accept="image/png,image/jpeg,image/webp"
-        :disabled="disabled"
-        class="image-editor__file-input"
-        aria-label="Choose image file"
-        tabindex="-1"
-        @change="onFileChange"
-      />
-
-      <!-- Visible trigger button (proxies the hidden input) -->
-      <button
-        type="button"
-        :disabled="disabled"
-        :aria-disabled="disabled ? 'true' : undefined"
-        :aria-controls="fileInputId"
-        aria-label="Replace image — choose a PNG, JPEG, or WebP file"
-        class="image-editor__pick-button"
-        @click="onPickerClick"
+    <!--
+      Cropper panel — shown while isCropOpen is true.
+      CropperComponent mounts cropperjs on the img element and initialises with
+      the locked aspect ratio derived from fillW / fillH.
+    -->
+    <div v-if="isCropOpen && cropSourceUrl !== null" class="space-y-2">
+      <div
+        class="w-full overflow-hidden rounded-xl bg-[--ui-bg-muted]"
+        :class="{ 'h-64': useFixedHeight }"
+        :style="previewBoxStyle"
       >
-        Replace image
-      </button>
+        <CropperComponent class="h-full w-full" />
+      </div>
 
-      <!-- Current image status hint -->
-      <span v-if="hasImage" class="image-editor__status-hint"> Image loaded </span>
-      <span v-else class="image-editor__status-hint image-editor__status-hint--empty">
-        No image — placeholder fill
-      </span>
+      <div class="flex items-center justify-end gap-2">
+        <UButton size="md" color="neutral" variant="outline" @click="cancelCrop"> Cancel </UButton>
+        <UButton size="md" color="primary" variant="solid" icon="i-lucide-check" @click="applyCrop">
+          Apply
+        </UButton>
+      </div>
     </div>
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Validation / external error                                          -->
-    <!-- ------------------------------------------------------------------ -->
-    <p v-if="displayError" role="alert" class="image-editor__error">
-      {{ displayError }}
+    <!--
+      Thumbnail — shown when a preview is available and the cropper is not open.
+      Read-only; user crops via the "Crop" button below.
+    -->
+    <div
+      v-else-if="previewUrl !== null"
+      class="relative w-full overflow-hidden rounded-xl bg-[--ui-bg-muted] select-none"
+      :class="{ 'h-36': useFixedHeight }"
+      :style="previewBoxStyle"
+    >
+      <img
+        :src="previewUrl"
+        class="absolute inset-0 h-full w-full object-cover"
+        alt=""
+        aria-hidden="true"
+      />
+    </div>
+
+    <!-- Status row + action buttons -->
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <UIcon
+          :name="modelValue.hasImage ? 'i-lucide-image' : 'i-lucide-image-off'"
+          class="size-4 shrink-0 text-muted"
+          aria-hidden="true"
+        />
+        <span class="text-xs text-muted">{{ statusLabel }}</span>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <!-- Crop button — only when there is a preview and the cropper is closed -->
+        <UButton
+          v-if="previewUrl !== null && !isCropOpen"
+          size="md"
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-crop"
+          :disabled="disabled || previewUrl === null"
+          :aria-label="'Crop image'"
+          @click="openCrop"
+        >
+          Crop
+        </UButton>
+
+        <!-- Upload / Replace button -->
+        <UButton
+          size="md"
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-upload"
+          :loading="isUploading"
+          :disabled="disabled || isUploading"
+          :aria-label="modelValue.hasImage ? 'Replace image' : 'Upload image'"
+          @click="triggerFileInput"
+        >
+          {{ modelValue.hasImage ? 'Replace' : 'Upload' }}
+        </UButton>
+      </div>
+    </div>
+
+    <!-- 2 MB soft size warning -->
+    <p v-if="sizeWarning" class="text-xs text-warning" role="status" aria-live="polite">
+      {{ sizeWarning }}
     </p>
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Crop section — only shown when an image is present                  -->
-    <!-- ------------------------------------------------------------------ -->
-    <div v-if="hasImage" class="image-editor__crop-section">
-      <p class="image-editor__crop-label" aria-hidden="true">Crop</p>
-
-      <!-- Loading skeleton while App.vue awaits image bytes -->
-      <div
-        v-if="loading"
-        role="img"
-        aria-busy="true"
-        aria-label="Loading image preview"
-        class="image-editor__crop-skeleton"
-      />
-
-      <!-- CropperCanvas -->
-      <CropperCanvas v-else v-bind="cropperProps" @update:crop-transform="onCropTransformUpdate" />
-    </div>
-
-    <!-- No-image placeholder -->
-    <div v-else class="image-editor__no-image">
-      <p class="image-editor__no-image-text">Replace the image above to enable crop controls.</p>
-    </div>
-  </section>
+    <!-- Hidden native file input (image/* — accepts PNG, JPEG, WebP, GIF) -->
+    <input
+      ref="fileInput"
+      type="file"
+      accept="image/*"
+      :disabled="disabled"
+      tabindex="-1"
+      aria-hidden="true"
+      style="display: none"
+      @change="onFileSelected"
+    />
+  </div>
 </template>
-
-<style scoped>
-/*
- * Compact density — matches the Figma plugin iframe context.
- * Colors reference CSS custom properties so they adapt to Figma's light/dark
- * themes. Fallback values are Tailwind slate equivalents.
- */
-
-.image-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-/* ---- File picker ---- */
-
-.image-editor__picker-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-
-/* Visually hide the native input while keeping it accessible to AT */
-.image-editor__file-input {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
-
-.image-editor__pick-button {
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 10px;
-  font-size: 11px;
-  font-weight: 500;
-  line-height: 1.5;
-  color: var(--color-button-text, #111827);
-  background: var(--color-button-bg, #f9fafb);
-  border: 1px solid var(--color-button-border, #d1d5db);
-  border-radius: 4px;
-  cursor: pointer;
-  outline: none;
-  white-space: nowrap;
-}
-
-.image-editor__pick-button:hover:not(:disabled) {
-  background: var(--color-button-hover-bg, #f3f4f6);
-}
-
-.image-editor__pick-button:focus-visible {
-  outline: 2px solid var(--color-focus-ring, #2563eb);
-  outline-offset: 2px;
-}
-
-.image-editor__pick-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.image-editor__status-hint {
-  font-size: 11px;
-  color: var(--color-label, #6b7280);
-}
-
-.image-editor__status-hint--empty {
-  color: var(--color-label-muted, #9ca3af);
-  font-style: italic;
-}
-
-/* ---- Error ---- */
-
-.image-editor__error {
-  margin: 0;
-  padding: 6px 8px;
-  font-size: 11px;
-  line-height: 1.4;
-  color: var(--color-error-text, #b91c1c);
-  background: var(--color-error-bg, #fef2f2);
-  border: 1px solid var(--color-error-border, #fecaca);
-  border-radius: 4px;
-}
-
-/* ---- Crop section ---- */
-
-.image-editor__crop-section {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.image-editor__crop-label {
-  margin: 0;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--color-label, #6b7280);
-  user-select: none;
-}
-
-.image-editor__crop-skeleton {
-  width: 100%;
-  height: 160px;
-  border-radius: 4px;
-  background: linear-gradient(
-    90deg,
-    var(--color-skeleton-a, #e5e7eb) 0%,
-    var(--color-skeleton-b, #f3f4f6) 50%,
-    var(--color-skeleton-a, #e5e7eb) 100%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.4s ease-in-out infinite;
-}
-
-/* Respect prefers-reduced-motion */
-@media (prefers-reduced-motion: reduce) {
-  .image-editor__crop-skeleton {
-    animation: none;
-    background: var(--color-skeleton-a, #e5e7eb);
-  }
-}
-
-@keyframes shimmer {
-  0% {
-    background-position: 200% 0;
-  }
-  100% {
-    background-position: -200% 0;
-  }
-}
-
-/* ---- No-image placeholder ---- */
-
-.image-editor__no-image {
-  padding: 12px 8px;
-  border: 1px dashed var(--color-input-border, #d1d5db);
-  border-radius: 4px;
-  text-align: center;
-}
-
-.image-editor__no-image-text {
-  margin: 0;
-  font-size: 11px;
-  color: var(--color-label-muted, #9ca3af);
-}
-
-/* sr-only utility */
-.sr-only {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border-width: 0;
-}
-</style>

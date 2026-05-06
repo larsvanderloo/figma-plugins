@@ -52,36 +52,123 @@ import { afterEach, beforeEach } from 'vitest';
 import { cleanup } from '@testing-library/vue';
 
 // ---------------------------------------------------------------------------
-// ResizeObserver shim
+// HTMLCanvasElement.getContext stub
 //
-// jsdom does not implement ResizeObserver. CropperCanvas.vue (inside ImageEditor)
-// uses it to track the canvas dimensions. Without this shim, any test that mounts
-// ImageEditor (directly or via App.vue with an image-containing GeneralSections
-// fixture) throws "ResizeObserver is not defined" and the suite aborts.
-//
-// The shim is a minimal no-op: observe/unobserve/disconnect do nothing.
-// CropperCanvas handles the case where the observer callback never fires by
-// reading the canvas clientWidth/clientHeight on its own mount hook — so
-// the crop UI is simply static in tests, which is correct for unit/smoke tests.
+// axe-core's color-contrast rule and cropperjs both call getContext('2d').
+// jsdom does not implement the Canvas 2D API — without this stub, tests that
+// mount ImageEditor (directly or via App.vue) throw on the getContext call.
 // ---------------------------------------------------------------------------
-if (typeof globalThis.ResizeObserver === 'undefined') {
-  class ResizeObserverStub {
-    observe(): void {
-      /* no-op */
-    }
-    unobserve(): void {
-      /* no-op */
-    }
-    disconnect(): void {
-      /* no-op */
-    }
-  }
-  Object.defineProperty(globalThis, 'ResizeObserver', {
-    configurable: true,
-    writable: true,
-    value: ResizeObserverStub,
-  });
+
+const canvasCtxStub: Partial<CanvasRenderingContext2D> = {
+  clearRect: () => undefined,
+  fillRect: () => undefined,
+  strokeRect: () => undefined,
+  drawImage: () => undefined,
+  beginPath: () => undefined,
+  moveTo: () => undefined,
+  lineTo: () => undefined,
+  stroke: () => undefined,
+  setTransform: () => undefined,
+  fillStyle: '',
+  strokeStyle: '',
+  lineWidth: 1,
+};
+
+if (typeof HTMLCanvasElement !== 'undefined') {
+  HTMLCanvasElement.prototype.getContext = function (contextId: string): RenderingContext | null {
+    if (contextId === '2d') return canvasCtxStub as CanvasRenderingContext2D;
+    return null;
+  } as typeof HTMLCanvasElement.prototype.getContext;
 }
+
+// ---------------------------------------------------------------------------
+// Nuxt UI component stubs
+//
+// UButton, UIcon, UInput, and other Nuxt UI auto-import components are not
+// resolvable in the jsdom test environment (no Nuxt Vite plugin, no auto-
+// import transform). We register lightweight stubs via @testing-library/vue's
+// config.global.components so every render(App, ...) call in the suite sees
+// them without manual per-call wiring.
+//
+// Stubs are accessible HTML so axe scans and role queries remain valid:
+//   - UButton → <button type="button"> with aria-label and disabled forwarded
+//   - UIcon   → <span aria-hidden="true">
+//   - UInput  → <input> with aria-label forwarded
+//   - UTabs / UTab → semantic tab wrapper stubs
+// ---------------------------------------------------------------------------
+
+import { config as vtuConfig } from '@vue/test-utils';
+import { defineComponent, h } from 'vue';
+
+const UButtonStub = defineComponent({
+  name: 'UButton',
+  inheritAttrs: false,
+  props: {
+    disabled: { type: Boolean, default: false },
+    loading: { type: Boolean, default: false },
+    icon: { type: String, default: undefined },
+    size: { type: String, default: undefined },
+    color: { type: String, default: undefined },
+    variant: { type: String, default: undefined },
+    to: { type: String, default: undefined },
+    type: { type: String, default: 'button' },
+  },
+  setup(props, { slots, attrs }) {
+    return () =>
+      h(
+        'button',
+        {
+          type: props.type ?? 'button',
+          disabled: props.disabled || props.loading || undefined,
+          'aria-disabled': props.disabled || props.loading ? 'true' : undefined,
+          ...attrs,
+        },
+        slots.default?.(),
+      );
+  },
+});
+
+const UIconStub = defineComponent({
+  name: 'UIcon',
+  inheritAttrs: false,
+  props: { name: { type: String, required: true } },
+  setup(props, { attrs }) {
+    return () => h('span', { 'aria-hidden': 'true', 'data-icon': props.name, ...attrs });
+  },
+});
+
+const UInputStub = defineComponent({
+  name: 'UInput',
+  inheritAttrs: false,
+  props: {
+    modelValue: { type: String, default: '' },
+    placeholder: { type: String, default: undefined },
+    disabled: { type: Boolean, default: false },
+  },
+  emits: ['update:modelValue'],
+  setup(props, { emit, attrs }) {
+    return () =>
+      h('input', {
+        value: props.modelValue,
+        placeholder: props.placeholder,
+        disabled: props.disabled || undefined,
+        onInput: (e: Event) => {
+          emit('update:modelValue', (e.target as HTMLInputElement).value);
+        },
+        ...attrs,
+      });
+  },
+});
+
+// Register stubs globally via @vue/test-utils config so every render() call
+// in the test suite (via @testing-library/vue, which delegates to @vue/test-utils
+// internally) resolves UButton / UIcon / UInput as accessible HTML stubs.
+vtuConfig.global.components = {
+  ...vtuConfig.global.components,
+  UButton: UButtonStub,
+  UIcon: UIconStub,
+  UInput: UInputStub,
+};
 
 //   afterEach(cleanup)
 //     @testing-library/vue does NOT auto-cleanup unless vitest is configured

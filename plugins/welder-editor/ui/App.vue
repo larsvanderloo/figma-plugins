@@ -48,7 +48,6 @@ import { TitleDescriptionEditor } from '@figma-plugins/sections-title-descriptio
 import { BadgeEditor } from '@figma-plugins/sections-badge-editor';
 import { IconPicker } from '@figma-plugins/sections-icon-picker';
 import { ImageEditor } from '@figma-plugins/sections-image-editor';
-import type { Transform } from '@figma-plugins/sections-image-editor';
 import { CardList } from '@figma-plugins/sections-card-list';
 import { CardEditor } from '@figma-plugins/sections-card-editor/CardEditor';
 import type { CardItem } from '@figma-plugins/sections-card-editor/CardEditor';
@@ -82,6 +81,18 @@ const { slides, activeSlideId, general, content, graphs, sync } = storeToRefs(st
 
 /** Active tab id for TabStrip. Local ref; TabStrip auto-promotes on hide-empty. */
 const activeTab = ref<TabId>('general');
+
+/**
+ * Image preview state — ephemeral, scoped to App.vue (section-local per
+ * Sprint 2 task 2.2 review note). Populated by the image-upload:result
+ * message; reset when the general slice changes (slide switch).
+ *
+ * imagePreviewUrl: base64 data-URL of the current image fill bytes.
+ * imageFillW / imageFillH: Figma slot dimensions in pixels (0 = unknown).
+ */
+const imagePreviewUrl = ref<string | null>(null);
+const imageFillW = ref<number | null>(null);
+const imageFillH = ref<number | null>(null);
 
 // ---------------------------------------------------------------------------
 // Bridge: handle inbound messages from the code side
@@ -143,6 +154,26 @@ bridge.onMessage((msg: Message) => {
         content: null,
         graphs: null,
       });
+      break;
+    }
+
+    case 'image-upload:result': {
+      // Populate image preview state from the bytes returned by the code side.
+      // Converts raw bytes to a base64 data-URL for ImageEditor's previewUrl prop.
+      if (msg.payload.ok) {
+        const { bytes, fillW, fillH } = msg.payload.data;
+        // bytes is Uint8Array<ArrayBufferLike> from the message bus; copy to a
+        // plain ArrayBuffer so Blob constructor accepts it without type errors.
+        const bytesPlain = new Uint8Array(bytes);
+        const blob = new Blob([bytesPlain], { type: 'image/png' });
+        const reader = new FileReader();
+        reader.onload = () => {
+          imagePreviewUrl.value = typeof reader.result === 'string' ? reader.result : null;
+        };
+        reader.readAsDataURL(blob);
+        imageFillW.value = fillW > 0 ? fillW : null;
+        imageFillH.value = fillH > 0 ? fillH : null;
+      }
       break;
     }
 
@@ -241,20 +272,17 @@ function handleBadgeUpdate(patch: { label: string; icon: string }): void {
 }
 
 // ---------------------------------------------------------------------------
-// ImageEditor event handlers
+// ImageEditor event handler
+//
+// The `upload` emit fires for both file-replace and apply-crop flows.
+// App.vue maps it to actions.applyImage() — the main thread treats them
+// identically (figma.createImage(bytes)).
 // ---------------------------------------------------------------------------
 
-function handleImageUpdate(bytes: Uint8Array): void {
+function handleImageUpload(bytes: Uint8Array): void {
   if (general.value === null || general.value.image === null) return;
-
   const { imageWrapId } = general.value.image;
-
   void actions.applyImage({ imageWrapId, bytes });
-}
-
-function handleCropTransformUpdate(_transform: Transform): void {
-  // apply-crop is a v0.2.0 action — not wired in Sprint 2.
-  // The emit is accepted and silently dropped so ImageEditor renders without error.
 }
 
 // ---------------------------------------------------------------------------
@@ -644,10 +672,15 @@ function handleJourneyItemRange(payload: {
             <!-- ImageEditor -->
             <PropertyPanel v-if="general !== null && general.image !== null" title="Image">
               <ImageEditor
-                :model="general.image"
+                :model-value="{
+                  hasImage: general.image.imageHash !== null,
+                  imageHash: general.image.imageHash,
+                }"
+                :preview-url="imagePreviewUrl"
+                :fill-w="imageFillW"
+                :fill-h="imageFillH"
                 :disabled="sectionsDisabled"
-                @update:image="handleImageUpdate"
-                @update:crop-transform="handleCropTransformUpdate"
+                @upload="handleImageUpload"
               />
             </PropertyPanel>
 

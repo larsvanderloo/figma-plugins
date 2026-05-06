@@ -2,29 +2,25 @@
 //
 // Owner: ui-engineer
 //
-// 1. localStorage shim — same rationale as TitleDescriptionEditor/tests/setup.ts.
-//    pinia@3 imports @vue/devtools-kit which calls localStorage.getItem() at
-//    module-evaluation time. Node 25 throws a SecurityError on the native
-//    localStorage getter unless started with --localstorage-file.
+// 1. localStorage shim — pinia@3 imports @vue/devtools-kit which calls
+//    localStorage.getItem() at module-evaluation time. Node 25 throws a
+//    SecurityError on the native localStorage getter unless started with
+//    --localstorage-file.
 //
-// 2. HTMLCanvasElement shim — jsdom does not implement Canvas 2D context.
-//    Tests that mount CropperCanvas will call getContext('2d'); we return a
-//    minimal stub so canvas drawing code does not throw. Tests verify model
-//    logic (CropRect, Transform computation, handle dispatch) — not the
-//    canvas pixels themselves.
+// 2. HTMLCanvasElement.getContext stub — axe-core's color-contrast rule calls
+//    HTMLCanvasElement.getContext('2d') internally even when there are no
+//    canvas elements in the component under test. jsdom does not implement
+//    the Canvas 2D API. We return a minimal stub so axe does not throw.
 //
-// 3. requestAnimationFrame / cancelAnimationFrame shim — jsdom's rAF is a
-//    no-op that never fires. We replace it with a synchronous stub so
-//    scheduleRedraw() calls complete without hanging tests.
-//
-// 4. ResizeObserver shim — jsdom does not implement ResizeObserver. We
-//    provide a no-op stub so CropperCanvas.vue's onMounted doesn't throw.
-//
-// 5. PointerEvent shim — jsdom's PointerEvent may lack setPointerCapture on
-//    HTMLElement. We patch it to a no-op.
-//
-// 6. Image shim — jsdom's Image element fires no load events for data URLs.
-//    We immediately fire onload so loadImage() resolves synchronously in tests.
+// 3. Nuxt UI component stubs — UButton and UIcon are global Nuxt UI
+//    auto-imports that are not available in jsdom. We register lightweight
+//    HTML stubs so that:
+//    a. Tests can query by role/label without depending on Nuxt UI internals.
+//    b. The stubs forward aria attributes and disabled state so axe scans
+//       see valid accessible markup.
+//    The stubs are registered via @testing-library/vue's `global.components`
+//    option — see ImageEditor.test.ts. Setup registers them on the Vue global
+//    app so we don't need to thread options through every render call.
 
 // ---------------------------------------------------------------------------
 // 1. localStorage shim
@@ -59,6 +55,8 @@ try {
 
 // ---------------------------------------------------------------------------
 // 2. HTMLCanvasElement.getContext stub
+// axe-core calls getContext('2d') for color-contrast analysis even when no
+// canvas elements exist in the component. We stub to a minimal object.
 // ---------------------------------------------------------------------------
 
 const canvasCtxStub: Partial<CanvasRenderingContext2D> = {
@@ -83,74 +81,6 @@ if (typeof HTMLCanvasElement !== 'undefined') {
     }
     return null;
   } as typeof HTMLCanvasElement.prototype.getContext;
-}
-
-// ---------------------------------------------------------------------------
-// 3. requestAnimationFrame / cancelAnimationFrame shim
-// ---------------------------------------------------------------------------
-
-// Replace rAF with immediate execution so scheduleRedraw() runs synchronously.
-globalThis.requestAnimationFrame = (cb: FrameRequestCallback): number => {
-  cb(performance.now());
-  return 0;
-};
-globalThis.cancelAnimationFrame = (_id: number): void => {
-  // no-op
-};
-
-// ---------------------------------------------------------------------------
-// 4. ResizeObserver shim
-// ---------------------------------------------------------------------------
-
-if (typeof globalThis.ResizeObserver === 'undefined') {
-  class ResizeObserverStub {
-    observe(): void {
-      // no-op
-    }
-    unobserve(): void {
-      // no-op
-    }
-    disconnect(): void {
-      // no-op
-    }
-  }
-  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
-}
-
-// ---------------------------------------------------------------------------
-// 5. setPointerCapture shim
-// ---------------------------------------------------------------------------
-
-if (typeof HTMLElement !== 'undefined' && !HTMLElement.prototype.setPointerCapture) {
-  HTMLElement.prototype.setPointerCapture = (_pointerId: number): void => {
-    // no-op
-  };
-  HTMLElement.prototype.releasePointerCapture = (_pointerId: number): void => {
-    // no-op
-  };
-}
-
-// ---------------------------------------------------------------------------
-// 6. Image load shim
-// ---------------------------------------------------------------------------
-
-// Patch Image.prototype.src so that setting it immediately fires onload.
-// We do this by redefining the `src` descriptor on HTMLImageElement.prototype,
-// wrapping the original setter with an onload dispatch.
-{
-  const originalDescriptor = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-  const originalSetter = originalDescriptor?.set;
-  if (originalSetter) {
-    Object.defineProperty(HTMLImageElement.prototype, 'src', {
-      ...originalDescriptor,
-      set(this: HTMLImageElement, value: string) {
-        originalSetter.call(this, value);
-        if (typeof this.onload === 'function') {
-          (this.onload as EventListener)(new Event('load'));
-        }
-      },
-    });
-  }
 }
 
 // ---------------------------------------------------------------------------

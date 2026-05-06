@@ -1,27 +1,133 @@
 // sections/ImageEditor/tests/ImageEditor.test.ts
 //
-// @testing-library/vue + axe-core tests for ImageEditor.
+// @testing-library/vue + axe-core tests for the rewritten ImageEditor.
 //
 // Owner: ui-engineer
+// Resolves: MON-2894451805 (Sprint 5 Wave 3 task 5.6)
 //
 // Test contract:
-//   1. File picker renders + triggers file-input click on button press
-//   2. File selection emits `update:image` with Uint8Array bytes
-//   3. File type validation rejects non-image files and shows error
-//   4. File size validation rejects files > 10 MB
-//   5. Disabled state: button is disabled; CropperCanvas receives disabled prop
-//   6. No-image state: crop section hidden; placeholder shown
-//   7. Image-loaded state: crop section shown; loading skeleton hidden
-//   8. Loading state: loading skeleton shown; CropperCanvas hidden
-//   9. External error prop surfaces in the error region
-//  10. update:cropTransform from CropperCanvas is relayed up
-//  11. axe WCAG 2.1 AA — 0 violations across all states
+//   1.  Thumbnail renders when previewUrl is set (no-image vs image states)
+//   2.  File picker: hidden input present, button click triggers input.click()
+//   3.  File selection emits `upload` with Uint8Array bytes
+//   4.  2 MB soft warning shown for large files
+//   5.  Disabled state: Upload button is disabled; click does not open file picker
+//   6.  No-image state: Crop button absent, "No image" status text shown
+//   7.  Image state: thumbnail rendered, Crop button present
+//   8.  Crop open/cancel: clicking Crop shows CropperComponent; Cancel closes it
+//   9.  Apply crop: cropperApi.getBlob resolves → emits `upload` with bytes
+//  10.  axe WCAG 2.1 AA — 0 violations: no-image, image, cropper-open, disabled states
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/vue';
+import { defineComponent, h } from 'vue';
 import axe from 'axe-core';
+
+// ---------------------------------------------------------------------------
+// Mock vue-picture-cropper before importing ImageEditor.
+//
+// cropperjs requires a real browser layout engine. jsdom does not implement
+// layout so useCropper() would fail. We mock the module to return:
+//   - CropperComponent: a minimal <div data-testid="cropper-component"> stub
+//   - cropperApi: { getBlob } that resolves to a small PNG-like Blob
+// ---------------------------------------------------------------------------
+
+// The mock Blob must implement arrayBuffer() — jsdom's Blob may not have it.
+const MOCK_PNG_BYTES = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+const mockBlobWithArrayBuffer: Blob = Object.assign(
+  new Blob([MOCK_PNG_BYTES], { type: 'image/png' }),
+  {
+    arrayBuffer: async (): Promise<ArrayBuffer> => MOCK_PNG_BYTES.buffer.slice(0) as ArrayBuffer,
+  },
+);
+
+const mockGetBlob = vi.fn(async (): Promise<Blob> => mockBlobWithArrayBuffer);
+
+// vi.mock is hoisted before imports. The factory must import Vue via
+// dynamic import (no top-level static imports available at hoist time).
+// We import Vue directly — no `typeof import()` type annotation needed
+// because we let TypeScript infer the type from the awaited result.
+vi.mock('vue-picture-cropper', async () => {
+  // Dynamic import of Vue is safe inside an async mock factory: Vitest
+  // resolves it before the test module runs, so the mock is ready in time.
+  const { defineComponent, h } = await import('vue');
+
+  const CropperStub = defineComponent({
+    name: 'CropperComponentStub',
+    setup() {
+      return () => h('div', { 'data-testid': 'cropper-component' });
+    },
+  });
+  return {
+    useCropper: () => [CropperStub, { getBlob: mockGetBlob }],
+  };
+});
+
+// Import ImageEditor AFTER the mock is established.
 import ImageEditor from '../src/ImageEditor.vue';
-import type { ImageModel, Transform } from '../src/types.js';
+
+// ---------------------------------------------------------------------------
+// Nuxt UI component stubs
+//
+// UButton and UIcon are Nuxt UI auto-imports unavailable in jsdom.
+// We register stubs that:
+//   - Render as accessible HTML elements (button, span).
+//   - Forward aria-label, disabled, aria-hidden so axe scans remain valid.
+//   - Emit click events so trigger-button tests work.
+// ---------------------------------------------------------------------------
+
+const UButtonStub = defineComponent({
+  name: 'UButton',
+  inheritAttrs: false,
+  props: {
+    disabled: { type: Boolean, default: false },
+    loading: { type: Boolean, default: false },
+    icon: { type: String, default: undefined },
+    size: { type: String, default: undefined },
+    color: { type: String, default: undefined },
+    variant: { type: String, default: undefined },
+  },
+  setup(props, { slots, attrs }) {
+    // Do NOT declare 'click' in emits — that would strip onClick from attrs.
+    // Pass attrs (including onClick) directly to the button element so that
+    // @click="handler" on the parent template is wired through correctly.
+    return () =>
+      h(
+        'button',
+        {
+          type: 'button',
+          disabled: props.disabled || props.loading || undefined,
+          'aria-disabled': props.disabled || props.loading ? 'true' : undefined,
+          ...attrs,
+        },
+        slots.default?.(),
+      );
+  },
+});
+
+const UIconStub = defineComponent({
+  name: 'UIcon',
+  props: {
+    name: { type: String, required: true },
+    ariaHidden: { type: String, default: undefined },
+  },
+  setup(props, { attrs }) {
+    return () =>
+      h('span', {
+        'aria-hidden': (attrs['aria-hidden'] as string | undefined) ?? 'true',
+        'data-icon': props.name,
+      });
+  },
+});
+
+// Global render options — injects UButton/UIcon stubs into every mounted Vue app.
+const globalOpts = {
+  global: {
+    components: {
+      UButton: UButtonStub,
+      UIcon: UIconStub,
+    },
+  },
+};
 
 // ---------------------------------------------------------------------------
 // axe helpers
@@ -55,100 +161,113 @@ function formatViolations(violations: axe.Result[]): string {
 // Fixtures
 // ---------------------------------------------------------------------------
 
-const MODEL_NO_IMAGE: ImageModel = {
-  imageWrapId: 'node-image-wrap-1',
-  imageHash: null,
-};
-
-const MODEL_WITH_IMAGE: ImageModel = {
-  imageWrapId: 'node-image-wrap-2',
-  imageHash: 'abc123def456',
-};
-
-const MODEL_WITH_CROP: ImageModel = {
-  imageWrapId: 'node-image-wrap-3',
-  imageHash: 'abc123def456',
-  cropTransform: [
-    [0.5, 0, 0.25],
-    [0, 0.5, 0.25],
-  ],
-};
-
-// Minimal PNG bytes (1×1 px, valid PNG header)
-const VALID_PNG_BYTES = new Uint8Array([
-  0x89,
-  0x50,
-  0x4e,
-  0x47,
-  0x0d,
-  0x0a,
-  0x1a,
-  0x0a, // PNG signature
-  0x00,
-  0x00,
-  0x00,
-  0x0d,
-  0x49,
-  0x48,
-  0x44,
-  0x52, // IHDR chunk length + type
-]);
+const MV_NO_IMAGE = { hasImage: false, imageHash: null };
+const MV_WITH_IMAGE = { hasImage: true, imageHash: 'abc123def456' };
+const PREVIEW_URL = 'data:image/png;base64,iVBORw0KGgo=';
 
 function makeFakeFile(name: string, type: string, sizeBytes: number): File {
-  // Build a buffer of the requested size.
-  const buffer = new ArrayBuffer(sizeBytes);
-  return new File([buffer], name, { type });
+  return new File([new ArrayBuffer(sizeBytes)], name, { type });
 }
 
+const MINI_PNG_BUFFER = new Uint8Array([0x89, 0x50, 0x4e, 0x47]).buffer as ArrayBuffer;
+
 // ---------------------------------------------------------------------------
-// 1. File picker renders + triggers click on button press
+// 1. Thumbnail vs no-image state
 // ---------------------------------------------------------------------------
 
-describe('ImageEditor — file picker', () => {
-  it('renders a "Replace image" button', () => {
-    render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    expect(screen.getByRole('button', { name: /replace image/i })).toBeDefined();
+describe('ImageEditor — thumbnail / no-image state', () => {
+  it('shows "No image" status when hasImage is false', () => {
+    render(ImageEditor, {
+      props: { modelValue: MV_NO_IMAGE, previewUrl: null, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+    // getAllByText because the text appears in both the sr-only aria-live region
+    // and the visible status span — both are expected.
+    expect(screen.getAllByText(/no image/i).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders a hidden file input accepting image types', () => {
-    const { container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(input).toBeTruthy();
-    expect(input.accept).toContain('image/png');
-    expect(input.accept).toContain('image/jpeg');
-    expect(input.accept).toContain('image/webp');
+  it('shows "Image set" status when hasImage is true', () => {
+    render(ImageEditor, {
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: 800, fillH: 600 },
+      ...globalOpts,
+    });
+    expect(screen.getAllByText(/image set/i).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('clicking the button triggers a click on the hidden file input', async () => {
-    const { container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    const button = screen.getByRole('button', { name: /replace image/i });
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+  it('renders an <img> thumbnail when previewUrl is set', () => {
+    const { container } = render(ImageEditor, {
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+    const img = container.querySelector('img');
+    expect(img).toBeTruthy();
+    expect(img?.getAttribute('src')).toBe(PREVIEW_URL);
+  });
 
-    const clickSpy = vi.spyOn(input, 'click');
-    await fireEvent.click(button);
-    expect(clickSpy).toHaveBeenCalled();
+  it('does not render an <img> when previewUrl is null', () => {
+    const { container } = render(ImageEditor, {
+      props: { modelValue: MV_NO_IMAGE, previewUrl: null, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+    expect(container.querySelector('img')).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// 2. File selection emits `update:image` with bytes
+// 2. File picker
 // ---------------------------------------------------------------------------
 
-describe('ImageEditor — update:image emit', () => {
-  it('emits update:image with Uint8Array when a valid PNG is selected', async () => {
-    const { emitted, container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
+describe('ImageEditor — file picker', () => {
+  it('renders a hidden file input accepting image/*', () => {
+    const { container } = render(ImageEditor, {
+      props: { modelValue: MV_NO_IMAGE, previewUrl: null, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement | null;
+    expect(input).toBeTruthy();
+    expect(input?.accept).toBe('image/*');
+    expect(input?.style.display).toBe('none');
+  });
+
+  it('Upload button click triggers click on the hidden file input', async () => {
+    const { container } = render(ImageEditor, {
+      props: { modelValue: MV_NO_IMAGE, previewUrl: null, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    const clickSpy = vi.spyOn(input, 'click');
+    const uploadBtn = screen.getByRole('button', { name: /upload image/i });
+    await fireEvent.click(uploadBtn);
+    expect(clickSpy).toHaveBeenCalled();
+  });
+
+  it('Replace button label shown when hasImage is true', () => {
+    render(ImageEditor, {
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+    expect(screen.getByRole('button', { name: /replace image/i })).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 3. File selection emits `upload`
+// ---------------------------------------------------------------------------
+
+describe('ImageEditor — upload emit', () => {
+  it('emits `upload` with Uint8Array when a valid file is selected', async () => {
+    const { emitted, container } = render(ImageEditor, {
+      props: { modelValue: MV_NO_IMAGE, previewUrl: null, fillW: null, fillH: null },
+      ...globalOpts,
+    });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
 
-    // Simulate file selection by setting files on the input.
-    const file = makeFakeFile('test.png', 'image/png', VALID_PNG_BYTES.byteLength);
-
-    // jsdom's File may not have arrayBuffer on its prototype — use defineProperty.
+    const file = makeFakeFile('test.png', 'image/png', 4);
     Object.defineProperty(file, 'arrayBuffer', {
-      value: () => Promise.resolve(VALID_PNG_BYTES.buffer as ArrayBuffer),
+      value: () => Promise.resolve(MINI_PNG_BUFFER),
       writable: true,
       configurable: true,
     });
-
     Object.defineProperty(input, 'files', {
       value: [file],
       writable: false,
@@ -156,64 +275,47 @@ describe('ImageEditor — update:image emit', () => {
     });
 
     await fireEvent.change(input);
-    // Give the async arrayBuffer read a tick to resolve.
     await new Promise((r) => setTimeout(r, 0));
 
-    const events = emitted('update:image') as [Uint8Array][] | undefined;
-    expect(events, 'update:image not emitted').toBeDefined();
+    const events = emitted('upload') as [Uint8Array][] | undefined;
+    expect(events, 'upload not emitted').toBeDefined();
     expect(events![0]?.[0]).toBeInstanceOf(Uint8Array);
   });
 
-  it('emits update:image for JPEG files', async () => {
-    const { emitted, container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-
-    const file = makeFakeFile('photo.jpg', 'image/jpeg', 1024);
-    Object.defineProperty(file, 'arrayBuffer', {
-      value: () => Promise.resolve(new ArrayBuffer(1024)),
-      writable: true,
-      configurable: true,
+  it('does not emit when no file is selected', async () => {
+    const { emitted, container } = render(ImageEditor, {
+      props: { modelValue: MV_NO_IMAGE, previewUrl: null, fillW: null, fillH: null },
+      ...globalOpts,
     });
-
-    Object.defineProperty(input, 'files', {
-      value: [file],
-      writable: false,
-      configurable: true,
-    });
-
-    await fireEvent.change(input);
-    await new Promise((r) => setTimeout(r, 0));
-
-    const events = emitted('update:image') as [Uint8Array][] | undefined;
-    expect(events).toBeDefined();
-  });
-
-  it('does not emit when no file is selected (null files)', async () => {
-    const { emitted, container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-
     Object.defineProperty(input, 'files', {
       value: [],
       writable: false,
       configurable: true,
     });
-
     await fireEvent.change(input);
-    expect(emitted('update:image')).toBeUndefined();
+    expect(emitted('upload')).toBeUndefined();
   });
 });
 
 // ---------------------------------------------------------------------------
-// 3. File type validation
+// 4. 2 MB soft size warning
 // ---------------------------------------------------------------------------
 
-describe('ImageEditor — file type validation', () => {
-  it('shows an error message for unsupported file type', async () => {
-    const { container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
+describe('ImageEditor — soft size warning', () => {
+  it('shows a size warning for files > 2 MB without blocking the upload', async () => {
+    const { emitted, container } = render(ImageEditor, {
+      props: { modelValue: MV_NO_IMAGE, previewUrl: null, fillW: null, fillH: null },
+      ...globalOpts,
+    });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
 
-    const file = makeFakeFile('document.pdf', 'application/pdf', 1024);
-
+    const file = makeFakeFile('big.png', 'image/png', 3 * 1024 * 1024);
+    Object.defineProperty(file, 'arrayBuffer', {
+      value: () => Promise.resolve(new ArrayBuffer(3 * 1024 * 1024)),
+      writable: true,
+      configurable: true,
+    });
     Object.defineProperty(input, 'files', {
       value: [file],
       writable: false,
@@ -223,68 +325,8 @@ describe('ImageEditor — file type validation', () => {
     await fireEvent.change(input);
     await new Promise((r) => setTimeout(r, 0));
 
-    const alert = screen.queryByRole('alert');
-    expect(alert).toBeTruthy();
-    expect(alert?.textContent).toMatch(/unsupported file type/i);
-  });
-
-  it('does NOT emit update:image for unsupported file type', async () => {
-    const { emitted, container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-
-    const file = makeFakeFile('document.pdf', 'application/pdf', 1024);
-
-    Object.defineProperty(input, 'files', {
-      value: [file],
-      writable: false,
-      configurable: true,
-    });
-
-    await fireEvent.change(input);
-    expect(emitted('update:image')).toBeUndefined();
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 4. File size validation
-// ---------------------------------------------------------------------------
-
-describe('ImageEditor — file size validation', () => {
-  it('shows an error message for files over 10 MB', async () => {
-    const { container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-
-    // 11 MB
-    const file = makeFakeFile('huge.png', 'image/png', 11 * 1024 * 1024);
-
-    Object.defineProperty(input, 'files', {
-      value: [file],
-      writable: false,
-      configurable: true,
-    });
-
-    await fireEvent.change(input);
-    await new Promise((r) => setTimeout(r, 0));
-
-    const alert = screen.queryByRole('alert');
-    expect(alert).toBeTruthy();
-    expect(alert?.textContent).toMatch(/too large/i);
-  });
-
-  it('does NOT emit update:image for files over 10 MB', async () => {
-    const { emitted, container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-
-    const file = makeFakeFile('huge.png', 'image/png', 11 * 1024 * 1024);
-
-    Object.defineProperty(input, 'files', {
-      value: [file],
-      writable: false,
-      configurable: true,
-    });
-
-    await fireEvent.change(input);
-    expect(emitted('update:image')).toBeUndefined();
+    expect(screen.getByText(/large file/i)).toBeDefined();
+    expect(emitted('upload')).toBeDefined();
   });
 });
 
@@ -293,213 +335,211 @@ describe('ImageEditor — file size validation', () => {
 // ---------------------------------------------------------------------------
 
 describe('ImageEditor — disabled state', () => {
-  it('disables the Replace image button when disabled=true', () => {
-    render(ImageEditor, { props: { model: MODEL_NO_IMAGE, disabled: true } });
-    const button = screen.getByRole('button', { name: /replace image/i }) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
+  it('Upload button is disabled when disabled=true', () => {
+    render(ImageEditor, {
+      props: {
+        modelValue: MV_NO_IMAGE,
+        previewUrl: null,
+        fillW: null,
+        fillH: null,
+        disabled: true,
+      },
+      ...globalOpts,
+    });
+    const btn = screen.getByRole('button', { name: /upload image/i }) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
   });
 
-  it('does not trigger file input click when button is clicked while disabled', async () => {
+  it('does not trigger file input click when Upload is clicked while disabled', async () => {
     const { container } = render(ImageEditor, {
-      props: { model: MODEL_NO_IMAGE, disabled: true },
+      props: {
+        modelValue: MV_NO_IMAGE,
+        previewUrl: null,
+        fillW: null,
+        fillH: null,
+        disabled: true,
+      },
+      ...globalOpts,
     });
-    const button = screen.getByRole('button', { name: /replace image/i });
     const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-
     const clickSpy = vi.spyOn(input, 'click');
-    await fireEvent.click(button);
+    const btn = screen.getByRole('button', { name: /upload image/i });
+    await fireEvent.click(btn);
     expect(clickSpy).not.toHaveBeenCalled();
-  });
-
-  it('file input is disabled when disabled=true', () => {
-    const { container } = render(ImageEditor, {
-      props: { model: MODEL_NO_IMAGE, disabled: true },
-    });
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
-    expect(input.disabled).toBe(true);
   });
 });
 
 // ---------------------------------------------------------------------------
-// 6. No-image state — crop section hidden
+// 6. No-image state — Crop button absent
 // ---------------------------------------------------------------------------
 
 describe('ImageEditor — no-image state', () => {
-  it('shows "No image" hint text when imageHash is null', () => {
-    render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    expect(screen.getByText(/no image/i)).toBeDefined();
-  });
-
-  it('does not show crop label when imageHash is null', () => {
-    render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    expect(screen.queryByText('Crop')).toBeNull();
-  });
-
-  it('does not render CropperCanvas when imageHash is null', () => {
-    const { container } = render(ImageEditor, { props: { model: MODEL_NO_IMAGE } });
-    // CropperCanvas renders 8 handles; if absent there are none.
-    expect(container.querySelectorAll('[data-handle]')).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 7. Image-loaded state
-// ---------------------------------------------------------------------------
-
-describe('ImageEditor — image-loaded state', () => {
-  it('shows the Crop label when imageHash is non-null', () => {
+  it('does not show a Crop button when previewUrl is null', () => {
     render(ImageEditor, {
-      props: { model: MODEL_WITH_IMAGE, imageDataUrl: 'data:image/png;base64,abc' },
+      props: { modelValue: MV_NO_IMAGE, previewUrl: null, fillW: null, fillH: null },
+      ...globalOpts,
     });
-    expect(screen.getByText('Crop')).toBeDefined();
-  });
-
-  it('renders CropperCanvas (8 handles) when imageHash is non-null', () => {
-    const { container } = render(ImageEditor, {
-      props: { model: MODEL_WITH_IMAGE, imageDataUrl: 'data:image/png;base64,abc' },
-    });
-    expect(container.querySelectorAll('[data-handle]')).toHaveLength(8);
-  });
-
-  it('does not show loading skeleton when loading=false', () => {
-    const { container } = render(ImageEditor, {
-      props: { model: MODEL_WITH_IMAGE, loading: false },
-    });
-    expect(container.querySelector('[aria-busy="true"]')).toBeNull();
+    expect(screen.queryByRole('button', { name: /crop image/i })).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// 8. Loading state
+// 7. Image state — thumbnail + Crop button present
 // ---------------------------------------------------------------------------
 
-describe('ImageEditor — loading state', () => {
-  it('shows loading skeleton (aria-busy) when loading=true and image is present', () => {
-    const { container } = render(ImageEditor, {
-      props: { model: MODEL_WITH_IMAGE, loading: true },
-    });
-    expect(container.querySelector('[aria-busy="true"]')).toBeTruthy();
-  });
-
-  it('hides CropperCanvas when loading=true', () => {
-    const { container } = render(ImageEditor, {
-      props: { model: MODEL_WITH_IMAGE, loading: true },
-    });
-    expect(container.querySelectorAll('[data-handle]')).toHaveLength(0);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// 9. External error prop
-// ---------------------------------------------------------------------------
-
-describe('ImageEditor — external error prop', () => {
-  it('displays the error prop in an alert region', () => {
+describe('ImageEditor — image state (with previewUrl)', () => {
+  it('shows the Crop button when previewUrl is set and cropper is closed', () => {
     render(ImageEditor, {
-      props: {
-        model: MODEL_WITH_IMAGE,
-        error: 'Failed to apply image: node not found.',
-      },
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: 800, fillH: 600 },
+      ...globalOpts,
     });
-    const alert = screen.getByRole('alert');
-    expect(alert.textContent).toContain('Failed to apply image');
+    expect(screen.getByRole('button', { name: /crop image/i })).toBeDefined();
   });
 });
 
 // ---------------------------------------------------------------------------
-// 10. update:cropTransform relay
+// 8. Crop open / cancel
 // ---------------------------------------------------------------------------
 
-describe('ImageEditor — update:cropTransform relay', () => {
+describe('ImageEditor — crop open / cancel', () => {
+  it('clicking Crop shows the CropperComponent stub', async () => {
+    const { container } = render(ImageEditor, {
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /crop image/i }));
+    expect(container.querySelector('[data-testid="cropper-component"]')).toBeTruthy();
+  });
+
+  it('clicking Cancel closes the CropperComponent', async () => {
+    const { container } = render(ImageEditor, {
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /crop image/i }));
+    expect(container.querySelector('[data-testid="cropper-component"]')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+    expect(container.querySelector('[data-testid="cropper-component"]')).toBeNull();
+  });
+
+  it('Apply and Cancel buttons appear when cropper is open', async () => {
+    render(ImageEditor, {
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /crop image/i }));
+    expect(screen.getByRole('button', { name: /apply/i })).toBeDefined();
+    expect(screen.getByRole('button', { name: /cancel/i })).toBeDefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. Apply crop — emits `upload` with bytes from cropperApi.getBlob
+// ---------------------------------------------------------------------------
+
+describe('ImageEditor — apply crop flow', () => {
   beforeEach(() => {
-    vi.useFakeTimers();
+    mockGetBlob.mockClear();
   });
 
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('relays update:cropTransform emitted by CropperCanvas', async () => {
-    const { emitted, container } = render(ImageEditor, {
-      props: {
-        model: MODEL_WITH_IMAGE,
-        imageDataUrl: 'data:image/png;base64,abc',
-      },
+  it('clicking Apply emits `upload` with Uint8Array from cropperApi.getBlob', async () => {
+    const { emitted } = render(ImageEditor, {
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: null, fillH: null },
+      ...globalOpts,
     });
 
-    const handle = container.querySelector('[data-handle="right"]') as HTMLElement;
-    expect(handle).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: /crop image/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+    await new Promise((r) => setTimeout(r, 0));
 
-    await fireEvent.keyDown(handle, { key: 'ArrowLeft' });
-    vi.advanceTimersByTime(300);
+    expect(mockGetBlob).toHaveBeenCalledOnce();
+    const events = emitted('upload') as [Uint8Array][] | undefined;
+    expect(events, 'upload not emitted after apply crop').toBeDefined();
+    expect(events![0]?.[0]).toBeInstanceOf(Uint8Array);
+  });
 
-    const events = emitted('update:cropTransform') as [Transform][] | undefined;
-    expect(events).toBeDefined();
-    expect(events!.length).toBeGreaterThanOrEqual(1);
+  it('after Apply, the cropper panel is closed', async () => {
+    const { container } = render(ImageEditor, {
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: null, fillH: null },
+      ...globalOpts,
+    });
+
+    await fireEvent.click(screen.getByRole('button', { name: /crop image/i }));
+    await fireEvent.click(screen.getByRole('button', { name: /apply/i }));
+    await new Promise((r) => setTimeout(r, 0));
+
+    expect(container.querySelector('[data-testid="cropper-component"]')).toBeNull();
   });
 });
 
 // ---------------------------------------------------------------------------
-// 11. axe WCAG 2.1 AA
+// 10. axe WCAG 2.1 AA
 // ---------------------------------------------------------------------------
 
 describe('ImageEditor — axe WCAG 2.1 AA', () => {
   async function mountAndScan(props: {
-    model: ImageModel;
-    imageDataUrl?: string;
+    modelValue: { hasImage: boolean; imageHash: string | null };
+    previewUrl: string | null;
+    fillW: number | null;
+    fillH: number | null;
     disabled?: boolean;
-    loading?: boolean;
-    error?: string;
   }): Promise<axe.Result[]> {
-    const { container } = render(ImageEditor, { props });
+    const { container } = render(ImageEditor, { props, ...globalOpts });
     return runAxeWCAG(container);
   }
 
   it('has zero violations — no-image state', async () => {
-    const violations = await mountAndScan({ model: MODEL_NO_IMAGE });
+    const violations = await mountAndScan({
+      modelValue: MV_NO_IMAGE,
+      previewUrl: null,
+      fillW: null,
+      fillH: null,
+    });
     expect(violations, `axe violations:\n${formatViolations(violations)}`).toHaveLength(0);
   });
 
-  it('has zero violations — image loaded state', async () => {
+  it('has zero violations — image state (with previewUrl)', async () => {
     const violations = await mountAndScan({
-      model: MODEL_WITH_IMAGE,
-      imageDataUrl: 'data:image/png;base64,abc',
+      modelValue: MV_WITH_IMAGE,
+      previewUrl: PREVIEW_URL,
+      fillW: 800,
+      fillH: 600,
     });
     expect(violations, `axe violations:\n${formatViolations(violations)}`).toHaveLength(0);
   });
 
   it('has zero violations — disabled state (no image)', async () => {
-    const violations = await mountAndScan({ model: MODEL_NO_IMAGE, disabled: true });
-    expect(violations, `axe violations:\n${formatViolations(violations)}`).toHaveLength(0);
-  });
-
-  it('has zero violations — disabled state (with image)', async () => {
     const violations = await mountAndScan({
-      model: MODEL_WITH_IMAGE,
-      imageDataUrl: 'data:image/png;base64,abc',
+      modelValue: MV_NO_IMAGE,
+      previewUrl: null,
+      fillW: null,
+      fillH: null,
       disabled: true,
     });
     expect(violations, `axe violations:\n${formatViolations(violations)}`).toHaveLength(0);
   });
 
-  it('has zero violations — loading state', async () => {
-    const violations = await mountAndScan({ model: MODEL_WITH_IMAGE, loading: true });
-    expect(violations, `axe violations:\n${formatViolations(violations)}`).toHaveLength(0);
-  });
-
-  it('has zero violations — error state', async () => {
+  it('has zero violations — disabled state (with image)', async () => {
     const violations = await mountAndScan({
-      model: MODEL_WITH_IMAGE,
-      error: 'Something went wrong.',
+      modelValue: MV_WITH_IMAGE,
+      previewUrl: PREVIEW_URL,
+      fillW: 800,
+      fillH: 600,
+      disabled: true,
     });
     expect(violations, `axe violations:\n${formatViolations(violations)}`).toHaveLength(0);
   });
 
-  it('has zero violations — with crop transform', async () => {
-    const violations = await mountAndScan({
-      model: MODEL_WITH_CROP,
-      imageDataUrl: 'data:image/png;base64,abc',
+  it('has zero violations — cropper-open state', async () => {
+    const { container } = render(ImageEditor, {
+      props: { modelValue: MV_WITH_IMAGE, previewUrl: PREVIEW_URL, fillW: null, fillH: null },
+      ...globalOpts,
     });
+    await fireEvent.click(screen.getByRole('button', { name: /crop image/i }));
+    const violations = await runAxeWCAG(container);
     expect(violations, `axe violations:\n${formatViolations(violations)}`).toHaveLength(0);
   });
 });
