@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "jsx": "preserve",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "resolveJsonModule": true,
+    "verbatimModuleSyntax": true,
+    "paths": {
+      "@/*": ["./widget-src/ui/*"]
+    }
+  },
+  "include": [
+    "widget-src/ui/**/*.ts",
+    "widget-src/ui/**/*.tsx",
+    "widget-src/ui/**/*.vue",
+    "widget-src/ui/shims-vue.d.ts",
+    "widget-src/types.ts",
+    "widget-src/constants.ts",
+    "widget-src/chart-core/**/*.ts"
+  ],
+  "exclude": ["node_modules", "dist", "vite.config.ts", "app.config.ts", "esbuild.config.mjs"]
+}

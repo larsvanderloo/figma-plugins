@@ -1,0 +1,186 @@
+<!--
+  CardItemEditor — v-model-gebonden editor voor één card binnen de
+  Content-tab (spec §9 T11).
+
+  Props:
+    modelValue: { cardNodeId: string; heading: string; paragraph: string;
+                   visualHash: string | null | undefined }
+    index:      number — 1-based kaart-volgnummer voor de heading.
+
+  Emits:
+    update:modelValue — het volledige card-object, debounced op 200ms
+      sinds de laatste keystroke. Zelfde pattern als
+      TitleDescriptionEditor.
+    upload-visual (bytes: Uint8Array) — ruwe PNG/JPG-bytes wanneer de
+      user een file kiest. ContentPanel routeert dit naar de main-
+      thread via `upload-image` (géén debounce).
+
+  Gedrag:
+    - Heading + Paragraph zijn altijd zichtbaar.
+    - Visual-upload-knop alleen wanneer `visualHash !== undefined`
+      (undefined = card heeft geen image-slot).
+    - Interne `local`-refs zodat type-snelheid niet beperkt wordt door
+      de debounce. Externe prop-changes (slide-wissel / main-echo)
+      resetten de refs via watch(props, ...).
+-->
+<script setup lang="ts">
+import { ref, watch, computed } from 'vue';
+import type { CardItem } from '../../types';
+import IconPicker from './IconPicker.vue';
+
+interface Props {
+  modelValue: CardItem;
+  index: number;
+}
+
+const props = defineProps<Props>();
+
+const emit = defineEmits<{
+  'update:modelValue': [value: CardItem];
+  'upload-visual': [bytes: Uint8Array];
+}>();
+
+// Lokale reactieve kopie zodat de user-typing niet door de 200ms-
+// debounce wordt afgeknepen.
+// localIcon is altijd string — icon-picker rendert alleen wanneer
+// modelValue.icon !== null (T32).
+const localHeading = ref<string>(props.modelValue.heading);
+const localParagraph = ref<string>(props.modelValue.paragraph);
+const localIcon = ref<string>(props.modelValue.icon !== null ? props.modelValue.icon : '');
+
+// Visual-slot aanwezigheid: undefined = geen slot, null = lege slot,
+// string = gevulde slot. We tonen de upload-knop alleen als de slot
+// bestaat (undefined betekent niet tonen).
+const hasVisualSlot = computed<boolean>(() => props.modelValue.visualHash !== undefined);
+const hasImage = computed<boolean>(() => typeof props.modelValue.visualHash === 'string');
+
+// Slide-wissel of main-echo: sync lokale refs met prop.
+// localIcon valt terug op '' wanneer icon null is (T32: picker verborgen in dat geval).
+watch(
+  () => props.modelValue,
+  (next) => {
+    localHeading.value = next.heading;
+    localParagraph.value = next.paragraph;
+    localIcon.value = next.icon !== null ? next.icon : '';
+  },
+);
+
+let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function scheduleEmit(): void {
+  if (debounceTimer !== null) clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => {
+    emit('update:modelValue', {
+      cardNodeId: props.modelValue.cardNodeId,
+      heading: localHeading.value,
+      paragraph: localParagraph.value,
+      icon: localIcon.value,
+      visualHash: props.modelValue.visualHash,
+    });
+  }, 200);
+}
+
+function onHeadingInput(value: string): void {
+  localHeading.value = value;
+  scheduleEmit();
+}
+
+function onParagraphInput(value: string): void {
+  localParagraph.value = value;
+  scheduleEmit();
+}
+
+function onIconChange(value: string): void {
+  localIcon.value = value;
+  scheduleEmit();
+}
+
+// File-input ref + upload-handling.
+const fileInput = ref<HTMLInputElement | null>(null);
+const isUploading = ref<boolean>(false);
+
+function triggerFileInput(): void {
+  if (fileInput.value !== null) fileInput.value.click();
+}
+
+async function onFileSelected(event: Event): Promise<void> {
+  const input = event.target as HTMLInputElement;
+  const files = input.files;
+  if (files === null || files.length === 0) return;
+
+  const file = files[0];
+  isUploading.value = true;
+  try {
+    const buffer = await file.arrayBuffer();
+    const bytes = new Uint8Array(buffer);
+    emit('upload-visual', bytes);
+  } finally {
+    isUploading.value = false;
+    input.value = '';
+  }
+}
+</script>
+
+<template>
+  <section
+    class="space-y-3 rounded-[calc(var(--ui-radius)*4)] bg-default px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
+  >
+    <h3 class="text-base font-semibold text-default">Kaart {{ index }}</h3>
+
+    <UFormField v-if="modelValue.icon !== null" name="icon" label="Icoon" size="md">
+      <IconPicker :model-value="localIcon" @update:model-value="onIconChange" />
+    </UFormField>
+
+    <UFormField name="heading" label="Koptekst" size="md">
+      <UInput
+        :model-value="localHeading"
+        placeholder="Koptekst"
+        class="w-full"
+        @update:model-value="onHeadingInput"
+      />
+    </UFormField>
+
+    <UFormField name="paragraph" label="Alinea" size="md">
+      <UTextarea
+        :model-value="localParagraph"
+        :rows="3"
+        :autoresize="true"
+        placeholder="Alineatekst"
+        class="w-full"
+        @update:model-value="onParagraphInput"
+      />
+    </UFormField>
+
+    <div v-if="hasVisualSlot" class="flex items-center justify-between">
+      <div class="flex items-center gap-2">
+        <UIcon
+          :name="hasImage ? 'i-lucide-image' : 'i-lucide-image-off'"
+          class="size-4 shrink-0 text-muted"
+        />
+        <span class="text-xs text-muted">
+          {{ hasImage ? 'Visual ingesteld' : 'Nog geen visual' }}
+        </span>
+      </div>
+      <UButton
+        size="md"
+        color="neutral"
+        variant="outline"
+        icon="i-lucide-upload"
+        :loading="isUploading"
+        :disabled="isUploading"
+        @click="triggerFileInput"
+      >
+        {{ hasImage ? 'Vervangen' : 'Uploaden' }}
+      </UButton>
+    </div>
+
+    <input
+      v-if="hasVisualSlot"
+      ref="fileInput"
+      type="file"
+      accept="image/*"
+      style="display: none"
+      @change="onFileSelected"
+    />
+  </section>
+</template>

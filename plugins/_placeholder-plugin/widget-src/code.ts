@@ -1,0 +1,1653 @@
+// ============================================================
+// Welder Slide Editor — Plugin Main (T4 skelet)
+//
+// Entry-point voor de plugin-thread. Verantwoordelijkheden:
+//   1. UI-iframe tonen (figma.showUI).
+//   2. Fonts preloaden (FIG-FONT-01) zodat latere debounced text-edits
+//      direct kunnen doorzetten zonder per-call loadFontAsync.
+//   3. Command-dispatch op `figma.command` (manifest menu "open").
+//   4. Bridge-message-loop: vertaalt UI-events naar figma-node-scans
+//      en response-messages (spec §5, FIG-MSG-01).
+//   5. Page-change listener: hercomputet de slidelist bij page-nav.
+//
+// Update-handlers voor general/card/graph/image zijn bewust no-op met
+// TODO-comments — die krijgen hun implementatie in T8–T12.
+//
+// ES2017-compat: geen optional chaining, geen nullish coalescing,
+// geen catch-without-binding (memory feedback_figma_runtime.md).
+// ============================================================
+
+import uiHtml from '../dist/ui.html';
+import { REQUIRED_FONTS } from './constants';
+import {
+  findSlidesOnPage,
+  slideSummary,
+  findCopyWrap,
+  findBadge,
+  findImageWrap,
+  findCardWrap,
+  findChartWrap,
+  findTableWrap,
+  findTableSlot,
+  findTimelineWrap,
+  findJourneyWrap,
+  findJourneySlot,
+  isSlide,
+  isEffectivelyVisible,
+} from './slide-machine';
+import {
+  applyTitleDescription,
+  TitleDescriptionPayload,
+} from './editors/general/title-description';
+import { applyBadge, BadgePayload } from './editors/general/badge';
+import { applyImage, findImageSlot } from './editors/general/image';
+import { applyCard, applyCardVisual } from './editors/content/card';
+import { normalizeIconKey, LUCIDE_SLUG_RE, primeIconCache } from './editors/shared/icon-swap';
+import { renderChart, replaceChartContent } from './editors/chart/renderer';
+import { applyTable, scanTableSlot } from './editors/table/renderer';
+import { applyJourney, scanJourneySlot } from './editors/journey/renderer';
+import { importCSV } from './editors/table/csv';
+import { loadAllFontsForNode, setTextCharactersSafe } from './editors/_shared/fonts';
+import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from './editors/_shared/accent-vars';
+import type {
+  SlideSummary,
+  GeneralSections,
+  ContentItems,
+  GraphItems,
+  CardItem,
+  TimelineItem,
+  ChartData,
+  TableWrapModel,
+  JourneyWrapModel,
+  UIToPluginMessage,
+  PluginToUIMessage,
+} from './types';
+
+// ============================================================
+// Bootstrap
+// ============================================================
+
+figma.showUI(uiHtml, { width: 520, height: 760, themeColors: true });
+
+// ============================================================
+// Accent (Text Dimmer) — library-variable helpers (spec §13 T30)
+//
+// T34.2: `loadAccentVars`, `resolveColor`, `TEXT_KEY`, `TEXT_DIMMER_KEY`,
+// `TEXT_DIMMER_RGB` zijn verhuisd naar `editors/_shared/accent-vars.ts`
+// zodat zowel deze accent-range-writer (T28.2 heading-dim) als de
+// Slot-based table-renderer (T34.2) dezelfde single-source-of-truth
+// gebruiken.
+// ============================================================
+
+const DIMMER_HEX_TOLERANCE = 0.01;
+
+/**
+ * True wanneer een fill een SOLID-paint is bound aan de gegeven variable-id,
+ * óf raw SOLID met een kleur die ≈ #ffc78f matcht (binnen tolerance).
+ * Dekt beide read-gevallen: variable-bound accent + raw-hex accent
+ * (migreert bij eerste write naar variable-binding).
+ */
+function isDimmedFill(fill: Paint, dimmerId: string | null): boolean {
+  if (fill.type !== 'SOLID') return false;
+  const solid = fill as SolidPaint;
+  if (dimmerId !== null && solid.boundVariables !== undefined && solid.boundVariables !== null) {
+    const bound = solid.boundVariables.color;
+    if (bound !== undefined && bound !== null && bound.id === dimmerId) {
+      return true;
+    }
+  }
+  const c = solid.color;
+  if (
+    Math.abs(c.r - TEXT_DIMMER_RGB.r) <= DIMMER_HEX_TOLERANCE &&
+    Math.abs(c.g - TEXT_DIMMER_RGB.g) <= DIMMER_HEX_TOLERANCE &&
+    Math.abs(c.b - TEXT_DIMMER_RGB.b) <= DIMMER_HEX_TOLERANCE
+  ) {
+    return true;
+  }
+  return false;
+}
+
+/**
+ * Leest dim-ranges van een TextNode via `getStyledTextSegments`.
+ *
+ * - `null` → library-variables niet bereikbaar (UI verbergt het accent-blok).
+ * - `[]`   → library OK maar geen dim-range aanwezig.
+ * - gevuld → aaneengesloten dim-segmenten samengevoegd tot canonical ranges.
+ */
+async function readDimRanges(node: TextNode): Promise<Array<[number, number]> | null> {
+  const vars = await loadAccentVars();
+  if (vars.text === null && vars.dimmer === null) {
+    return null;
+  }
+  const dimmerId = vars.dimmer !== null ? vars.dimmer.id : null;
+  const segments = node.getStyledTextSegments(['fills']);
+  const ranges: Array<[number, number]> = [];
+  for (let i = 0; i < segments.length; i++) {
+    const seg = segments[i];
+    const fills = seg.fills;
+    if (!Array.isArray(fills) || fills.length === 0) continue;
+    let dimmed = false;
+    for (let j = 0; j < fills.length; j++) {
+      if (isDimmedFill(fills[j], dimmerId)) {
+        dimmed = true;
+        break;
+      }
+    }
+    if (!dimmed) continue;
+    const last = ranges.length > 0 ? ranges[ranges.length - 1] : null;
+    if (last !== null && last[1] === seg.start) {
+      last[1] = seg.end;
+    } else {
+      ranges.push([seg.start, seg.end]);
+    }
+  }
+  return ranges;
+}
+
+/**
+ * Past accent-ranges toe op een text-node: dim-fill op `dimRanges`,
+ * text-fill op het complement. Characters blijven ongemoeid.
+ * T28.2-patroon: all-fonts-preflight, resolveForConsumer-pre-resolve,
+ * setBoundVariableForPaint, visible-toggle render-cache-flush.
+ */
+async function applyAccentRanges(
+  node: TextNode,
+  dimRanges: Array<[number, number]>,
+): Promise<void> {
+  const vars = await loadAccentVars();
+  if (vars.text === null || vars.dimmer === null) {
+    console.log('[welder-slide-editor] applyAccentRanges skipped — library vars not available.');
+    return;
+  }
+  await loadAllFontsForNode(node);
+
+  const textColor = resolveColor(vars.text, node, { r: 1, g: 0.957, b: 0.918 });
+  const dimColor = resolveColor(vars.dimmer, node, {
+    r: TEXT_DIMMER_RGB.r,
+    g: TEXT_DIMMER_RGB.g,
+    b: TEXT_DIMMER_RGB.b,
+  });
+
+  const textFill = figma.variables.setBoundVariableForPaint(
+    { type: 'SOLID', color: textColor },
+    'color',
+    vars.text,
+  );
+  const dimFill = figma.variables.setBoundVariableForPaint(
+    { type: 'SOLID', color: dimColor },
+    'color',
+    vars.dimmer,
+  );
+
+  const len = node.characters.length;
+  if (len === 0) return;
+
+  try {
+    node.setRangeFills(0, len, [textFill]);
+    for (let i = 0; i < dimRanges.length; i++) {
+      const r = dimRanges[i];
+      const start = Math.max(0, r[0]);
+      const end = Math.min(len, r[1]);
+      if (end <= start) continue;
+      node.setRangeFills(start, end, [dimFill]);
+    }
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] setRangeFills failed:', err);
+  }
+
+  // T28.2 belt-and-suspenders render-cache-flush.
+  try {
+    const prev = node.visible;
+    node.visible = !prev;
+    node.visible = prev;
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] visible-toggle flush failed:', err);
+  }
+}
+
+/**
+ * Parallel preload van alle fonts die we in text-mutaties gebruiken.
+ * Faalt hard bij een missing font zodat we niet later in T8/T9/T11
+ * stille crashes krijgen. FIG-FONT-01.
+ */
+async function loadFonts(): Promise<void> {
+  await Promise.all(REQUIRED_FONTS.map((font) => figma.loadFontAsync(font)));
+}
+
+// ============================================================
+// Slide-scan — bouwt de drie tab-payloads voor één slide
+// ============================================================
+
+/** Combinatie van de drie tab-payloads; exact de shape van `slide-loaded`. */
+interface SlideScan {
+  general: GeneralSections | null;
+  content: ContentItems | null;
+  graphs: GraphItems | null;
+}
+
+/**
+ * Leest een descendant text-node op naam en geeft zijn characters terug.
+ * Bounded scope (findOne binnen de wrapper) en naam-gebaseerd — zie
+ * spec §7. Text-lookup is read-only zodat we geen font hoeven te
+ * laden alvorens `characters` te lezen.
+ */
+function readTextByName(scope: SceneNode, name: string): string | null {
+  if (!('findOne' in scope)) return null;
+  const node = scope.findOne((n: SceneNode) => {
+    return n.type === 'TEXT' && n.name === name;
+  });
+  if (node === null) return null;
+  if (node.type !== 'TEXT') return null;
+  return node.characters;
+}
+
+/**
+ * Als readTextByName, maar retourneert null wanneer de gevonden text-node
+ * (of één van zijn ancestors binnen `slide`) visible=false heeft.
+ *
+ * Gebruikt voor de Paragraph-textnode in CopyWrap: de Slide Machine-
+ * variant "Heading only" zet de Paragraph-subtree op visible=false, en
+ * de plugin moet de Paragraph-textarea dan niet tonen (spec §13 T19).
+ * Zelfde patroon als findBadge (T18).
+ */
+function readVisibleTextByName(scope: SceneNode, name: string, slide: InstanceNode): string | null {
+  if (!('findAll' in scope)) return null;
+  // Slide Machine variant-componenten bevatten vaak meerdere text-nodes
+  // met dezelfde naam (één per variant-branch); we moeten de eerste
+  // *zichtbare* match pakken, niet de eerste in de tree — anders verbergen
+  // we de textarea terwijl de user de paragraph wel degelijk toont.
+  const matches = scope.findAll((n: SceneNode) => {
+    return n.type === 'TEXT' && n.name === name;
+  });
+  for (const m of matches) {
+    if (m.type !== 'TEXT') continue;
+    if (!isEffectivelyVisible(m, slide)) continue;
+    return m.characters;
+  }
+  return null;
+}
+
+/**
+ * Leest de huidige icon-slug uit een Badge-instance.
+ * Structuur: Badge → icon_wrapper (FRAME) → eerste INSTANCE-kind → .name
+ * Normaliseert de naam via normalizeIconKey (strip 'i-lucide-' etc.).
+ * Retourneert '' wanneer de wrapper of icon-kind ontbreekt.
+ */
+function readBadgeIcon(badge: InstanceNode): string {
+  if (!('findChild' in badge)) return '';
+  const wrapper = badge.findChild((n: SceneNode) => n.name === 'icon_wrapper');
+  if (wrapper === null || !('children' in wrapper)) return '';
+  const wrapperNode = wrapper as FrameNode | GroupNode | InstanceNode;
+  for (let i = 0; i < wrapperNode.children.length; i++) {
+    const child = wrapperNode.children[i];
+    if (child.type === 'INSTANCE') {
+      return normalizeIconKey(child.name);
+    }
+  }
+  return '';
+}
+
+/**
+ * Leest de huidige icon-slug uit een Card-node.
+ * Drie strategieën (symmetrisch met applyCardIconSwap in card.ts):
+ *
+ *   A. Directe INSTANCE-children — eerste child wier naam een Lucide-slug is.
+ *   B. icon_wrapper-child → eerste INSTANCE-kind daarin.
+ *   C. findOne descendant — eerste INSTANCE-descendant met Lucide-slug-naam.
+ *
+ * Retourneert null wanneer geen passend kind gevonden wordt of wanneer de
+ * gevonden icon-instance niet zichtbaar is (visible === false via ancestor-chain).
+ *
+ * T32: signatuur uitgebreid met `slide` zodat isEffectivelyVisible aangeroepen
+ * kan worden. Zelfde visibility-pattern als readVisibleTextByName (T19).
+ */
+function readCardIcon(card: SceneNode, slide: InstanceNode): string | null {
+  // Strategy A: directe INSTANCE-children
+  if ('children' in card) {
+    const children = (card as FrameNode | GroupNode | InstanceNode).children;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (child.type !== 'INSTANCE') continue;
+      const normalized = normalizeIconKey(child.name);
+      if (LUCIDE_SLUG_RE.test(normalized)) {
+        return isEffectivelyVisible(child, slide) ? normalized : null;
+      }
+    }
+  }
+
+  // Strategy B: icon_wrapper → eerste INSTANCE-kind
+  if ('findChild' in card) {
+    const wrapper = (card as InstanceNode).findChild((n: SceneNode) => n.name === 'icon_wrapper');
+    if (wrapper !== null && 'children' in wrapper) {
+      const wrapperNode = wrapper as FrameNode | GroupNode | InstanceNode;
+      for (let i = 0; i < wrapperNode.children.length; i++) {
+        const child = wrapperNode.children[i];
+        if (child.type === 'INSTANCE') {
+          return isEffectivelyVisible(child, slide) ? normalizeIconKey(child.name) : null;
+        }
+      }
+    }
+  }
+
+  // Strategy C: findOne descendant — eerste INSTANCE met Lucide-slug-naam
+  if ('findOne' in card) {
+    const found = (card as InstanceNode).findOne((n: SceneNode) => {
+      if (n.type !== 'INSTANCE') return false;
+      return LUCIDE_SLUG_RE.test(normalizeIconKey(n.name));
+    });
+    if (found !== null && found.type === 'INSTANCE') {
+      return isEffectivelyVisible(found, slide) ? normalizeIconKey(found.name) : null;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Zoekt het eerste zichtbare descendant-TextNode met de gegeven naam binnen
+ * de CopyWrap. Spiegelbeeld van `readVisibleTextByName`, maar retourneert
+ * het TextNode-object zelf (nodig voor `getStyledTextSegments`).
+ */
+function findVisibleTextNodeByName(
+  scope: SceneNode,
+  name: string,
+  slide: InstanceNode,
+): TextNode | null {
+  if (!('findAll' in scope)) return null;
+  const matches = scope.findAll((n: SceneNode) => {
+    return n.type === 'TEXT' && n.name === name;
+  });
+  for (const m of matches) {
+    if (m.type !== 'TEXT') continue;
+    if (!isEffectivelyVisible(m, slide)) continue;
+    return m;
+  }
+  return null;
+}
+
+async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null> {
+  const copyWrap = findCopyWrap(slide);
+  const badge = findBadge(slide);
+  const imageWrap = findImageWrap(slide);
+
+  // Secties opbouwen; elke null wanneer de wrapper niet bestaat.
+  let titleDescription: GeneralSections['titleDescription'] = null;
+  if (copyWrap !== null) {
+    const headingNode = findVisibleTextNodeByName(copyWrap, 'Heading', slide);
+    const paragraphNode = findVisibleTextNodeByName(copyWrap, 'Paragraph', slide);
+    const heading =
+      headingNode !== null ? headingNode.characters : readTextByName(copyWrap, 'Heading') || '';
+    const paragraph = paragraphNode !== null ? paragraphNode.characters : null;
+
+    // Dim-range scan (spec §13 T30) — heading-only, silent-fail naar null
+    // wanneer de library onbereikbaar is of het heading-node ontbreekt.
+    // Paragraph-accent is permanent out-of-scope (geen paragraphDim).
+    let headingDim: Array<[number, number]> | null = null;
+    if (headingNode !== null) {
+      try {
+        headingDim = await readDimRanges(headingNode);
+      } catch (err: unknown) {
+        console.log('[welder-slide-editor] readDimRanges(heading) failed:', err);
+        headingDim = null;
+      }
+    }
+
+    titleDescription = {
+      copyWrapId: copyWrap.id,
+      heading: heading,
+      paragraph: paragraph,
+      headingDim: headingDim,
+    };
+  }
+
+  const badgeSection =
+    badge === null
+      ? null
+      : {
+          badgeNodeId: badge.id,
+          label: readTextByName(badge, 'Label') || badge.name,
+          icon: readBadgeIcon(badge),
+        };
+
+  const imageSection =
+    imageWrap === null
+      ? null
+      : {
+          imageWrapId: imageWrap.id,
+          imageHash: readImageWrapHash(imageWrap),
+        };
+
+  if (titleDescription === null && badgeSection === null && imageSection === null) {
+    return null;
+  }
+  return {
+    titleDescription: titleDescription,
+    badge: badgeSection,
+    image: imageSection,
+  };
+}
+
+/**
+ * Leest de huidige ImagePaint-hash van het image-slot binnen de ImageWrap.
+ * Hergebruikt dezelfde heuristiek als findImageSlot in editors/general/image.ts.
+ * Returns null wanneer het slot leeg is of geen IMAGE-fill draagt.
+ */
+function readImageWrapHash(imageWrap: InstanceNode): string | null {
+  if (!('findOne' in imageWrap)) return null;
+
+  // Strategie 1: naam-gebaseerd
+  var byName = imageWrap.findOne(function (n: SceneNode) {
+    if (n.name !== 'Image' && n.name !== 'Visual' && n.name !== 'ImageSlot') return false;
+    return 'fills' in n;
+  });
+  // Strategie 2: bestaande IMAGE-fill
+  var slot =
+    byName !== null
+      ? byName
+      : imageWrap.findOne(function (n: SceneNode) {
+          if (!('fills' in n)) return false;
+          var fills = (n as GeometryMixin).fills;
+          if (fills === figma.mixed) return false;
+          if (!Array.isArray(fills)) return false;
+          for (var i = 0; i < fills.length; i++) {
+            if (fills[i].type === 'IMAGE') return true;
+          }
+          return false;
+        });
+  if (slot === null) return null;
+  if (!('fills' in slot)) return null;
+
+  var fills = (slot as GeometryMixin).fills;
+  if (fills === figma.mixed) return null;
+  if (!Array.isArray(fills)) return null;
+  for (var i = 0; i < fills.length; i++) {
+    if (fills[i].type === 'IMAGE') {
+      var hash = (fills[i] as ImagePaint).imageHash;
+      return hash !== null ? hash : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * Best-effort detectie van de image-slot binnen een card.
+ * Retourneert de huidige ImagePaint-hash wanneer de slot een IMAGE-fill
+ * draagt, null wanneer de slot aanwezig is maar leeg, of undefined
+ * wanneer de card geen slot heeft (de UI verbergt dan de upload-knop).
+ * Heuristiek matcht editors/content/card.ts:findImageSlot.
+ */
+function readCardVisualHash(card: SceneNode): string | null | undefined {
+  if (!('findOne' in card)) return undefined;
+
+  // Strategie 1: descendant met name 'Visual' of 'Image'.
+  const byName = card.findOne((n: SceneNode) => {
+    if (n.name !== 'Visual' && n.name !== 'Image') return false;
+    return 'fills' in n;
+  });
+  const slot: SceneNode | null =
+    byName !== null
+      ? byName
+      : card.findOne((n: SceneNode) => {
+          if (!('fills' in n)) return false;
+          const fills = (n as GeometryMixin).fills;
+          if (fills === figma.mixed) return false;
+          if (!Array.isArray(fills)) return false;
+          for (const f of fills) {
+            if (f.type === 'IMAGE') return true;
+          }
+          return false;
+        });
+  if (slot === null) return undefined;
+  if (!('fills' in slot)) return undefined;
+
+  const fills = (slot as GeometryMixin).fills;
+  if (fills === figma.mixed) return null;
+  if (!Array.isArray(fills)) return null;
+  for (const f of fills) {
+    if (f.type === 'IMAGE') {
+      const hash = (f as ImagePaint).imageHash;
+      return hash !== null ? hash : null;
+    }
+  }
+  return null;
+}
+
+/**
+ * T31.2: Extraheert Card-instances (recursief via findAll) binnen een
+ * wrapper-scope (CardWrap of TimelineWrap). Bounded tot de wrapper-subtree
+ * (FIG-TRAVERSE-01 — findAll op een wrapper-node, niet op de hele pagina).
+ *
+ * Corrupt-items zonder Heading-textnode worden silent overgeslagen.
+ *
+ * T32: `slide` parameter toegevoegd zodat readCardIcon de visibility van de
+ * icon-instance kan beoordelen via isEffectivelyVisible.
+ */
+function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
+  const items: CardItem[] = [];
+  if (!('findAll' in scope)) return items;
+  const cardInstances = scope.findAll(function (n: SceneNode) {
+    return n.type === 'INSTANCE' && n.name === 'Card';
+  });
+  for (let i = 0; i < cardInstances.length; i++) {
+    const card = cardInstances[i];
+    const heading = readTextByName(card, 'Heading');
+    if (heading === null) continue; // corrupt card: skip
+    items.push({
+      cardNodeId: card.id,
+      heading: heading,
+      paragraph: readTextByName(card, 'Paragraph') || '',
+      icon: readCardIcon(card, slide),
+      visualHash: readCardVisualHash(card),
+    });
+  }
+  return items;
+}
+
+/**
+ * T31.2: Extraheert CopyWrap-instances (recursief via findAll) binnen een
+ * wrapper-scope (TimelineWrap). Bounded tot de wrapper-subtree (FIG-TRAVERSE-01).
+ *
+ * Skipt decoratieve `Stepper Item`-instances; pakt alleen CopyWrap-
+ * instances als editable items. Elk item heeft Heading + Paragraph
+ * (geen icon, geen visual). Corrupt-items zonder Heading-textnode
+ * worden silent overgeslagen.
+ */
+function extractCopyWrapItems(scope: InstanceNode): TimelineItem[] {
+  const items: TimelineItem[] = [];
+  if (!('findAll' in scope)) return items;
+  const copyWrapInstances = scope.findAll(function (n: SceneNode) {
+    return n.type === 'INSTANCE' && n.name === 'CopyWrap';
+  });
+  for (let i = 0; i < copyWrapInstances.length; i++) {
+    const cw = copyWrapInstances[i];
+    const heading = readTextByName(cw, 'Heading');
+    if (heading === null) continue;
+    items.push({
+      copyWrapNodeId: cw.id,
+      heading: heading,
+      paragraph: readTextByName(cw, 'Paragraph') || '',
+    });
+  }
+  return items;
+}
+
+/**
+ * T31.2: Polymorphic scan van CardWrap en TimelineWrap.
+ *
+ * TimelineWrap kan in productie bevatten:
+ *   - directe Card-instances (worden in content.cards gerouted — icon-picker werkt)
+ *   - genestede CopyWrap-instances binnen tussenliggende Frames (→ content.timelineItems)
+ *
+ * Beide worden gevonden via findAll (recursieve descendant-walk, bounded tot wrapper-scope).
+ */
+function scanContent(slide: InstanceNode): ContentItems | null {
+  const cardWrap = findCardWrap(slide);
+  const timelineWrap = findTimelineWrap(slide);
+  const journeySlot = findJourneySlot(slide);
+  const journeyModel: JourneyWrapModel | null =
+    journeySlot !== null ? scanJourneySlot(journeySlot) : null;
+
+  // Retourneer null wanneer geen van alle wrappers aanwezig is.
+  if (cardWrap === null && timelineWrap === null && journeyModel === null) return null;
+
+  const cards: CardItem[] = [];
+  const timelineItems: TimelineItem[] = [];
+
+  // CardWrap: Cards zijn directe children (Slide Machine-pattern); ook hier
+  // gebruiken we extractCards zodat de helper consistent en testbaar blijft.
+  if (cardWrap !== null) {
+    const fromCardWrap = extractCards(cardWrap, slide);
+    for (let i = 0; i < fromCardWrap.length; i++) {
+      cards.push(fromCardWrap[i]);
+    }
+  }
+
+  // TimelineWrap: polymorphic — directe Cards (met icon + visual) én genestede
+  // CopyWraps (heading + paragraph only) via tussenliggende Frames.
+  if (timelineWrap !== null) {
+    const fromTimeline = extractCards(timelineWrap, slide);
+    for (let i = 0; i < fromTimeline.length; i++) {
+      cards.push(fromTimeline[i]);
+    }
+    const cwItems = extractCopyWrapItems(timelineWrap);
+    for (let j = 0; j < cwItems.length; j++) {
+      timelineItems.push(cwItems[j]);
+    }
+    console.log(
+      '[welder-slide-editor] T31.2 timelineWrap scan: ' +
+        String(fromTimeline.length) +
+        ' cards, ' +
+        String(cwItems.length) +
+        ' copyWrap-items on slide ' +
+        slide.id,
+    );
+  }
+
+  if (cards.length === 0 && timelineItems.length === 0 && journeyModel === null) return null;
+
+  // `cardWrapId` blijft semantisch gebonden aan CardWrap wanneer aanwezig;
+  // bij slide-met-alleen-TimelineWrap vallen we terug op de TimelineWrap-id.
+  // Bij slide-met-alleen-JourneyWrap vallen we terug op de JourneySlot-id.
+  var wrapId: string;
+  if (cardWrap !== null) {
+    wrapId = cardWrap.id;
+  } else if (timelineWrap !== null) {
+    wrapId = (timelineWrap as InstanceNode).id;
+  } else if (journeySlot !== null) {
+    wrapId = journeySlot.id;
+  } else {
+    wrapId = '';
+  }
+
+  return {
+    cardWrapId: wrapId,
+    cards: cards,
+    timelineItems: timelineItems,
+    journeyModel: journeyModel,
+  };
+}
+
+/**
+ * Leest persisterende model-data uit `node.getPluginData('model')` (spec §6).
+ * Retourneert null wanneer de wrapper nog geen pluginData draagt (nieuwe
+ * instance) of wanneer de JSON corrupt is — editor valt dan terug op zijn
+ * DEFAULT_*_DATA uit {chart,table}-core/constants.
+ *
+ * Werkt voor zowel ChartWrap als TableWrap (zelfde pluginData-conventie).
+ */
+function readModelData(wrap: InstanceNode): unknown | null {
+  const raw = wrap.getPluginData('model');
+  if (raw === '' || raw === null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch (_err) {
+    return null;
+  }
+}
+
+function scanGraphs(slide: InstanceNode): GraphItems | null {
+  // v0.1.0 wrapper-finders geven de eerste hit; in de praktijk heeft een
+  // Slide-template precies één ChartWrap en één TableWrap. De instance-
+  // selector in GraphsPanel kan hier later groeien wanneer we meerdere
+  // charts per slide toestaan (out of scope v0.1.0).
+  const chartWrap = findChartWrap(slide);
+  const tableWrap = findTableWrap(slide);
+
+  const instances: GraphItems['instances'] = [];
+
+  if (chartWrap !== null) {
+    instances.push({
+      nodeId: chartWrap.id,
+      type: 'chart',
+      label: 'Chart — ' + chartWrap.name,
+      chartData: readModelData(chartWrap) as ChartData | null,
+    });
+  }
+  if (tableWrap !== null) {
+    // T34.2: lees nu via findTableSlot + scanTableSlot; `tableData` (legacy)
+    // blijft null zodat de UI-stub niet crasht. T34.3 leest `tableModel`.
+    const slot = findTableSlot(slide);
+    const tableModel: TableWrapModel | null = slot !== null ? scanTableSlot(slot) : null;
+    // Wanneer de TableWrap een Slot heeft, gebruiken we het Slot-id als
+    // nodeId zodat `update-table` en `import-csv` direct naar de Slot kunnen.
+    const nodeId = slot !== null ? slot.id : tableWrap.id;
+    instances.push({
+      nodeId: nodeId,
+      type: 'table',
+      label: 'Table — ' + tableWrap.name,
+      tableData: null,
+      tableModel: tableModel,
+    });
+  }
+
+  if (instances.length === 0) return null;
+
+  return {
+    instances: instances,
+    selectedGraphId: instances[0].nodeId,
+  };
+}
+
+/**
+ * T39.5 — normaliseer Heading/Paragraph-zichtbaarheid op slide-load.
+ *
+ * Bestaande slides kunnen lege heading/paragraph text-nodes hebben die
+ * nooit door de plugin gemuteerd zijn (visible=true ondanks characters="").
+ * T39.4 fixt alleen het mutation-pad; deze helper handelt de existing-
+ * empty case op pick-slide.
+ *
+ * Returnt `true` als er minstens één visibility-flip plaatsvond, zodat
+ * de caller weet of een refreshTablesOnSlide nodig is.
+ *
+ * Idempotent: als beide nodes al de juiste visibility hebben → no-op.
+ */
+async function normalizeCopyWrapVisibility(slide: InstanceNode): Promise<boolean> {
+  const copyWrap = findCopyWrap(slide);
+  if (copyWrap === null) return false;
+  let changed = false;
+
+  // Heading + Paragraph: visible alleen als characters niet leeg zijn.
+  const charDriven = ['Heading', 'Paragraph'];
+  for (let i = 0; i < charDriven.length; i++) {
+    const name = charDriven[i];
+    const node = copyWrap.findOne((n: SceneNode) => n.type === 'TEXT' && n.name === name);
+    if (node === null || node.type !== 'TEXT') continue;
+    const text = (node as TextNode).characters;
+    const desiredVisible = text !== '';
+    if (node.visible !== desiredVisible) {
+      node.visible = desiredVisible;
+      changed = true;
+    }
+  }
+
+  // T39.6 — Placeholder is een Slide-Machine-template-hint die zich toont
+  // wanneer Paragraph leeg is. Plugin is source-of-truth; placeholder is
+  // designer-crutch en moet altijd verborgen zijn zodat CopyWrap-auto-
+  // layout om de werkelijke content sluit. Naam "Placeholder" matcht alle
+  // bekende Welder-template-varianten.
+  const placeholders = copyWrap.findAll(
+    (n: SceneNode) => n.type === 'TEXT' && n.name === 'Placeholder',
+  );
+  for (let p = 0; p < placeholders.length; p++) {
+    const ph = placeholders[p];
+    if (ph.visible !== false) {
+      ph.visible = false;
+      changed = true;
+    }
+  }
+
+  return changed;
+}
+
+async function scanSlide(slide: InstanceNode): Promise<SlideScan> {
+  const visibilityChanged = await normalizeCopyWrapVisibility(slide);
+  if (visibilityChanged) {
+    await refreshTablesOnSlide(slide);
+  }
+  const general = await scanGeneral(slide);
+  return {
+    general: general,
+    content: scanContent(slide),
+    graphs: scanGraphs(slide),
+  };
+}
+
+/**
+ * T39.3 — Re-render TableWraps op een slide na een mutatie die de slide-
+ * layout heeft kunnen veranderen (bv. CopyWrap-tekst korter/langer).
+ *
+ * Container.resize bevriest slot.height op het moment van applyTable.
+ * Als de slot daarna reflowt, blijft de container op de oude snapshot.
+ * Deze helper scant + re-applyt de TableWrap-slot op de slide zodat
+ * fontSize + container-hoogte de actuele slot.height pakken.
+ *
+ * Geen-op als de slide geen TableWrap/Slot heeft of het model leeg is.
+ * Errors worden stilletjes gelogd; mag de caller-flow niet meeslepen.
+ */
+async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
+  const slot = findTableSlot(slide);
+  if (slot === null) return;
+  try {
+    const model = scanTableSlot(slot);
+    if (model.rows.length === 0) return;
+    await applyTable(slot, model);
+  } catch (e) {
+    console.log('[welder-slide-editor] refreshTablesOnSlide failed:', String(e));
+  }
+}
+
+// T34.0: detectAndSendThemeModes verwijderd. ThemePicker-UI is permanent
+// verwijderd; library-variable-modes regelen het buiten de plugin om
+// (T34 research §8). T34.1: slide-theme + set-variable-mode message-types
+// verwijderd uit types.ts; ThemeMode-interface verwijderd.
+
+// ============================================================
+// Slide-lookup helpers
+// ============================================================
+
+function buildSlideList(): { summaries: SlideSummary[]; nodes: InstanceNode[] } {
+  const nodes = findSlidesOnPage();
+  const summaries: SlideSummary[] = [];
+  for (let i = 0; i < nodes.length; i++) {
+    summaries.push(slideSummary(nodes[i], i + 1));
+  }
+  return { summaries: summaries, nodes: nodes };
+}
+
+function findSlideById(id: string): InstanceNode | null {
+  const nodes = findSlidesOnPage();
+  for (const node of nodes) {
+    if (node.id === id) return node;
+  }
+  return null;
+}
+
+/**
+ * Loopt vanaf `node` omhoog langs `.parent` tot we een Slide-instance
+ * vinden (isSlide-check). Retourneert null wanneer we de pagina-root
+ * bereiken zonder hit — dan zit het target niet binnen een Slide.
+ * Gebruikt door `upload-image` om vanuit een ImageWrap-id terug te
+ * herleiden welke slide hij draagt.
+ */
+function findSlideAncestor(node: BaseNode): InstanceNode | null {
+  let current: BaseNode | null = node;
+  // Bounded: Slide Machine-slides staan op page-level, dus ≤5 parent-hops.
+  for (let i = 0; i < 10; i++) {
+    if (current === null) return null;
+    // Alleen SceneNodes (dus niet page/document) kunnen isSlide-match zijn.
+    if ('type' in current && (current as SceneNode).type === 'INSTANCE') {
+      const asScene = current as SceneNode;
+      if (isSlide(asScene)) return asScene as InstanceNode;
+    }
+    const parent: BaseNode | null = 'parent' in current ? (current as SceneNode).parent : null;
+    if (parent === null || parent === undefined) return null;
+    current = parent;
+  }
+  return null;
+}
+
+/**
+ * Bepaalt welke Welder-Slide de user momenteel voor ogen heeft op basis
+ * van de huidige selectie. Drie scenarios (in volgorde):
+ *   1. Primary selection = Welder-Slide zelf → direct return.
+ *   2. Primary selection = descendant van een Welder-Slide (bv. text-klik
+ *      in Figma Design) → walk up via findSlideAncestor.
+ *   3. Primary selection = container die een Welder-Slide BEVAT (bv.
+ *      SlideNode in Figma Slides navigator) → walk down via findOne met
+ *      isSlide-predicate, bounded.
+ * Retourneert null wanneer geen match — caller doet niets.
+ */
+function findFocusedWelderSlide(): InstanceNode | null {
+  const selection = figma.currentPage.selection;
+  if (selection.length === 0) return null;
+  const selected = selection[0];
+
+  // Scenario 1: selected IS a Welder-Slide
+  if (selected.type === 'INSTANCE' && isSlide(selected)) {
+    return selected;
+  }
+
+  // Scenario 2: selected is INSIDE a Welder-Slide
+  const ancestor = findSlideAncestor(selected);
+  if (ancestor !== null) return ancestor;
+
+  // Scenario 3: selected is a CONTAINER of a Welder-Slide (e.g. SlideNode)
+  if ('findOne' in selected) {
+    const container = selected as SceneNode & { findOne: SlideNode['findOne'] };
+    const descendant = container.findOne((n: SceneNode) => {
+      if (n.type !== 'INSTANCE') return false;
+      return isSlide(n as InstanceNode);
+    });
+    if (descendant !== null && descendant.type === 'INSTANCE') {
+      return descendant as InstanceNode;
+    }
+  }
+
+  return null;
+}
+
+function postToUI(msg: PluginToUIMessage): void {
+  figma.ui.postMessage(msg);
+}
+
+// ============================================================
+// Live slide-list refresh — debounced postSlideList
+// ============================================================
+
+/**
+ * Debounce-handle voor pending slide-list-updates. Wanneer meerdere
+ * documentchanges binnen 200ms binnenkomen (bv. bulk-delete of een
+ * snelle add+rename), coalesce we naar één buildSlideList-call.
+ *
+ * Type `number` i.p.v. `ReturnType<typeof setTimeout>` om mismatches
+ * tussen node-/dom-typings in de Figma-sandbox te vermijden — de eerdere
+ * crash-poging (commit 35298c4) leed hier mogelijk onder.
+ */
+let pendingSlideListUpdate: number | null = null;
+
+/**
+ * Signature van de laatst geposte slide-list. Dedupliceert updates
+ * wanneer burst-events snel achter elkaar binnenkomen.
+ */
+let lastSlideListSignature: string = '';
+
+// Module-level: last-sent imageHash per imageWrapId — prevents re-posting on unrelated documentchange events.
+var lastSentPreviewHash: Map<string, string> = new Map();
+
+/**
+ * Bouwt een stabiele string die alleen wijzigt als de slide-list
+ * inhoudelijk veranderde. Combineert id + number + name + isSkipped —
+ * wijziging van één van deze triggert een refresh richting de UI.
+ *
+ * `isSkipped` hoort in de signature omdat Figma's native skip-toggle
+ * (oogje in de left-panel thumbnail) via `PROPERTY_CHANGE` binnenkomt;
+ * zonder deze component zou de signature ongewijzigd blijven en de
+ * UI-sync met `SlideNode.isSkippedSlide` verloren gaan.
+ */
+function slideListSignature(summaries: SlideSummary[]): string {
+  const parts: string[] = [];
+  for (let i = 0; i < summaries.length; i++) {
+    const s = summaries[i];
+    parts.push(s.id + '|' + String(s.number) + '|' + s.name + '|' + String(s.isSkipped));
+  }
+  return String(summaries.length) + '#' + parts.join(';');
+}
+
+function postSlideList(): void {
+  if (pendingSlideListUpdate !== null) {
+    clearTimeout(pendingSlideListUpdate);
+  }
+  pendingSlideListUpdate = setTimeout(() => {
+    pendingSlideListUpdate = null;
+    try {
+      const list = buildSlideList();
+      const sig = slideListSignature(list.summaries);
+      // Skip if nothing changed since last post — voorkomt redundante updates
+      // bij burst-events (bv. bulk-delete of snelle rename-sequenties).
+      if (sig === lastSlideListSignature) return;
+      lastSlideListSignature = sig;
+      postToUI({ type: 'page-changed', slides: list.summaries });
+    } catch (err: unknown) {
+      console.log('[welder-slide-editor] postSlideList failed:', err);
+    }
+  }, 200) as unknown as number;
+}
+
+// ============================================================
+// Bridge-message-loop (spec §5)
+// ============================================================
+
+async function handleMessage(msg: UIToPluginMessage): Promise<void> {
+  if (msg.type === 'ui-ready') {
+    const list = buildSlideList();
+    // Seed de dedup-signature zodat de eerste poll-tick na init geen
+    // duplicaat `page-changed` post met dezelfde content als `init`.
+    lastSlideListSignature = slideListSignature(list.summaries);
+    const initialSlideId = list.summaries.length > 0 ? list.summaries[0].id : null;
+    postToUI({
+      type: 'init',
+      slides: list.summaries,
+      initialSlideId: initialSlideId,
+    });
+    return;
+  }
+
+  if (msg.type === 'pick-slide') {
+    const slide = findSlideById(msg.slideId);
+    if (slide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    figma.viewport.scrollAndZoomIntoView([slide]);
+    const scan = await scanSlide(slide);
+    postToUI({
+      type: 'slide-loaded',
+      slideId: slide.id,
+      general: scan.general,
+      content: scan.content,
+      graphs: scan.graphs,
+    });
+
+    // Image-preview bytes — fire-and-forget; post PNG/JPG bytes for the
+    // current ImagePaint so the UI can render a live preview. Geen dedup
+    // meer op pick-slide: de UI gooit preview-bytes weg bij pickSlide
+    // (general → null), dus bij terug-navigatie naar een eerder bezochte
+    // slide moet main ze opnieuw sturen. lastSentPreviewHash wordt nog
+    // steeds gevuld zodat upload-image de dedup-cache kan bijwerken.
+    // Async IIFE — fire-and-forget; faalt stil.
+    (async function () {
+      if (scan.general === null) return;
+      if (scan.general.image === null) return;
+      if (scan.general.image.imageHash === null) return;
+      var imageWrapId = scan.general.image.imageWrapId;
+      var imageHash = scan.general.image.imageHash;
+      var img = figma.getImageByHash(imageHash);
+      if (img === null) return;
+
+      // Haal slot-dimensies op zodat de UI-preview dezelfde aspect-ratio
+      // kan tonen als het Figma image-slot (T28a-fix).
+      var fillW = 0;
+      var fillH = 0;
+      try {
+        var wrapNode = await figma.getNodeByIdAsync(imageWrapId);
+        if (wrapNode !== null && wrapNode.type === 'INSTANCE') {
+          var slot = findImageSlot(wrapNode as InstanceNode);
+          if (slot !== null && 'width' in slot && 'height' in slot) {
+            var slotW = (slot as LayoutMixin).width;
+            var slotH = (slot as LayoutMixin).height;
+            if (slotW > 0 && slotH > 0) {
+              fillW = slotW;
+              fillH = slotH;
+            }
+          }
+        }
+      } catch (_e) {
+        // Fallback: laat fillW/fillH op 0 staan; UI toont h-36 fallback.
+      }
+
+      var bytes: Uint8Array;
+      try {
+        bytes = await img.getBytesAsync();
+      } catch (_e) {
+        return;
+      }
+      postToUI({
+        type: 'image-preview',
+        imageWrapId: imageWrapId,
+        bytes: bytes,
+        fillW: fillW,
+        fillH: fillH,
+      });
+      lastSentPreviewHash.set(imageWrapId, imageHash);
+    })().catch(function (_e) {});
+
+    // Prime icon cache in background using first card/badge found.
+    // Async IIFE — fire-and-forget; errors caught so UI never gets stuck.
+    (async function () {
+      var cardNodeId: string | null = null;
+      if (scan.content !== null && scan.content.cards.length > 0) {
+        cardNodeId = scan.content.cards[0].cardNodeId;
+      }
+      var targetNode: InstanceNode | null = null;
+      if (cardNodeId !== null) {
+        try {
+          var n = await figma.getNodeByIdAsync(cardNodeId);
+          if (n !== null && n.type === 'INSTANCE') {
+            targetNode = n as InstanceNode;
+          }
+        } catch (e) {
+          /* node not found — skip */
+        }
+      }
+      if (targetNode !== null) {
+        primeIconCache(targetNode)
+          .then(function () {
+            postToUI({ type: 'icons-ready' });
+          })
+          .catch(function () {
+            postToUI({ type: 'icons-ready' });
+          });
+      } else {
+        // No suitable node — send icons-ready immediately so UI isn't stuck.
+        postToUI({ type: 'icons-ready' });
+      }
+    })();
+
+    return;
+  }
+
+  if (msg.type === 'update-general') {
+    const slide = findSlideById(msg.slideId);
+    if (slide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    if (msg.section === 'titleDescription') {
+      const payload = msg.payload as TitleDescriptionPayload;
+      await applyTitleDescription(slide, payload);
+      await refreshTablesOnSlide(slide); // T39.3: re-render tables na CopyWrap-edit
+      postToUI({
+        type: 'target-updated',
+        ok: true,
+        targetId: slide.id,
+      });
+      return;
+    }
+    if (msg.section === 'badge') {
+      const payload = msg.payload as BadgePayload;
+      await applyBadge(slide, payload);
+      postToUI({
+        type: 'target-updated',
+        ok: true,
+        targetId: slide.id,
+      });
+      return;
+    }
+    // TODO(T10): dispatch naar editors/general/image.ts
+    console.log('[welder-slide-editor] update-general (T10+ placeholder):', msg.section);
+    return;
+  }
+
+  if (msg.type === 'update-accent') {
+    // Spec §13 T30 — heading-only. Paragraph-accent permanent out-of-scope.
+    const slide = findSlideById(msg.slideId);
+    if (slide === null) {
+      postToUI({ type: 'target-updated', ok: false, error: 'Slide not found: ' + msg.slideId });
+      return;
+    }
+    const copyWrap = findCopyWrap(slide);
+    if (copyWrap === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'CopyWrap not found on slide: ' + msg.slideId,
+      });
+      return;
+    }
+    const headingNode = findVisibleTextNodeByName(copyWrap, 'Heading', slide);
+    if (headingNode === null) {
+      postToUI({ type: 'target-updated', ok: false, error: 'Heading node not found' });
+      return;
+    }
+    await applyAccentRanges(headingNode, msg.dimRanges);
+    await refreshTablesOnSlide(slide); // T39.3: heading-fill mutatie kan line-wrap reflowen
+    postToUI({ type: 'target-updated', ok: true, targetId: headingNode.id });
+    return;
+  }
+
+  if (msg.type === 'update-card') {
+    const slide = findSlideById(msg.slideId);
+    if (slide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    await applyCard(slide, {
+      cardNodeId: msg.cardNodeId,
+      heading: msg.payload.heading,
+      paragraph: msg.payload.paragraph,
+      icon: msg.payload.icon,
+    });
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: msg.cardNodeId,
+    });
+    return;
+  }
+
+  if (msg.type === 'update-timeline-item') {
+    // T31.2 — muteert heading/paragraph van één CopyWrap-item.
+    // Zoek CopyWrap via slide.findOne(id) zodat ook genestede CopyWraps
+    // (binnen tussenliggende Frames) gevonden worden — wrapper-agnostisch.
+    const slide = findSlideById(msg.slideId);
+    if (slide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    // T31.2: slide-scoped findOne op node-id — vindt ook genestede CopyWraps.
+    const copyWrapNode = slide.findOne(function (n: SceneNode) {
+      return n.type === 'INSTANCE' && n.name === 'CopyWrap' && n.id === msg.copyWrapNodeId;
+    });
+    const copyWrap: InstanceNode | null =
+      copyWrapNode !== null && copyWrapNode.type === 'INSTANCE'
+        ? (copyWrapNode as InstanceNode)
+        : null;
+    if (copyWrap === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Timeline CopyWrap not found: ' + msg.copyWrapNodeId,
+      });
+      return;
+    }
+    if (typeof msg.payload.heading === 'string') {
+      const headingNode = copyWrap.findOne((n: SceneNode) => {
+        return n.type === 'TEXT' && n.name === 'Heading';
+      });
+      if (headingNode !== null && headingNode.type === 'TEXT') {
+        await setTextCharactersSafe(headingNode as TextNode, msg.payload.heading);
+      }
+    }
+    if (typeof msg.payload.paragraph === 'string') {
+      const paragraphNode = copyWrap.findOne((n: SceneNode) => {
+        return n.type === 'TEXT' && n.name === 'Paragraph';
+      });
+      if (paragraphNode !== null && paragraphNode.type === 'TEXT') {
+        await setTextCharactersSafe(paragraphNode as TextNode, msg.payload.paragraph);
+      }
+    }
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: msg.copyWrapNodeId,
+    });
+    return;
+  }
+
+  if (msg.type === 'update-graph') {
+    // T12: persisteer ChartData op de ChartWrap (`pluginData.model` +
+    // `kind: 'welder-chartwrap'`), plus een relaunch-knop zodat de user
+    // de editor direct kan heropenen vanaf de canvas-selection.
+    //
+    // Canvas-rendering volgt in T13 (editors/chart/renderer.ts); voor
+    // v0.1.0-T12 volstaat persistentie + ACK zodat de UI een save-state
+    // kan tonen en T13 alleen nog de render-call hoeft toe te voegen.
+    const target = await figma.getNodeByIdAsync(msg.chartWrapId);
+    if (target === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'ChartWrap not found: ' + msg.chartWrapId,
+      });
+      return;
+    }
+    if (target.type !== 'INSTANCE' && target.type !== 'FRAME') {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Target is not a wrapper node: ' + msg.chartWrapId,
+      });
+      return;
+    }
+    const scene = target as SceneNode;
+    scene.setPluginData('kind', 'welder-chartwrap');
+    scene.setPluginData('v', '1');
+    scene.setPluginData('model', JSON.stringify(msg.data));
+    if ('setRelaunchData' in scene) {
+      (
+        scene as SceneNode & { setRelaunchData: (data: { [k: string]: string }) => void }
+      ).setRelaunchData({
+        open: 'Bewerk met Slide Editor',
+      });
+    }
+
+    // T13: render een vers chart-frame en vervang ChartWrap's content.
+    // Fallback-pad: wanneer de wrapper geen appendChild toestaat (locked
+    // library-instance), plaatsen we het frame naast de wrapper in zijn
+    // parent op dezelfde x/y — de user kan dan handmatig herplaatsen.
+    const fresh = await renderChart(msg.data);
+    const swapped = replaceChartContent(scene, fresh);
+    if (!swapped) {
+      // Remove any previously-placed fallback frame to prevent accumulation.
+      const prevId = scene.getPluginData('fallbackFrameId');
+      if (prevId !== '' && prevId !== null) {
+        const prevNode = await figma.getNodeByIdAsync(prevId);
+        if (prevNode !== null && 'remove' in prevNode) {
+          try {
+            (prevNode as SceneNode).remove();
+          } catch (_e) {}
+        }
+      }
+      // T33: in Slide Machine zit de wrapper-parent óók binnen een Slide-
+      // INSTANCE. Een kale `parentFrame.appendChild(fresh)` throws dan
+      // `Cannot move node. New parent is an instance or is inside of an
+      // instance` en crasht de hele handler. We proberen eerst de parent,
+      // maar vangen de failure op en vallen door naar currentPage.
+      const parent = 'parent' in scene ? (scene as SceneNode).parent : null;
+      let placed = false;
+      if (parent !== null && parent !== undefined && 'appendChild' in parent) {
+        const parentFrame = parent as FrameNode | PageNode | GroupNode;
+        if ('x' in scene && 'y' in scene) {
+          fresh.x = (scene as LayoutMixin).x;
+          fresh.y = (scene as LayoutMixin).y;
+        }
+        try {
+          parentFrame.appendChild(fresh);
+          placed = true;
+        } catch (_err) {
+          // Parent zit ook binnen een INSTANCE — fall through naar
+          // currentPage-drop hieronder.
+        }
+      }
+      if (!placed) {
+        // Laatste redmiddel: op de current page droppen zodat het frame
+        // niet gewoon verdwijnt. User kan het handmatig naar de goede
+        // plek slepen.
+        try {
+          figma.currentPage.appendChild(fresh);
+        } catch (_err) {
+          // Zeer onwaarschijnlijk (bv. tijdens page-switch), maar we
+          // kiezen liever een stille log dan een crash-toast.
+          console.log('[welder-slide-editor] could not place chart fallback frame');
+        }
+      }
+      // Track fresh frame so next render can clean it up.
+      try {
+        scene.setPluginData('fallbackFrameId', fresh.id);
+      } catch (_e) {}
+    }
+
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: msg.chartWrapId,
+    });
+    return;
+  }
+
+  if (msg.type === 'update-table') {
+    // T34.2: Slot-based full-state PUT. msg.slotId adresseert de SlotNode
+    // rechtstreeks (de UI ontving 'm via `GraphInstance.nodeId`).
+    const slide = findSlideById(msg.slideId);
+    if (slide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    const slotNode = await figma.getNodeByIdAsync(msg.slotId);
+    if (slotNode === null || slotNode.type !== 'SLOT') {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Table slot not found: ' + msg.slotId,
+      });
+      return;
+    }
+    await applyTable(slotNode as SlotNode, msg.desired);
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: msg.slotId,
+    });
+    return;
+  }
+
+  if (msg.type === 'import-csv') {
+    // T34.2 / T39.2: parse + truncate + applyTable. Width blijft behouden
+    // (gelezen uit pluginData) — import verandert alleen row/cel-inhoud.
+    const slide = findSlideById(msg.slideId);
+    if (slide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    const slotNode = await figma.getNodeByIdAsync(msg.slotId);
+    if (slotNode === null || slotNode.type !== 'SLOT') {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Table slot not found: ' + msg.slotId,
+      });
+      return;
+    }
+    await importCSV(slotNode as SlotNode, msg.csv);
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: msg.slotId,
+    });
+    return;
+  }
+
+  if (msg.type === 'update-journey') {
+    // T45: Slot-based full-state PUT voor JourneyWrap.
+    const journeySlide = findSlideById(msg.slideId);
+    if (journeySlide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    const journeySlotNode = await figma.getNodeByIdAsync(msg.slotId);
+    if (journeySlotNode === null || journeySlotNode.type !== 'SLOT') {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Journey slot not found: ' + msg.slotId,
+      });
+      return;
+    }
+    await applyJourney(journeySlotNode as SlotNode, msg.desired);
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: msg.slotId,
+    });
+    return;
+  }
+
+  if (msg.type === 'upload-image') {
+    // Target-node lookup — `documentAccess: "dynamic-page"` vereist de
+    // async-variant. Bytes komen als Uint8Array via structured-cloning
+    // binnen en hoeven niet geconverteerd te worden.
+    const target = await figma.getNodeByIdAsync(msg.targetNodeId);
+    if (target === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Target node not found: ' + msg.targetNodeId,
+      });
+      return;
+    }
+    const slide = findSlideAncestor(target);
+    if (slide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'No enclosing slide for target: ' + msg.targetNodeId,
+      });
+      return;
+    }
+
+    // Routing: wanneer de target een directe child is van CardWrap gaan
+    // de bytes naar de card-slot; anders naar de slide-level ImageWrap.
+    const cardWrap = findCardWrap(slide);
+    const targetParent = 'parent' in target ? (target as SceneNode).parent : null;
+    const isCardChild =
+      cardWrap !== null && targetParent !== null && targetParent.id === cardWrap.id;
+
+    if (isCardChild) {
+      const newHash = await applyCardVisual(slide, msg.targetNodeId, msg.bytes);
+      if (newHash === null) {
+        postToUI({
+          type: 'target-updated',
+          ok: false,
+          error: 'Card visual slot not found: ' + msg.targetNodeId,
+        });
+        return;
+      }
+      postToUI({
+        type: 'target-updated',
+        ok: true,
+        targetId: msg.targetNodeId,
+      });
+      return;
+    }
+
+    const newHash = await applyImage(slide, { bytes: msg.bytes });
+    if (newHash === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'ImageWrap not found on slide: ' + slide.id,
+      });
+      return;
+    }
+
+    // Refresh thumbnail in UI immediately — no need for getBytesAsync, we
+    // already have the bytes that were just uploaded (FIG-ASYNC-01 compliant:
+    // no fire-and-forget; this is synchronous within the async handler).
+    var previewFillW = 0;
+    var previewFillH = 0;
+    try {
+      if (target.type === 'INSTANCE') {
+        var previewSlot = findImageSlot(target as InstanceNode);
+        if (previewSlot !== null && 'width' in previewSlot && 'height' in previewSlot) {
+          var previewSlotW = (previewSlot as LayoutMixin).width;
+          var previewSlotH = (previewSlot as LayoutMixin).height;
+          if (previewSlotW > 0 && previewSlotH > 0) {
+            previewFillW = previewSlotW;
+            previewFillH = previewSlotH;
+          }
+        }
+      }
+    } catch (_e) {
+      // Fallback: laat dims op 0 staan; UI toont h-36 fallback.
+    }
+    postToUI({
+      type: 'image-preview',
+      imageWrapId: msg.targetNodeId,
+      bytes: msg.bytes,
+      fillW: previewFillW,
+      fillH: previewFillH,
+    });
+    // Update dedup-cache so that een documentchange-triggered pick-slide
+    // de preview niet opnieuw verstuurt met de verouderde hash.
+    lastSentPreviewHash.set(msg.targetNodeId, newHash);
+
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: msg.targetNodeId,
+    });
+    return;
+  }
+
+  // T34.0: set-variable-mode handler verwijderd. Theme-switching is permanent
+  // uit de plugin-UI (T34 research §8 — library-variable-modes regelen het
+  // buiten de plugin om). T34.1: message-type ook uit types.ts verwijderd.
+
+  if (msg.type === 'set-slide-skipped') {
+    var skipSlide = findSlideById(msg.slideId);
+    if (skipSlide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    var skipParent: BaseNode | null = skipSlide.parent;
+    if (skipParent === null || skipParent.type !== 'SLIDE') {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide has no SlideNode parent (requires Figma Slides editor)',
+      });
+      return;
+    }
+    (skipParent as SlideNode).isSkippedSlide = msg.skipped;
+    // Re-build slide-list zodat elke SlideSummary een verse `isSkipped` meekrijgt.
+    // `page-changed` draagt de volledige lijst en gaat ongededuped uit — we
+    // resetten de signature zodat postSlideList niet als duplicaat-skip wordt afgedaan.
+    lastSlideListSignature = '';
+    var refreshed = buildSlideList();
+    lastSlideListSignature = slideListSignature(refreshed.summaries);
+    postToUI({ type: 'page-changed', slides: refreshed.summaries });
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: skipSlide.id,
+    });
+    return;
+  }
+
+  if (msg.type === 'close') {
+    figma.closePlugin();
+    return;
+  }
+}
+
+// ============================================================
+// Main — init-sequence
+// ============================================================
+
+async function main(): Promise<void> {
+  // Command-dispatch: v0.1.0 heeft alleen 'open' (manifest menu +
+  // relaunch-buttons vuren met diezelfde command). Geen command-match
+  // betekent dat de plugin via een ander event is gestart; we tonen
+  // dan alsnog de UI (defensief).
+  const cmd = figma.command;
+  if (cmd !== '' && cmd !== 'open') {
+    // Onbekend command: log maar blijf draaien zodat de UI debugbaar is.
+    console.log('[welder-slide-editor] Unknown command:', cmd);
+  }
+
+  // Font-preload: klaar vóór live-events. FIG-FONT-01, FIG-ASYNC-01.
+  // loadAllPagesAsync is verwijderd — het scande alle pagina's en veroorzaakte
+  // 10-30s vertraging bij grote bestanden. primeIconCache bestaat niet meer,
+  // dus er is geen volledige paginascan nodig.
+  await loadFonts();
+
+  figma.ui.onmessage = (raw: unknown) => {
+    const msg = raw as UIToPluginMessage;
+    handleMessage(msg).catch((err: unknown) => {
+      const text = err instanceof Error ? err.message : String(err);
+      figma.notify('Slide editor error: ' + text, { error: true });
+      postToUI({ type: 'target-updated', ok: false, error: text });
+    });
+  };
+
+  figma.on('currentpagechange', () => {
+    try {
+      postSlideList();
+    } catch (err: unknown) {
+      console.log('[welder-slide-editor] currentpagechange handler failed:', err);
+    }
+  });
+
+  // documentchange-registratie: zonder loadAllPagesAsync kan dit in
+  // dynamic-page mode falen met een runtime-exception. We registreren
+  // in een try/catch; bij fout is de polling-fallback (postSlideList via
+  // currentpagechange) voldoende om de slide-list vers te houden.
+  try {
+    figma.on('documentchange', (event: DocumentChangeEvent) => {
+      try {
+        const relevant = event.documentChanges.some((change) => {
+          if (change.type === 'CREATE') return true;
+          if (change.type === 'DELETE') return true;
+          // Native skip-toggle in Figma's left-panel thumbnail muteert
+          // SlideNode.isSkippedSlide → PROPERTY_CHANGE op het SLIDE-node.
+          // Zonder deze branch zou het oogje in de plugin niet sync'en
+          // met de Figma-UI.
+          if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') return true;
+          return false;
+        });
+        if (!relevant) return;
+        postSlideList();
+      } catch (err: unknown) {
+        console.log('[welder-slide-editor] documentchange handler failed:', err);
+      }
+    });
+  } catch (err: unknown) {
+    // Fallback: documentchange niet beschikbaar in dynamic-page mode zonder
+    // loadAllPagesAsync — poll-interval (currentpagechange) houdt de lijst vers.
+    console.log('[welder-slide-editor] documentchange registration skipped (dynamic-page):', err);
+  }
+
+  // Auto-follow: when user navigates slides in Figma (Slides navigator click
+  // or selecting content in a slide in Design), signal the UI to switch.
+  // Full try/catch — crashing this would re-introduce the earlier "plugin
+  // opent niet meer" bug; silent skip is fine since polling keeps list fresh.
+  try {
+    figma.on('selectionchange', () => {
+      try {
+        const focused = findFocusedWelderSlide();
+        if (focused === null) return;
+        postToUI({ type: 'slide-focused', slideId: focused.id });
+      } catch (err: unknown) {
+        console.log('[welder-slide-editor] selectionchange handler failed:', err);
+      }
+    });
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] selectionchange not available:', err);
+  }
+
+  figma.on('close', () => {
+    // Cleanup hook — Figma ruimt listeners automatisch op. FIG-CLOSE-01.
+    if (pendingSlideListUpdate !== null) {
+      clearTimeout(pendingSlideListUpdate);
+      pendingSlideListUpdate = null;
+    }
+  });
+}
+
+main().catch((err: unknown) => {
+  const text = err instanceof Error ? err.message : String(err);
+  figma.notify('Slide editor failed to start: ' + text, { error: true });
+  figma.closePlugin();
+});

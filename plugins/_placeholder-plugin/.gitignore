@@ -1,0 +1,11 @@
+# Auto-generated door @nuxt/ui/vite plugin (unplugin-auto-import + unplugin-vue-components).
+# Deze .d.ts-bestanden worden bij elke UI-build opnieuw gegenereerd en hoeven niet in git.
+widget-src/ui/auto-imports.d.ts
+widget-src/ui/components.d.ts
+
+# node_modules en Vite dev-cache (top-level .gitignore dekt node_modules al, maar
+# we houden het hier expliciet voor duidelijkheid).
+node_modules/
+
+# dist/ is gitignored at the monorepo root (plugins/*/dist/) — the standalone
+# scaffold's `!dist/` re-include was removed when this plugin was imported.

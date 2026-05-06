@@ -29,8 +29,14 @@ pre-commit:
       # Block the commit on ESLint errors. No --fix: keeps changes deliberate.
       # vue files are excluded from the ESLint config (vue-tsc covers them);
       # the glob here mirrors eslint.config.ts which ignores *.vue.
+      # --no-warn-ignored: when staged files match an `ignores` pattern in
+      # eslint.config.ts (e.g. plugins/_placeholder-plugin/**), skip silently
+      # instead of emitting "File ignored" warnings that --max-warnings=0
+      # would treat as errors. This is the same flag CI uses implicitly via
+      # `eslint .`; here we set it explicitly because lefthook passes
+      # specific staged file paths.
       glob: '*.{ts,tsx,mts,cts}'
-      run: pnpm exec eslint --max-warnings=0 {staged_files}
+      run: pnpm exec eslint --max-warnings=0 --no-warn-ignored {staged_files}
 
 commit-msg:
   commands:

@@ -51,6 +51,12 @@ jobs:
                 echo "Skipping $manifest (template)"
                 continue
                 ;;
+              plugins/_placeholder-plugin/manifest.json)
+                # Out-of-band npm-driven plugin (excluded from pnpm workspace).
+                # Manifest + artifacts are validated in the npm-plugin-placeholder job.
+                echo "Skipping $manifest (handled by npm-plugin-placeholder job)"
+                continue
+                ;;
             esac
             echo "Validating $manifest"
             python3 tools/validate_manifest.py "$manifest"
@@ -136,6 +142,13 @@ jobs:
             case "$manifest" in
               plugins/_template/manifest.json)
                 echo "Skipping $manifest (template)"
+                continue
+                ;;
+              plugins/_placeholder-plugin/manifest.json)
+                # Out-of-band npm-driven plugin (excluded from pnpm workspace,
+                # so `pnpm build` above doesn't produce its dist/). Validated
+                # in the npm-plugin-placeholder job which builds with npm first.
+                echo "Skipping $manifest (handled by npm-plugin-placeholder job)"
                 continue
                 ;;
             esac

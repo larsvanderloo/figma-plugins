@@ -1,0 +1,13 @@
+{
+  "name": "Placeholder Plugin",
+  "id": "1629244658249217029",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma", "slides"],
+  "documentAccess": "dynamic-page",
+  "permissions": ["teamlibrary"],
+  "networkAccess": { "allowedDomains": ["none"] },
+  "menu": [{ "name": "Open placeholder plugin", "command": "open" }],
+  "relaunchButtons": [{ "command": "open", "name": "Edit with Placeholder Plugin" }]
+}

@@ -1,0 +1,85 @@
+# Plugin metadata. Read by tools/monday-sync/sync.py to find the right
+# Monday boards for this plugin's PR events. Also a place for plugin-level
+# config that the bootstrap process bakes into placeholders.
+#
+# Monday workspace structure (per runbooks/monday-workflow.md):
+#   workspace_id = 6325546 (Figma Plugins)
+#     └── folder/_placeholder-plugin/  (folder_id TBD — see [monday] below)
+#           ├── Epics             — strategic tracks, multi-sprint
+#           ├── Sprints           — sprint container
+#           ├── Tasks             — work items (sync target for PRs)
+#           ├── Retrospectives    — sprint retros
+#           ├── Bugs Queue        — bug intake
+#           └── Capacity          — sprint capacity planning
+#
+# Onboarding note: this plugin was imported from an external zip and parked
+# under a placeholder slug to keep it out of the pnpm workspace until
+# T_PNPM_MIGRATION lands. See CHANGELOG.md and the import ADR. Several
+# fields below are placeholders pending follow-up work — search for
+# `TODO(project-pm)` to find them.
+
+[plugin]
+slug = "_placeholder-plugin"
+name = "Placeholder Plugin"
+class_prefix = "PlaceholderPlugin"
+version = "0.2.1"
+editor_types = ["figma", "slides"]  # matches manifest.json; FigJam excluded by external scaffold
+
+# Owner agent — which subagent has primary responsibility per the
+# ownership map in CLAUDE.md. One of:
+#   project-pm | figma-api-engineer | ui-engineer |
+#   plugin-tester | release-engineer | product-researcher
+#
+# UI-heavy plugin (Vue 3 + Nuxt UI v4 iframe with sub-editors for general,
+# content, charts, table, journey) — same call as welder-editor.
+owner_agent = "ui-engineer"
+
+[monday]
+# TODO(project-pm): create Monday folder + duplicate the Scrum Team
+# template into workspace 6325546, then fill the IDs below and flip
+# enabled = true. See runbooks/monday-workflow.md §"Onboarding playbook".
+enabled = false
+workspace_id = "6325546"
+folder_id = ""              # TODO(project-pm): set after folder creation
+tasks_board_id = ""         # TODO(project-pm): from duplicated Scrum Team template
+sprints_board_id = ""       # TODO(project-pm)
+epics_board_id = ""         # TODO(project-pm)
+bugs_board_id = ""          # TODO(project-pm)
+retros_board_id = ""        # TODO(project-pm)
+capacity_board_id = ""      # TODO(project-pm)
+
+[validation]
+# Architecture: this plugin reuses the chunked-text-loader pattern (see
+# learnings/anti-patterns/0002-figma-plugin-load-debugging.md and the
+# import ADR) — esbuild.config.mjs splits dist/ui.html into ~60 KB string
+# chunks that are embedded into dist/code.js to bypass Figma's sandbox
+# string-literal parser limit. Result: dist/code.js carries both the
+# code-side logic AND the entire iframe bundle.
+#
+# Placeholder budgets below are derived from the raw (non-gzipped) sizes
+# observed in the imported zip:
+#   dist/code.js  = 1,756,471 bytes raw  (~1.756 MB)
+#   dist/ui.html  = 1,577,390 bytes raw  (~1.577 MB)
+#
+# These are GENEROUS placeholders at non-gzip. They are NOT the
+# canonical budget. The canonical budget for this monorepo is gzipped
+# (per docs/perf/ convention) and must be re-measured before the next
+# release. TODO(figma-api-engineer + ui-engineer): run the gzip pass
+# (`gzip -c dist/<artifact> | wc -c`) and replace these numbers with
+# minified+gzipped budgets in a budget ADR (model after ADR-0003 and
+# ADR-0014). Until that happens, treat any growth as a soft signal and
+# escalate to project-pm before merging.
+code_bundle_kb_budget = 2200   # placeholder: raw, not gzipped — see note
+ui_bundle_kb_budget = 1700     # placeholder: raw, not gzipped — see note
+init_paint_ms_budget = 200
+
+[message_bus]
+# v1 — schema is currently encoded in widget-src/types.ts (UIMessage and
+# pluginMessage discriminated unions). There is no shared/messages.ts
+# yet because of the layout deviation documented in the import ADR.
+# Bump and ship a migration when the schema changes.
+version = 1
+
+[release]
+formats = ["figma-community"]
+primary_editor = "figma"
