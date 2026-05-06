@@ -94,6 +94,14 @@
 
 import { useId } from 'vue';
 
+// Disable automatic attribute inheritance on the root <div> so that extra
+// attributes (e.g. min, max, step, aria-valuemin, aria-valuemax, aria-valuenow
+// from JourneyEditor's numeric InputField usage) are forwarded to the actual
+// <input> or <textarea> via v-bind="$attrs" instead of landing on the wrapper div.
+// Without this, aria-valuemin on a <div role="generic"> is an axe aria-allowed-attr
+// violation (WCAG 2.1 A — ARIA 1.1 §5.2).
+defineOptions({ inheritAttrs: false });
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -184,8 +192,16 @@ function onInput(event: Event): void {
       label
     }}</label>
 
+    <!--
+      v-bind="$attrs" forwards any extra attributes (min, max, step,
+      aria-valuemin, aria-valuemax, aria-valuenow, data-*, etc.) from the
+      call site to the actual <textarea> or <input> element, not the wrapper div.
+      This is required because defineOptions({ inheritAttrs: false }) above
+      prevents Vue's automatic forwarding to the root element.
+    -->
     <textarea
       v-if="multiline"
+      v-bind="$attrs"
       :id="inputId"
       class="input-field__control input-field__textarea"
       :value="modelValue"
@@ -201,6 +217,7 @@ function onInput(event: Event): void {
 
     <input
       v-else
+      v-bind="$attrs"
       :id="inputId"
       class="input-field__control"
       :type="type"

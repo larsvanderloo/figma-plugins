@@ -124,6 +124,9 @@ importers:
       '@figma-plugins/sections-image-editor':
         specifier: workspace:*
         version: link:../../sections/ImageEditor
+      '@figma-plugins/sections-journey-editor':
+        specifier: workspace:*
+        version: link:../../sections/JourneyEditor
       '@figma-plugins/sections-property-panel':
         specifier: workspace:*
         version: link:../../sections/PropertyPanel
@@ -133,6 +136,9 @@ importers:
       '@figma-plugins/sections-tab-strip':
         specifier: workspace:*
         version: link:../../sections/TabStrip
+      '@figma-plugins/sections-table-editor':
+        specifier: workspace:*
+        version: link:../../sections/TableEditor
       '@figma-plugins/sections-timeline-editor':
         specifier: workspace:*
         version: link:../../sections/TimelineEditor

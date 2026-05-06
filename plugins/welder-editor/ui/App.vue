@@ -53,6 +53,9 @@ import { CardList } from '@figma-plugins/sections-card-list';
 import { CardEditor } from '@figma-plugins/sections-card-editor/CardEditor';
 import type { CardItem } from '@figma-plugins/sections-card-editor/CardEditor';
 import { TimelineEditor } from '@figma-plugins/sections-timeline-editor/TimelineEditor';
+import { TableEditor } from '@figma-plugins/sections-table-editor';
+import type { TableRow as CsvTableRow } from '@figma-plugins/sections-table-editor';
+import { JourneyEditor } from '@figma-plugins/sections-journey-editor/JourneyEditor';
 
 // ---- Shared message types ----
 import type { Message } from '@shared/messages.js';
@@ -177,7 +180,15 @@ const noSlideSelected = computed<boolean>(() => activeSlideId.value === null);
  */
 const generalNull = computed<boolean>(() => general.value === null);
 const contentNull = computed<boolean>(() => content.value === null);
-const graphsNull = computed<boolean>(() => graphs.value === null);
+/**
+ * TabStrip hide-empty: the Graphs tab is hidden when graphs itself is null OR
+ * when both tableModel and journeyModel are null (no graphs content on this slide).
+ */
+const graphsNull = computed<boolean>(
+  () =>
+    graphs.value === null ||
+    (graphs.value.tableModel === null && graphs.value.journeyModel === null),
+);
 
 /**
  * Section disabled flag: disable all editors when no slide is selected or a
@@ -346,6 +357,200 @@ function handleTimelineItemParagraphUpdate(payload: { itemId: string; value: str
   void actions.applyTimeline({
     copyWrapNodeId: payload.itemId,
     paragraph: payload.value,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Graphs tab — TableEditor event handlers
+//
+// applyTable is a full-state PUT. Each per-field emit applies the delta to a
+// copy of the current store model and dispatches the complete desired model.
+// App.vue reads graphs.value.tableModel; sections never read the store directly.
+//
+// Payloads mirror TableEditorEmits exactly (slotId comes from tableData.slotId).
+// ---------------------------------------------------------------------------
+
+function handleTableWidth(payload: { slotId: string; width: 'sm' | 'md' | 'lg' }): void {
+  if (graphs.value === null || graphs.value.tableModel === null) return;
+  void actions.applyTable({
+    slotId: payload.slotId,
+    desired: { ...graphs.value.tableModel, width: payload.width },
+  });
+}
+
+function handleTableTextSize(payload: { slotId: string; textSize: 'sm' | 'md' | 'lg' }): void {
+  if (graphs.value === null || graphs.value.tableModel === null) return;
+  void actions.applyTable({
+    slotId: payload.slotId,
+    desired: { ...graphs.value.tableModel, textSize: payload.textSize },
+  });
+}
+
+function handleTableHasColumnHeader(payload: { slotId: string; hasColumnHeader: boolean }): void {
+  if (graphs.value === null || graphs.value.tableModel === null) return;
+  void actions.applyTable({
+    slotId: payload.slotId,
+    desired: { ...graphs.value.tableModel, hasColumnHeader: payload.hasColumnHeader },
+  });
+}
+
+function handleTableRowCount(payload: { slotId: string; delta: 1 | -1 }): void {
+  if (graphs.value === null || graphs.value.tableModel === null) return;
+  const model = graphs.value.tableModel;
+  const rows = [...model.rows];
+
+  if (payload.delta === 1) {
+    // Add an empty row matching the existing column count.
+    const colCount = rows[0]?.cells.length ?? 0;
+    rows.push({
+      rowNodeId: '',
+      cells: Array.from({ length: colCount }, () => ({ cellNodeId: '', value: '' })),
+    });
+  } else {
+    // Remove the last row (guard: at least 1 row must remain).
+    if (rows.length > 1) rows.pop();
+  }
+
+  void actions.applyTable({
+    slotId: payload.slotId,
+    desired: { ...model, rows },
+  });
+}
+
+function handleTableColCount(payload: { slotId: string; delta: 1 | -1 }): void {
+  if (graphs.value === null || graphs.value.tableModel === null) return;
+  const model = graphs.value.tableModel;
+
+  const rows = model.rows.map((row) => {
+    const cells = [...row.cells];
+    if (payload.delta === 1) {
+      cells.push({ cellNodeId: '', value: '' });
+    } else {
+      if (cells.length > 1) cells.pop();
+    }
+    return { ...row, cells };
+  });
+
+  void actions.applyTable({
+    slotId: payload.slotId,
+    desired: { ...model, rows },
+  });
+}
+
+function handleTableCell(payload: {
+  slotId: string;
+  row: number;
+  col: number;
+  value: string;
+}): void {
+  if (graphs.value === null || graphs.value.tableModel === null) return;
+  const model = graphs.value.tableModel;
+
+  const rows = model.rows.map((row, rIdx) => {
+    if (rIdx !== payload.row) return row;
+    const cells = row.cells.map((cell, cIdx) =>
+      cIdx === payload.col ? { ...cell, value: payload.value } : cell,
+    );
+    return { ...row, cells };
+  });
+
+  void actions.applyTable({
+    slotId: payload.slotId,
+    desired: { ...model, rows },
+  });
+}
+
+function handleTableReplaceContent(payload: { slotId: string; rows: CsvTableRow[] }): void {
+  if (graphs.value === null || graphs.value.tableModel === null) return;
+  const model = graphs.value.tableModel;
+
+  // CsvTableRow already carries rowNodeId + cells[].cellNodeId — pass through
+  // directly. New rows from CSV import will have empty string ids, which is the
+  // correct sentinel for "not yet on canvas" per the shared model contract.
+  void actions.applyTable({
+    slotId: payload.slotId,
+    desired: { ...model, rows: payload.rows },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Graphs tab — JourneyEditor event handlers
+//
+// applyJourney is a full-state PUT. Each diff-based emit from JourneyEditor
+// applies its delta to a copy of the current store model before dispatch.
+// ---------------------------------------------------------------------------
+
+function handleJourneyColumnHeader(payload: {
+  slotId: string;
+  columnIndex: number;
+  header?: string;
+  subheader?: string;
+}): void {
+  if (graphs.value === null || graphs.value.journeyModel === null) return;
+  const model = graphs.value.journeyModel;
+
+  const columns = model.columns.map((col, idx) => {
+    if (idx !== payload.columnIndex) return col;
+    return {
+      header: payload.header !== undefined ? payload.header : col.header,
+      subheader: payload.subheader !== undefined ? payload.subheader : col.subheader,
+    };
+  });
+
+  void actions.applyJourney({
+    slotId: payload.slotId,
+    desired: { ...model, columns },
+  });
+}
+
+function handleJourneyItemLabel(payload: { itemId: string; label: string }): void {
+  if (graphs.value === null || graphs.value.journeyModel === null) return;
+  const model = graphs.value.journeyModel;
+
+  const items = model.items.map((item) =>
+    item.itemNodeId === payload.itemId ? { ...item, label: payload.label } : item,
+  );
+
+  void actions.applyJourney({
+    slotId: model.slotId,
+    desired: { ...model, items },
+  });
+}
+
+function handleJourneyItemIcon(payload: { itemId: string; icon: string }): void {
+  if (graphs.value === null || graphs.value.journeyModel === null) return;
+  const model = graphs.value.journeyModel;
+
+  const items = model.items.map((item) =>
+    item.itemNodeId === payload.itemId ? { ...item, icon: payload.icon } : item,
+  );
+
+  void actions.applyJourney({
+    slotId: model.slotId,
+    desired: { ...model, items },
+  });
+}
+
+function handleJourneyItemRange(payload: {
+  itemId: string;
+  startPct?: number;
+  endPct?: number;
+}): void {
+  if (graphs.value === null || graphs.value.journeyModel === null) return;
+  const model = graphs.value.journeyModel;
+
+  const items = model.items.map((item) => {
+    if (item.itemNodeId !== payload.itemId) return item;
+    return {
+      ...item,
+      ...(payload.startPct !== undefined ? { startPct: payload.startPct } : {}),
+      ...(payload.endPct !== undefined ? { endPct: payload.endPct } : {}),
+    };
+  });
+
+  void actions.applyJourney({
+    slotId: model.slotId,
+    desired: { ...model, items },
   });
 }
 </script>
@@ -527,11 +732,37 @@ function handleTimelineItemParagraphUpdate(payload: { itemId: string; value: str
         </template>
 
         <!-- ---------------------------------------------------------------- -->
-        <!-- Graphs tab — Sprint 4 placeholder                                -->
+        <!-- Graphs tab — Sprint 4 Task 4.3                                   -->
+        <!-- Charts intentionally absent (ADR-0007 — deferred to v0.2.0+ epic). -->
         <!-- ---------------------------------------------------------------- -->
         <template #graphs>
-          <div class="welder-editor__panel-stack welder-editor__panel-stack--placeholder">
-            <StatusMessage message="Graphs editing — coming in Sprint 4" variant="status" />
+          <div class="welder-editor__panel-stack">
+            <!-- TableEditor block — shown when tableModel is present -->
+            <PropertyPanel v-if="graphs !== null && graphs.tableModel !== null" title="Table">
+              <TableEditor
+                :table-data="graphs.tableModel"
+                :disabled="sectionsDisabled"
+                @update:width="handleTableWidth"
+                @update:text-size="handleTableTextSize"
+                @update:has-column-header="handleTableHasColumnHeader"
+                @update:row-count="handleTableRowCount"
+                @update:col-count="handleTableColCount"
+                @update:cell="handleTableCell"
+                @update:replace-content="handleTableReplaceContent"
+              />
+            </PropertyPanel>
+
+            <!-- JourneyEditor block — shown when journeyModel is present -->
+            <PropertyPanel v-if="graphs !== null && graphs.journeyModel !== null" title="Journey">
+              <JourneyEditor
+                :model="graphs.journeyModel"
+                :disabled="sectionsDisabled"
+                @update:column-header="handleJourneyColumnHeader"
+                @update:item-label="handleJourneyItemLabel"
+                @update:item-icon="handleJourneyItemIcon"
+                @update:item-range="handleJourneyItemRange"
+              />
+            </PropertyPanel>
           </div>
         </template>
       </TabStrip>
