@@ -8,7 +8,8 @@
   "documentAccess": "dynamic-page",
   "permissions": ["teamlibrary"],
   "networkAccess": {
-    "allowedDomains": ["http://localhost:8765"]
+    "allowedDomains": ["none"],
+    "devAllowedDomains": ["http://localhost:8765"]
   },
   "menu": [{ "name": "Open Welder Editor", "command": "open" }],
   "relaunchButtons": [{ "command": "open", "name": "Edit with Slide Editor" }]

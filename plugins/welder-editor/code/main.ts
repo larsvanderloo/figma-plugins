@@ -745,11 +745,13 @@ function isPersistedStateSetPayload(u: unknown): u is { key: string; value: unkn
 
 async function main(): Promise<void> {
   // ADR-0016: install dev console bridge before anything else so that even
-  // early errors are captured.  installDevConsole() is a no-op in production
-  // (import.meta.env.DEV is replaced with `false` by Vite at build time and
-  // the body is tree-shaken away).  Requires manifest.dev.json in effect
-  // (allowedDomains: ["http://localhost:8765"]) — see runbooks/local-development.md §11.
-  if (import.meta.env.DEV) {
+  // early errors are captured.  Use import.meta.env.MODE rather than .DEV —
+  // Vite's .DEV is `true` only in the dev server (`vite dev`), not in
+  // `vite build --mode development`.  MODE is replaced with the literal
+  // string from --mode, defaulting to 'production' for builds.  In a
+  // production build the entire `if` block is tree-shaken away.
+  // Requires manifest.dev.json in effect — see runbooks/local-development.md §11.
+  if (import.meta.env.MODE === 'development') {
     installDevConsole();
   }
 

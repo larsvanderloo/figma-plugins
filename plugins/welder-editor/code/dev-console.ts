@@ -79,7 +79,9 @@ function post(level: string, args: unknown[]): void {
  */
 export function installDevConsole(): void {
   // Extra safety net: if somehow called outside DEV mode, do nothing.
-  if (!import.meta.env.DEV) return;
+  // Use MODE not DEV — Vite's import.meta.env.DEV is false in any `vite build`,
+  // even with --mode development. MODE reflects the --mode flag explicitly.
+  if (import.meta.env.MODE !== 'development') return;
 
   const orig = {
     log: console.log.bind(console),
