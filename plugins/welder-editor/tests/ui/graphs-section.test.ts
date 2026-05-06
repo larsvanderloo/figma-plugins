@@ -1,6 +1,8 @@
-// plugins/welder-editor/tests/ui/graphs-tab.test.ts
+// plugins/welder-editor/tests/ui/graphs-section.test.ts
 //
-// Sprint 4 Task 4.3 — Graphs tab wiring tests.
+// Sprint 5 Wave 2 (was: graphs-tab.test.ts — Sprint 4 Task 4.3).
+// Structural change: no TabStrip, no switchToGraphsTab. Graphs card renders
+// automatically when graphs.tableModel !== null or graphs.journeyModel !== null.
 //
 // Purpose: verify that the Graphs tab in App.vue correctly composes
 // TableEditor + JourneyEditor (charts absent per ADR-0007) and wires their
@@ -90,14 +92,11 @@ vi.mock('../../ui/composables/usePluginBridge.js', () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
+// No titleDescription to avoid competing heading textboxes when JourneyEditor
+// also renders heading inputs. With stacked panels all sections are visible.
 const GENERAL_MINIMAL: GeneralSections = {
-  titleDescription: {
-    copyWrapId: 'cwrap-1',
-    heading: 'Slide',
-    paragraph: null,
-    headingDim: [],
-  },
-  badge: null,
+  titleDescription: null,
+  badge: { badgeNodeId: 'badge-1', label: 'Q4', icon: 'sparkles' },
   image: null,
 };
 
@@ -198,20 +197,10 @@ function populateStoreWithGraphs(
 }
 
 // ---------------------------------------------------------------------------
-// Helper: switch to Graphs tab
-//
-// Waits for the tab button to be present and aria-selected before proceeding.
-// If the tab is hidden (graphsNull=true), the button is absent — callers should
-// NOT call switchToGraphsTab when the tab is expected to be hidden.
+// No switchToGraphsTab helper needed — stacked panels.
+// The graphs card renders directly when graphs.tableModel !== null or
+// graphs.journeyModel !== null. No tab-click required.
 // ---------------------------------------------------------------------------
-
-async function switchToGraphsTab(q: ReturnType<typeof within>) {
-  const graphsTab = q.getByRole('tab', { name: /^graphs$/i });
-  await fireEvent.click(graphsTab);
-  await waitFor(() => {
-    expect((graphsTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
-  });
-}
 
 // ---------------------------------------------------------------------------
 // Per-test lifecycle
@@ -245,9 +234,8 @@ describe('1. table + journey both populated → both PropertyPanel blocks render
     populateStoreWithGraphs(store, GRAPHS_BOTH);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // Use CSS class selectors to verify the section components are mounted.
     // Both "Table" and "Journey" text appear multiple times (PropertyPanel title
@@ -265,7 +253,7 @@ describe('1. table + journey both populated → both PropertyPanel blocks render
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     expect(q.queryByText(/coming in sprint 4/i)).toBeNull();
   });
@@ -283,9 +271,8 @@ describe('2. table only → only table block, no journey block', () => {
     populateStoreWithGraphs(store, GRAPHS_TABLE_ONLY);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     expect(container.querySelector('.table-editor')).not.toBeNull();
     expect(container.querySelector('.journey-editor')).toBeNull();
@@ -304,9 +291,8 @@ describe('3. journey only → only journey block, no table block', () => {
     populateStoreWithGraphs(store, GRAPHS_JOURNEY_ONLY);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     expect(container.querySelector('.journey-editor')).not.toBeNull();
     expect(container.querySelector('.table-editor')).toBeNull();
@@ -338,19 +324,18 @@ describe('4. graphs.value === null → Graphs tab hidden by TabStrip', () => {
 // 5. Both fields null → Graphs tab hidden by TabStrip
 // ===========================================================================
 
-describe('5. both tableModel and journeyModel null → Graphs tab hidden by TabStrip', () => {
-  it('Graphs tab button is absent when both table and journey models are null', () => {
+describe('5. both tableModel and journeyModel null → graphs card absent (stacked panel)', () => {
+  it('no table-editor or journey-editor when both models are null', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    // Both fields null → graphsNull computed = true.
     populateStoreWithGraphs(store, GRAPHS_BOTH_NULL);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    const graphsTab = q.queryByRole('tab', { name: /^graphs$/i });
-    expect(graphsTab).toBeNull();
+    // Both null → hasGraphs = false → graphs card not rendered.
+    expect(container.querySelector('.table-editor')).toBeNull();
+    expect(container.querySelector('.journey-editor')).toBeNull();
   });
 });
 
@@ -369,7 +354,7 @@ describe('6. TableEditor update:width → applyTable dispatched', () => {
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // The TableEditor renders two toggle groups: width (sm/md/lg) and textSize (sm/md/lg).
     // Each group has 3 buttons. Total 6 toggle buttons. 'lg' appears twice.
@@ -408,7 +393,7 @@ describe('7. TableEditor update:textSize → applyTable dispatched', () => {
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // There are 3 toggle buttons per group (sm/md/lg). textSize group is second.
     // All 6 buttons are rendered (3 width + 3 textSize). sm is at index 3, etc.
@@ -447,7 +432,7 @@ describe('8. TableEditor update:hasColumnHeader → applyTable dispatched', () =
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // The checkbox is "First row is a header"
     const checkbox = q.getByRole('checkbox', { name: /first row is a header/i });
@@ -484,7 +469,7 @@ describe('9. TableEditor update:rowCount delta=1 → applyTable with more rows',
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     const addRowBtn = q.getByRole('button', { name: /add row/i });
     await fireEvent.click(addRowBtn);
@@ -520,7 +505,7 @@ describe('10. TableEditor update:colCount delta=-1 → applyTable with fewer col
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     const removeColBtn = q.getByRole('button', { name: /remove column/i });
     await fireEvent.click(removeColBtn);
@@ -560,7 +545,7 @@ describe('11. TableEditor update:cell → applyTable with patched cell value', (
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // Cell inputs have aria-label "Row N, column M".
     const row1col1Input = q.getByRole('textbox', { name: /row 1, column 1/i });
@@ -600,7 +585,7 @@ describe('12. TableEditor update:replaceContent → applyTable with CSV rows', (
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // Find the CSV textarea.
     const csvTextarea = q.getByRole('textbox', { name: /paste csv/i });
@@ -640,7 +625,7 @@ describe('13. JourneyEditor update:columnHeader → applyJourney dispatched', ()
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // JourneyEditor renders a TitleDescriptionEditor for column header.
     // The heading input is labeled by TitleDescriptionEditor's heading field.
@@ -680,7 +665,7 @@ describe('14. JourneyEditor update:itemLabel → applyJourney dispatched', () =>
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // Step 1 label input is labeled "Step 1 label".
     await waitFor(() => {
@@ -737,9 +722,8 @@ describe('15. JourneyEditor update:itemIcon → applyJourney dispatched', () => 
     // dispatched with apply-journey type and the correct slotId.
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // Wait for JourneyEditor to mount.
     await waitFor(() => {
@@ -773,7 +757,7 @@ describe('16. JourneyEditor update:itemRange → applyJourney dispatched', () =>
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     await waitFor(() => {
       expect(q.getByRole('spinbutton', { name: /step 1 start %/i })).toBeDefined();
@@ -817,9 +801,8 @@ describe('17. sync.inFlightRequestId set → disabled propagates to both section
     store.recordPendingRequest('req-456', 'graphs');
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // TableEditor renders <section class="table-editor" aria-disabled="true"> when disabled.
     const tableSection = container.querySelector('.table-editor');
@@ -838,7 +821,7 @@ describe('17. sync.inFlightRequestId set → disabled propagates to both section
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     // JourneyEditor renders TitleDescriptionEditor inputs — all should be disabled.
     await waitFor(() => {
@@ -864,7 +847,7 @@ describe('18. Charts absent — no chart UI rendered in Graphs tab (ADR-0007)', 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs card visible without tab navigation.
 
     expect(q.queryByText(/chart/i)).toBeNull();
   });
@@ -875,21 +858,14 @@ describe('18. Charts absent — no chart UI rendered in Graphs tab (ADR-0007)', 
 // ===========================================================================
 
 describe('axe: Graphs tab — 4 states pass WCAG 2.1 AA', () => {
-  async function runAxeOnGraphsTab(
-    graphs: GraphItems | null,
-    switchToGraphs: boolean = true,
-  ): Promise<axe.AxeResults> {
+  async function runAxeOnGraphsSection(graphs: GraphItems | null): Promise<axe.AxeResults> {
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
     populateStoreWithGraphs(store, graphs);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
-
-    if (switchToGraphs) {
-      await switchToGraphsTab(q);
-    }
+    // Stacked panel: no tab navigation needed.
 
     return axe.run(container as Element, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] },
@@ -897,24 +873,24 @@ describe('axe: Graphs tab — 4 states pass WCAG 2.1 AA', () => {
   }
 
   it('19. both table + journey populated: zero axe violations', async () => {
-    const results = await runAxeOnGraphsTab(GRAPHS_BOTH);
+    const results = await runAxeOnGraphsSection(GRAPHS_BOTH);
     expect(results.violations).toHaveLength(0);
   });
 
   it('20. table only: zero axe violations', async () => {
-    const results = await runAxeOnGraphsTab(GRAPHS_TABLE_ONLY);
+    const results = await runAxeOnGraphsSection(GRAPHS_TABLE_ONLY);
     expect(results.violations).toHaveLength(0);
   });
 
   it('21. journey only: zero axe violations', async () => {
-    const results = await runAxeOnGraphsTab(GRAPHS_JOURNEY_ONLY);
+    const results = await runAxeOnGraphsSection(GRAPHS_JOURNEY_ONLY);
     expect(results.violations).toHaveLength(0);
   });
 
-  it('22. both null / tab hidden: zero axe violations (general tab visible)', async () => {
+  it('22. both null / graphs card absent: zero axe violations', async () => {
     // When graphsNull=true, the Graphs tab is hidden so we cannot switch to it.
     // We verify the full page (general tab active) is axe-clean.
-    const results = await runAxeOnGraphsTab(GRAPHS_BOTH_NULL, false);
+    const results = await runAxeOnGraphsSection(GRAPHS_BOTH_NULL);
     expect(results.violations).toHaveLength(0);
   });
 });

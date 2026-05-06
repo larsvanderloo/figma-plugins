@@ -25,7 +25,6 @@
     "@figma-plugins/components": "workspace:*",
     "@figma-plugins/figma-api": "workspace:*",
     "@figma-plugins/sections-slide-picker": "workspace:*",
-    "@figma-plugins/sections-tab-strip": "workspace:*",
     "@figma-plugins/sections-property-panel": "workspace:*",
     "@figma-plugins/sections-title-description-editor": "workspace:*",
     "@figma-plugins/sections-badge-editor": "workspace:*",
@@ -36,6 +35,7 @@
     "@figma-plugins/sections-timeline-editor": "workspace:*",
     "@figma-plugins/sections-table-editor": "workspace:*",
     "@figma-plugins/sections-journey-editor": "workspace:*",
+    "vue-router": "^4.5.1",
     "pinia": "^3",
     "pinia-plugin-persistedstate": "^4",
     "zod": "^3.22.0"

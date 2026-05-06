@@ -1,5 +1,6 @@
 import { defineConfig, mergeConfig } from 'vitest/config';
 import vue from '@vitejs/plugin-vue';
+import ui from '@nuxt/ui/vite';
 import baseConfig from '../../vitest.config';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
@@ -9,7 +10,23 @@ const root = fileURLToPath(new URL('.', import.meta.url));
 export default mergeConfig(
   baseConfig,
   defineConfig({
-    plugins: [vue()],
+    plugins: [
+      // Nuxt UI Vite plugin must come BEFORE the Vue plugin so that Nuxt UI's
+      // component auto-registration and Tailwind CSS transforms run correctly.
+      // Same config as vite.config.ts (colorMode: false, Welder palette) so that
+      // test renders match production output.
+      ui({
+        colorMode: false,
+        ui: {
+          colors: {
+            primary: 'orange',
+            secondary: 'blue',
+            neutral: 'neutral',
+          },
+        },
+      }),
+      vue(),
+    ],
     resolve: {
       alias: {
         '@': resolve(root, 'ui'),
@@ -28,7 +45,7 @@ export default mergeConfig(
       // code-side tests (node environment). It uses an `if undefined` guard so it
       // is harmless in jsdom — ui-side tests never import figma.* code. Inline
       // figma stubs in wrappers.test.ts have been removed in favour of this file.
-      setupFiles: ['./tests/setup.ts', './tests/setup.code.ts'],
+      setupFiles: ['./tests/setup.ts', './tests/setup.code.ts', './tests/setup.ui.ts'],
       // ui-side tests need a DOM; code-side and tools tests run in node.
       // tests/ui/**   → jsdom  (default)
       // tests/code/** → node

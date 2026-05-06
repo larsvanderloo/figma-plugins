@@ -1,4 +1,6 @@
 // plugins/welder-editor/tests/ui/graphs-cross-section-integration.test.ts
+// Sprint 5 Wave 2: removed switchToGraphsTab helper (no tab navigation).
+// Graphs card renders directly when tableModel or journeyModel is non-null.
 //
 // Sprint 4 Task 4.6 — Cross-section integration tests for the Graphs tab.
 //
@@ -80,14 +82,11 @@ vi.mock('../../ui/composables/usePluginBridge.js', () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
+// No titleDescription to avoid competing heading textboxes with JourneyEditor.
+// With stacked panels all sections are visible simultaneously.
 const GENERAL_MINIMAL: GeneralSections = {
-  titleDescription: {
-    copyWrapId: 'cwrap-1',
-    heading: 'Slide',
-    paragraph: null,
-    headingDim: [],
-  },
-  badge: null,
+  titleDescription: null,
+  badge: { badgeNodeId: 'badge-1', label: 'Q4', icon: 'sparkles' },
   image: null,
 };
 
@@ -188,13 +187,9 @@ function populateStoreWithGraphs(
   });
 }
 
-async function switchToGraphsTab(q: ReturnType<typeof within>) {
-  const graphsTab = q.getByRole('tab', { name: /^graphs$/i });
-  await fireEvent.click(graphsTab);
-  await waitFor(() => {
-    expect((graphsTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
-  });
-}
+// No switchToGraphsTab helper needed — stacked panels.
+// Graphs card renders directly when graphs.tableModel !== null or
+// graphs.journeyModel !== null. No tab interaction required.
 
 // ---------------------------------------------------------------------------
 // Per-test lifecycle
@@ -237,7 +232,7 @@ describe('1. TableEditor cell edit → store.graphs.tableModel reflects update; 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     const row1col1Input = q.getByRole('textbox', { name: /row 1, column 1/i });
     await fireEvent.input(row1col1Input, { target: { value: 'Updated Header A' } });
@@ -267,7 +262,7 @@ describe('1. TableEditor cell edit → store.graphs.tableModel reflects update; 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     mockPostAndWait.mockClear();
     mockPostAndWait.mockResolvedValue(APPLY_TABLE_SUCCESS);
@@ -315,7 +310,7 @@ describe('2. JourneyEditor item label edit → store.graphs.journeyModel.items r
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     await waitFor(() => {
       expect(q.getByRole('textbox', { name: /step 1 label/i })).toBeDefined();
@@ -348,7 +343,7 @@ describe('2. JourneyEditor item label edit → store.graphs.journeyModel.items r
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     await waitFor(() => {
       expect(q.getByRole('textbox', { name: /step 1 label/i })).toBeDefined();
@@ -397,7 +392,7 @@ describe('3. Both blocks visible: TableEditor edit does NOT stomp JourneyEditor 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     // Capture journey state before edit.
     const journeyBefore = store.graphs?.journeyModel;
@@ -434,7 +429,7 @@ describe('3. Both blocks visible: TableEditor edit does NOT stomp JourneyEditor 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     // Capture table state before edit.
     const tableBefore = store.graphs?.tableModel;
@@ -481,7 +476,7 @@ describe('4. Bridge round-trip: applyTableWidth dispatched → store + TableEdit
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     // Width group is first: lg button at index 0.
     const lgBtns = q.getAllByRole('button', { name: 'lg' });
@@ -511,7 +506,7 @@ describe('4. Bridge round-trip: applyTableWidth dispatched → store + TableEdit
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     mockPostAndWait.mockClear();
     mockPostAndWait.mockResolvedValue(APPLY_TABLE_SUCCESS);
@@ -553,7 +548,7 @@ describe('5. Pinia persistedstate: graphs slice mutation produces localStorage w
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     const lgBtns = q.getAllByRole('button', { name: 'lg' });
     await fireEvent.click(lgBtns[0]!);
@@ -673,7 +668,7 @@ describe('6. Concurrent: table and journey optimisticallyApply are slice-indepen
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     // TableEditor renders <section class="table-editor" aria-disabled="true"> when disabled.
     const tableSection = container.querySelector('.table-editor');
@@ -707,7 +702,7 @@ describe('7. Error path: bridge returns ok=false for applyTable → rollback res
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     // Capture the original cell value.
     const originalValue = 'Header A';
@@ -737,7 +732,7 @@ describe('7. Error path: bridge returns ok=false for applyTable → rollback res
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     const row1col1Input = q.getByRole('textbox', { name: /row 1, column 1/i });
     await fireEvent.input(row1col1Input, { target: { value: 'Failed Edit' } });
@@ -768,7 +763,7 @@ describe('8. CSV import flow: TableEditor replaceContent → bridge → store.gr
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     const csvTextarea = q.getByRole('textbox', { name: /paste csv/i });
     await fireEvent.update(csvTextarea, 'Name,Role\nAlice,Engineer');
@@ -803,7 +798,7 @@ describe('8. CSV import flow: TableEditor replaceContent → bridge → store.gr
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     const csvTextarea = q.getByRole('textbox', { name: /paste csv/i });
     await fireEvent.update(csvTextarea, 'Col1,Col2,Col3\nA,B,C');
@@ -853,7 +848,7 @@ describe('9. JourneyEditor invalid range: end < start → clamp clamps in sectio
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     await waitFor(() => {
       expect(q.getByRole('spinbutton', { name: /step 1 end %/i })).toBeDefined();
@@ -901,9 +896,8 @@ describe('axe: Graphs cross-section integration states — 3 additional states p
     store.recordPendingRequest('req-inflight-axe', 'graphs');
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     const results = await axe.run(container as Element, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] },
@@ -921,9 +915,8 @@ describe('axe: Graphs cross-section integration states — 3 additional states p
     // inFlightRequestId already null after reconcileFrom.
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     const results = await axe.run(container as Element, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] },
@@ -941,9 +934,8 @@ describe('axe: Graphs cross-section integration states — 3 additional states p
     store.recordPendingRequest('req-concurrent-axe', 'graphs');
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToGraphsTab(q);
+    // Stacked panel: graphs section visible without tab navigation.
 
     const results = await axe.run(container as Element, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] },

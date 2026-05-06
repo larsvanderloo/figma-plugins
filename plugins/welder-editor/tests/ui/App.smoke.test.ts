@@ -1,58 +1,79 @@
 // App.vue — @testing-library/vue smoke test
 //
+// Sprint 5 Wave 2 update: stacked panels, UApp chrome, UAlert empty states.
+//
+// The harness smoke test verifies @testing-library/vue is wired correctly.
+// Tests mount App with a populated Pinia store (lastKnownAt > 0) to bypass
+// the initializing skeleton. The skeleton state is tested in App.test.ts.
+//
 // Owner: ui-engineer
-//
-// Purpose: prove the @testing-library/vue harness is wired and working.
-// Updated in Sprint 2 Task 2.9 to match the assembled App.vue contract.
-// The stub assertions are replaced with assertions against the real UI.
-//
-// Why @testing-library/vue instead of @vue/test-utils directly:
-//   - @testing-library/vue wraps @vue/test-utils and enforces role-based,
-//     accessible-name-based querying. Tests written against roles and labels
-//     survive refactors; tests written against class names or DOM structure
-//     do not. The axe.test.ts in this directory uses @vue/test-utils because
-//     axe.run() needs the raw DOM element — that is the one correct use of
-//     the lower-level API. All behavioral tests use @testing-library/vue.
-//
-// Environment: jsdom (set by vitest.config.ts environmentMatchGlobs tests/ui/*).
-//
-// Import path convention used by Sprint 2+ section tests:
-//   import { render, screen, fireEvent } from '@testing-library/vue'
-//   import ComponentUnderTest from '../../ui/<path>/ComponentUnderTest.vue'
 
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/vue';
+import { createPinia, setActivePinia } from 'pinia';
 
-// App.vue is the stable entry point. It always lives at ui/App.vue regardless
-// of sprint. This test reflects the Sprint 2 assembled plugin UI.
 import App from '../../ui/App.vue';
+import { useEditorStore } from '../../ui/stores/useEditorStore.js';
 
-// Cleanup and Pinia bootstrap are handled globally by tests/setup.ts
-// (registered via setupFiles in vitest.config.ts). No per-file afterEach
-// needed here.
+// Cleanup and Pinia bootstrap are handled globally by tests/setup.ts.
 
 describe('App.vue — @testing-library/vue harness smoke test', () => {
-  it('renders the slide picker combobox', () => {
-    // render() mounts the component into a real jsdom DOM node.
-    // Cleanup is handled globally by tests/setup.ts.
-    render(App);
+  it('renders the slide picker section (header card visible after init)', () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    // Populate store with lastKnownAt > 0 to bypass the initializing skeleton.
+    const store = useEditorStore();
+    store.reconcileFrom({
+      fileKey: 'fk',
+      slides: [],
+      activeSlideId: null,
+      general: null,
+      content: null,
+      graphs: null,
+    });
 
-    // SlidePicker renders a native <select> (role="combobox").
-    // With an empty store this is the first interactive element in the plugin.
+    render(App, { global: { plugins: [pinia] } });
+
+    // The header card renders the Welder logo img and intro paragraph.
+    // SlidePicker renders a native <select> (role="combobox") in the header.
     const picker = screen.getByRole('combobox');
     expect(picker).toBeDefined();
   });
 
-  it('renders the empty-state message before a slide is selected', () => {
-    render(App);
+  it('renders the no-slide empty state (UAlert) when no slide is selected', () => {
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const store = useEditorStore();
+    store.reconcileFrom({
+      fileKey: 'fk',
+      slides: [],
+      activeSlideId: null,
+      general: null,
+      content: null,
+      graphs: null,
+    });
 
-    // When no slide is selected, App.vue shows the "pick a slide above" prompt.
-    const emptyState = screen.getByText(/pick a slide above/i);
+    render(App, { global: { plugins: [pinia] } });
+
+    // The no-slide UAlert contains the picker instruction text.
+    const emptyState = screen.getByText(/pick a slide above to start editing/i);
     expect(emptyState).toBeDefined();
   });
 
   it('does not render any editor section before a slide is selected', () => {
-    render(App);
+    const pinia = createPinia();
+    setActivePinia(pinia);
+    const store = useEditorStore();
+    store.reconcileFrom({
+      fileKey: 'fk',
+      slides: [],
+      activeSlideId: null,
+      general: null,
+      content: null,
+      graphs: null,
+    });
+
+    render(App, { global: { plugins: [pinia] } });
 
     // No heading input should be present in the empty state.
     const headingInput = screen.queryByRole('textbox', { name: /heading/i });

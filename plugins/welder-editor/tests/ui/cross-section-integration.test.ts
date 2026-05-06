@@ -1,4 +1,6 @@
 // plugins/welder-editor/tests/ui/cross-section-integration.test.ts
+// Sprint 5 Wave 2: removed switchToContentTab helper (no tab navigation).
+// Content section renders directly when store.content has cards/timeline.
 //
 // Sprint 3 Task 3.5 — Cross-section integration tests.
 //
@@ -66,14 +68,12 @@ vi.mock('../../ui/composables/usePluginBridge.js', () => ({
 // Fixtures
 // ---------------------------------------------------------------------------
 
+// Use a general fixture WITHOUT titleDescription to avoid competing heading
+// textboxes when CardEditor or TimelineEditor also renders heading inputs.
+// With stacked panels, both General and Content sections are simultaneously visible.
 const GENERAL_ALL: GeneralSections = {
-  titleDescription: {
-    copyWrapId: 'cwrap-1',
-    heading: 'Slide Heading',
-    paragraph: 'Slide paragraph.',
-    headingDim: [],
-  },
-  badge: null,
+  titleDescription: null,
+  badge: { badgeNodeId: 'badge-1', label: 'Q4', icon: 'sparkles' },
   image: null,
 };
 
@@ -176,13 +176,9 @@ function populateStoreWithContent(
   });
 }
 
-async function switchToContentTab(q: ReturnType<typeof within>) {
-  const contentTab = q.getByRole('tab', { name: /^content$/i });
-  await fireEvent.click(contentTab);
-  await waitFor(() => {
-    expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
-  });
-}
+// No switchToContentTab helper needed — stacked panels.
+// Content card renders directly when content.cards.length > 0 or
+// content.timelineItems.length > 0. No tab interaction required.
 
 // ---------------------------------------------------------------------------
 // Per-test lifecycle
@@ -209,7 +205,7 @@ describe('1. CardList select → CardEditor renders selected card heading', () =
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     // Before selection: CardEditor not visible (no card selected by default).
     expect(q.queryByRole('textbox', { name: /heading/i })).toBeNull();
@@ -234,7 +230,7 @@ describe('1. CardList select → CardEditor renders selected card heading', () =
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     // Select Card A first.
     await fireEvent.click(q.getByRole('option', { name: /card a heading/i }));
@@ -275,7 +271,7 @@ describe('2. CardEditor heading edit → store.content.cards reflects new headin
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     // Select Card A to mount CardEditor.
     await fireEvent.click(q.getByRole('option', { name: /card a heading/i }));
@@ -311,7 +307,7 @@ describe('2. CardEditor heading edit → store.content.cards reflects new headin
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     await fireEvent.click(q.getByRole('option', { name: /card a heading/i }));
     await waitFor(() => {
@@ -353,7 +349,7 @@ describe('3. TimelineEditor heading edit → store.content.timelineItems reflect
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     // Wait for TimelineEditor to render with Step 1 heading input.
     await waitFor(() => {
@@ -385,7 +381,7 @@ describe('3. TimelineEditor heading edit → store.content.timelineItems reflect
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     await waitFor(() => {
       expect(q.getAllByRole('textbox', { name: /heading/i }).length).toBeGreaterThan(0);
@@ -435,7 +431,7 @@ describe('4. CardEditor edit does not stomp TimelineEditor state', () => {
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     // Select Card A to mount CardEditor.
     await fireEvent.click(q.getByRole('option', { name: /card a heading/i }));
@@ -487,7 +483,7 @@ describe('5. Bridge round-trip: applyCard → store + CardList + CardEditor refl
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     // Confirm Card A option is visible before edit.
     expect(q.getByRole('option', { name: /card a heading/i })).toBeDefined();
@@ -528,7 +524,7 @@ describe('5. Bridge round-trip: applyCard → store + CardList + CardEditor refl
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     await fireEvent.click(q.getByRole('option', { name: /card a heading/i }));
     await waitFor(() => {
@@ -576,7 +572,7 @@ describe('6. Pinia persistedstate: card heading edit produces localStorage write
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     await fireEvent.click(q.getByRole('option', { name: /card a heading/i }));
     await waitFor(() => {
@@ -720,7 +716,7 @@ describe('7. Concurrent: applyCard while applyTimeline in-flight — both resolv
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     // Both PropertyPanel blocks should be visible.
     expect(q.getByText('Cards')).toBeDefined();
@@ -751,7 +747,7 @@ describe('8. Error path: bridge error for applyCard → store rolls back → Car
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     // Select Card A to mount CardEditor.
     await fireEvent.click(q.getByRole('option', { name: /card a heading/i }));
@@ -787,7 +783,7 @@ describe('8. Error path: bridge error for applyCard → store rolls back → Car
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     await fireEvent.click(q.getByRole('option', { name: /card a heading/i }));
     await waitFor(() => {
@@ -822,9 +818,8 @@ describe('axe: additional Content tab states', () => {
     store.recordPendingRequest('req-in-flight', 'content');
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     const results = await axe.run(container as Element, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] },
@@ -842,9 +837,8 @@ describe('axe: additional Content tab states', () => {
     // (reconcileFrom already sets inFlightRequestId = null)
 
     const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
 
-    await switchToContentTab(q);
+    // Stacked panel: content section visible without tab navigation.
 
     const results = await axe.run(container as Element, {
       runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa'] },
