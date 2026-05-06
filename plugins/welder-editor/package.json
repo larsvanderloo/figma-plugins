@@ -3,10 +3,11 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "npm run build:ui && npm run build:widget",
+    "build": "npm run build:aliases && npm run build:ui && npm run build:widget",
+    "build:aliases": "node scripts/generate-lucide-aliases.mjs",
     "build:ui": "vite build",
     "build:widget": "node esbuild.config.mjs",
-    "watch": "concurrently --kill-others-on-fail \"vite build --watch\" \"node esbuild.config.mjs --watch\"",
+    "watch": "npm run build:aliases && concurrently --kill-others-on-fail \"vite build --watch\" \"node esbuild.config.mjs --watch\"",
     "dev:ui": "vite",
     "typecheck:ui": "vue-tsc --noEmit -p tsconfig.ui.json"
   },

@@ -33,6 +33,8 @@
 // FIG-GUARD-01: type-checks vóór property-access.
 // ============================================================
 
+import { expandLucideNameVariants } from '../../lucide-aliases';
+
 // ============================================================
 // Name normalisation
 // ============================================================
@@ -92,8 +94,19 @@ async function buildPrefValueCache(
   );
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
-    if (r !== null && !prefValueCache.has(r.name)) {
-      prefValueCache.set(r.name, r.key);
+    if (r === null) continue;
+    // Register the component under its own normalized name AND under
+    // every Lucide alias variant. Welder libraries built against an
+    // older Lucide version may name their components after old aliases
+    // (e.g. `badge-help`); the picker emits the current canonical name
+    // (`badge-question-mark`). Without alias expansion the lookup
+    // would silently miss. See lucide-aliases.ts for the source data.
+    const variants = expandLucideNameVariants(r.name);
+    for (let j = 0; j < variants.length; j++) {
+      const variant = variants[j];
+      if (!prefValueCache.has(variant)) {
+        prefValueCache.set(variant, r.key);
+      }
     }
   }
   console.log('[icon-swap] prefValueCache built: ' + String(prefValueCache.size) + ' entries');
