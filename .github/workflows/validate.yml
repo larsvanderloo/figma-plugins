@@ -88,6 +88,57 @@ jobs:
       - name: Build all plugins
         run: pnpm build
 
+  build-artifacts:
+    name: Build artifact validation — IIFE + singlefile checks
+    runs-on: [self-hosted, macOS, ARM64]
+    # Runs after the node job (which builds all plugins) so dist/ artifacts exist.
+    # Each job gets a fresh checkout, so we rebuild here.
+    needs: node
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    env:
+      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
+    #
+    # Checks (Sprint 3 retro action item A1):
+    #   1. dist/code.js must be an IIFE — first chars contain neither ^import nor ^export.
+    #      Regression here means the code-side bundle leaked ES module syntax, which
+    #      Figma's plugin sandbox rejects with "Unexpected token".
+    #   2. dist/ui.html (or dist/ui/index.html) must be self-contained — zero
+    #      <script src=...> or <link href=...> external references. Regression here
+    #      means vite-plugin-singlefile stopped inlining, which causes a silent load
+    #      failure inside the Figma iframe sandbox.
+    #
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Versions
+        run: |
+          node --version
+          pnpm --version
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all plugins
+        run: pnpm build
+
+      - name: Validate build artifacts (IIFE + singlefile)
+        run: |
+          set -e
+          for manifest in plugins/*/manifest.json; do
+            [ -f "$manifest" ] || continue
+            case "$manifest" in
+              plugins/_template/manifest.json)
+                echo "Skipping $manifest (template)"
+                continue
+                ;;
+            esac
+            echo "Validating build artifacts for $manifest"
+            python3 tools/validate_manifest.py --build-artifacts "$manifest"
+          done
+          echo ""
+          echo "All plugin build artifacts valid."
+
   axe:
     name: Accessibility — axe-core WCAG 2.1 AA (welder-editor)
     runs-on: [self-hosted, macOS, ARM64]
@@ -145,15 +196,21 @@ jobs:
     env:
       PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
     #
-    # Budgets from ADR-0003 (docs/adr/0003-welder-editor-bundle-budget.md):
-    #   code-side  dist/code.js  ≤ 60 KB gzipped
-    #   ui-side    dist/ui.js    ≤ 250 KB gzipped
+    # Budgets:
+    #   code-side  dist/code.js  ≤ 60 KB gzipped   (ADR-0003; unchanged)
+    #   ui-side    dist/ui.js    ≤ 320 KB gzipped   (ADR-0014; revised from 250 KB)
+    #
+    # ADR-0014 revision context: Sprint 5 Wave 1 adds Nuxt UI v4 + Tailwind v4
+    # + full Lucide offline + vue-picture-cropper. The v0.2.1 reference build
+    # benchmarks at ~280 KB gzip; 320 KB provides 14% headroom.
+    # If the post-rewire build exceeds 320 KB, apply lazy-load mitigations
+    # (vue-picture-cropper + Lucide subset) before revising the budget again.
     #
     # ARTIFACT NOTE: ADR-0003 and the perf doc originally referenced
     # dist/ui.html as the ui artifact (Vite single-file inline HTML).  The
     # Vite multi-entry config produces dist/ui.js (JS bundle) +
     # dist/ui/index.html (HTML shell, ~255 bytes).  The JS bundle
-    # dist/ui.js is the correct artifact to gate against the 250 KB budget;
+    # dist/ui.js is the correct artifact to gate against the budget;
     # dist/ui/index.html is a trivially-small shell that is not the deliverable.
     #
     # manifest.json was corrected to "ui": "dist/ui/index.html" in PR #22
@@ -185,14 +242,14 @@ jobs:
           fi
 
       - name: Bundle-size gate (ui-side)
-        # Gates dist/ui.js — the actual JS bundle produced by the Vite multi-
-        # entry build.  Budget is 250 KB per ADR-0003.
+        # Gates dist/ui.js — the actual JS bundle produced by the Vite build.
+        # Budget revised to 320 KB per ADR-0014 (was 250 KB per ADR-0003).
         run: |
           BYTES=$(gzip -c plugins/welder-editor/dist/ui.js | wc -c)
-          BUDGET=$((250 * 1024))
+          BUDGET=$((320 * 1024))
           echo "ui.js gzip = $BYTES bytes (budget $BUDGET)"
           if [ "$BYTES" -gt "$BUDGET" ]; then
-            echo "::error::dist/ui.js gzipped $BYTES bytes exceeds 250 KB budget per ADR-0003"
+            echo "::error::dist/ui.js gzipped $BYTES bytes exceeds 320 KB budget per ADR-0014"
             exit 1
           fi
 
