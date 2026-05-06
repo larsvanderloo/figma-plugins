@@ -55,18 +55,28 @@ function chunkedUiHtml(): Plugin {
       if (id !== RESOLVED_ID) return;
       const uiPath = resolve(root, 'dist/ui/index.html');
       const html = readFileSync(uiPath, 'utf-8');
-      // Base64-encode before chunking so every chunk is pure ASCII [A-Za-z0-9+/=].
-      // Without encoding, Rollup's string optimiser converts JSON string chunks
-      // to template literals; the HTML contains backticks (inlined Vue/Nuxt UI JS)
-      // which break the outer template literal with "Unexpected token {" at runtime.
-      // atob() is available in Figma's plugin sandbox. (anti-pattern 0004 fix v2)
-      const b64 = Buffer.from(html).toString('base64');
+      // Three constraints to satisfy simultaneously (anti-pattern 0004 fix v3):
+      //   1. Each chunk ≤ ~60 KB to stay under Figma's string-literal parser limit.
+      //   2. Chunks must not contain literal backticks ` or ${ — Rollup may
+      //      convert "..." string literals to template literals during minify;
+      //      those characters in the content would prematurely close the literal.
+      //   3. UTF-8 must round-trip natively — base64 + atob() in Figma returns
+      //      a Latin-1 byte string, mangling multibyte chars (em-dashes, etc.)
+      //      and crashing the inlined Vue/Nuxt UI JS at iframe-render time.
+      // Solution: JSON.stringify each chunk (UTF-8 preserved as raw bytes in JS
+      // source — JS engine reads source as UTF-8), then escape ` → ` and
+      // ${ → ${ so neither remains as a literal that would close a template
+      // literal. JS evaluates the unicode escapes at runtime, restoring the
+      // original characters in memory. No encoding/decoding, no Latin-1 detour.
       const CHUNK_SIZE = 60_000;
       const chunks: string[] = [];
-      for (let i = 0; i < b64.length; i += CHUNK_SIZE) {
-        chunks.push(JSON.stringify(b64.slice(i, i + CHUNK_SIZE)));
+      for (let i = 0; i < html.length; i += CHUNK_SIZE) {
+        const json = JSON.stringify(html.slice(i, i + CHUNK_SIZE))
+          .replace(/`/g, '\\u0060')
+          .replace(/\$\{/g, '\\u0024{');
+        chunks.push(json);
       }
-      return `export default atob([\n${chunks.join(',\n')}\n].join(''));`;
+      return `export default [\n${chunks.join(',\n')}\n].join('');`;
     },
   };
 }
