@@ -5,9 +5,9 @@
   "description": "Welder Editor — Figma plugin",
   "type": "module",
   "scripts": {
-    "dev": "vite build --watch",
+    "dev": "vite build --watch --mode development",
     "dev:ui": "vite",
-    "dev:code": "vite build --config vite.code.config.ts --watch",
+    "dev:code": "vite build --config vite.code.config.ts --watch --mode development",
     "dev:logs": "node ../../tools/dev-console-bridge/server.mjs",
     "dev:manifest": "cp manifest.dev.json manifest.json",
     "dev:manifest:restore": "git checkout -- manifest.json",
