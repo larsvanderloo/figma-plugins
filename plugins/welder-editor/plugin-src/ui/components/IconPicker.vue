@@ -18,6 +18,7 @@
 import { ref, computed, watch, onUnmounted } from 'vue';
 import { ALL_LUCIDE_ICONS } from '../lucide-icon-names';
 import { usePluginBridge } from '../composables/usePluginBridge';
+import { useIconRecents } from '../stores/useIconRecents';
 
 interface Props {
   modelValue: string;
@@ -43,32 +44,10 @@ const unsubIconsReady = onMessage(function (msg) {
 });
 onUnmounted(unsubIconsReady);
 
-// Recent icons — max 8 entries, persisted to localStorage.
-const RECENT_KEY = 'welder-icon-picker-recent';
-const MAX_RECENT = 8;
-
-function loadRecent(): string[] {
-  try {
-    var raw = localStorage.getItem(RECENT_KEY);
-    if (raw) {
-      var parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed.slice(0, MAX_RECENT);
-    }
-  } catch (e) {
-    // ignore
-  }
-  return [];
-}
-
-const recentIcons = ref<string[]>(loadRecent());
-
-function saveRecent(icons: string[]): void {
-  try {
-    localStorage.setItem(RECENT_KEY, JSON.stringify(icons));
-  } catch (e) {
-    // ignore
-  }
-}
+// Recently-picked icons. Source of truth is `useIconRecents`, which is
+// hydrated by App.vue from `figma.clientStorage` via the message bus.
+// Cross-instance: picking in any IconPicker reflects in all of them.
+const iconRecents = useIconRecents();
 
 const filtered = computed<string[]>(function () {
   var q = search.value.toLowerCase().trim();
@@ -93,17 +72,7 @@ const displayIcon = computed<string>(function () {
 });
 
 function select(name: string): void {
-  // Prepend to recent, deduplicate, cap at MAX_RECENT.
-  var updated = [name]
-    .concat(
-      recentIcons.value.filter(function (n) {
-        return n !== name;
-      }),
-    )
-    .slice(0, MAX_RECENT);
-  recentIcons.value = updated;
-  saveRecent(updated);
-
+  iconRecents.record(name);
   emit('update:modelValue', name);
   open.value = false;
   search.value = '';
@@ -198,11 +167,11 @@ function onGridScroll(event: Event): void {
 
         <template v-else>
           <!-- Recent row — alleen tonen als er recente icons zijn en search leeg is -->
-          <template v-if="recentIcons.length > 0 && search.length === 0">
+          <template v-if="iconRecents.items.length > 0 && search.length === 0">
             <p class="text-xs text-muted mb-1">Recent</p>
             <div class="grid grid-cols-6 gap-1">
               <button
-                v-for="name in recentIcons"
+                v-for="name in iconRecents.items"
                 :key="`recent-${name}`"
                 type="button"
                 class="flex items-center justify-center rounded-xl p-2.5 bg-[--ui-bg] ring-1 ring-[--ui-border] transition-colors hover:bg-[--ui-bg-elevated]"

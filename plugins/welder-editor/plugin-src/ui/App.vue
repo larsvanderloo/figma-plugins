@@ -16,7 +16,7 @@
     - Panels zelf blijven leeg — T7-T14 vullen de drie slots in.
 -->
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 
 import SlideSelector from './components/SlideSelector.vue';
 import GeneralPanel from './components/GeneralPanel.vue';
@@ -24,15 +24,23 @@ import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
 import { usePluginView } from './stores/usePluginView';
+import { useIconRecents } from './stores/useIconRecents';
 import welderLogo from './assets/welder-logo.svg';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
+const iconRecents = useIconRecents();
 
 // true until the first 'init' message arrives from main thread
 const initializing = ref<boolean>(true);
 // true while waiting for 'slide-loaded' after a slide pick
 const loadingSlide = ref<boolean>(false);
+
+// One-shot guard: when the sandbox hydrates the recents list via
+// `setItems`, the deep watcher below would otherwise echo the
+// just-loaded array back as a save. Flipped on hydration, consumed
+// by the next watcher tick.
+let skipIconRecentsSave = false;
 
 // Bind current slide via computed<get/set> zodat SlideSelector's v-model
 // direct de store muteert + een pick-slide-bericht triggert.
@@ -98,8 +106,56 @@ bridge.onMessage((msg) => {
     }
     return;
   }
+  if (msg.type === 'icon-recents') {
+    // Sandbox-driven hydration of recently-picked icon names from
+    // figma.clientStorage. If the sandbox has nothing stored AND the
+    // legacy iframe localStorage key from the pre-Pinia version still
+    // holds entries, migrate them once: populate the store, let the
+    // watcher persist them to clientStorage, and clear localStorage.
+    if (msg.items.length === 0) {
+      let migrated: string[] | null = null;
+      try {
+        const raw = localStorage.getItem('welder-icon-picker-recent');
+        if (raw !== null) {
+          const parsed = JSON.parse(raw) as unknown;
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            migrated = (parsed as string[]).slice(0, 8);
+            localStorage.removeItem('welder-icon-picker-recent');
+          }
+        }
+      } catch {
+        // ignore — corrupt or unreadable; fall through to empty
+      }
+      if (migrated !== null) {
+        // Migration path: don't skip the next save — the sandbox needs
+        // to receive these so they survive the next plugin open.
+        iconRecents.setItems(migrated);
+        return;
+      }
+    }
+    // Skip the echo-save: this setItems is hydrating from the sandbox,
+    // not a user action.
+    skipIconRecentsSave = true;
+    iconRecents.setItems(msg.items);
+    return;
+  }
   // target-updated: toekomstige save-indicator (T8+). Nu stil negeren.
 });
+
+// Persist recents to clientStorage whenever the store mutates (i.e.,
+// the user picks an icon in any IconPicker instance). The sandbox's
+// `set-icon-recents` handler writes the array verbatim.
+watch(
+  () => iconRecents.items,
+  (next) => {
+    if (skipIconRecentsSave) {
+      skipIconRecentsSave = false;
+      return;
+    }
+    bridge.post({ type: 'set-icon-recents', items: [...next] });
+  },
+  { deep: true },
+);
 
 onMounted(() => {
   bridge.post({ type: 'ui-ready' });

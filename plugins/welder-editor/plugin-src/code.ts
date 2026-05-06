@@ -914,6 +914,9 @@ let lastSlideListSignature: string = '';
 // Module-level: last-sent imageHash per imageWrapId — prevents re-posting on unrelated documentchange events.
 var lastSentPreviewHash: Map<string, string> = new Map();
 
+/** clientStorage key for the user's recently-picked icon names (max 8). */
+const ICON_RECENTS_KEY = 'icon-recents';
+
 /**
  * Bouwt een stabiele string die alleen wijzigt als de slide-list
  * inhoudelijk veranderde. Combineert id + number + name + isSkipped —
@@ -968,6 +971,29 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       type: 'init',
       slides: list.summaries,
       initialSlideId: initialSlideId,
+    });
+    // Hydrate icon-recents from clientStorage. Fire-and-forget; init
+    // doesn't block on it. UI shows an empty Recents row until this
+    // resolves (typically <50ms).
+    figma.clientStorage
+      .getAsync(ICON_RECENTS_KEY)
+      .then((value: unknown) => {
+        const items = Array.isArray(value) ? (value as string[]) : [];
+        postToUI({ type: 'icon-recents', items: items });
+      })
+      .catch((err: unknown) => {
+        console.log('[welder-slide-editor] icon-recents load failed:', err);
+        postToUI({ type: 'icon-recents', items: [] });
+      });
+    return;
+  }
+
+  if (msg.type === 'set-icon-recents') {
+    // Fire-and-forget. `useIconRecents` is the source of truth in the
+    // iframe; clientStorage is a persistence sink. A failed write only
+    // affects the next plugin open.
+    figma.clientStorage.setAsync(ICON_RECENTS_KEY, msg.items).catch((err: unknown) => {
+      console.log('[welder-slide-editor] icon-recents save failed:', err);
     });
     return;
   }

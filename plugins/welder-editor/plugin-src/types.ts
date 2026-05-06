@@ -562,6 +562,13 @@ export type UIToPluginMessage =
       slideId: string;
       skipped: boolean;
     }
+  /**
+   * Persist the user's recently-picked icon list. Sandbox writes the
+   * array to `figma.clientStorage` so it survives plugin restarts and
+   * is shared across all `IconPicker` instances. Capped at 8 entries
+   * client-side; sandbox writes verbatim.
+   */
+  | { type: 'set-icon-recents'; items: string[] }
   | { type: 'close' };
 
 /**
@@ -607,4 +614,11 @@ export type PluginToUIMessage =
       fillW: number;
       /** Hoogte van het image-slot (fill-dragende child) in Figma-pixels. 0 als onbekend. */
       fillH: number;
-    };
+    }
+  /**
+   * Initial hydration of recently-picked icons after plugin open.
+   * Sandbox reads from `figma.clientStorage` and posts the array;
+   * `useIconRecents` store calls `setItems(items)`. Empty array on
+   * first run.
+   */
+  | { type: 'icon-recents'; items: string[] };
