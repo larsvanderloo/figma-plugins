@@ -140,14 +140,23 @@ const placeholder = computed<string>(() => {
     <span class="select-none text-xs font-medium text-gray-500">Current slide</span>
 
     <!-- USelectMenu — replaces native <select> -->
+    <!-- :model-value uses explicit string coercion (selected ?? '') to satisfy
+         exactOptionalPropertyTypes: USelectMenu.modelValue is string, not string|undefined.
+         The empty-string fallback is safe because USelectMenu treats '' as unselected
+         (it won't match any item.value, which are Figma node IDs). -->
     <USelectMenu
-      v-model="selected"
+      :model-value="selected ?? ''"
       :items="items"
       value-key="value"
       :disabled="disabled"
       :placeholder="placeholder"
       size="md"
       class="min-w-[260px] max-w-[420px]"
+      @update:model-value="
+        (v: string) => {
+          selected = v;
+        }
+      "
     />
 
     <!--

@@ -182,7 +182,7 @@ function onParagraphInput(value: string | number): void {
         <UInput
           :model-value="localHeading"
           placeholder="Slide title"
-          :disabled="disabled"
+          :disabled="disabled ?? false"
           class="w-full"
           @update:model-value="onHeadingInput"
         />
@@ -197,7 +197,7 @@ function onParagraphInput(value: string | number): void {
           :model-value="localParagraph"
           :rows="3"
           :autoresize="true"
-          :disabled="disabled"
+          :disabled="disabled ?? false"
           placeholder="Paragraph text"
           class="w-full"
           @update:model-value="onParagraphInput"
