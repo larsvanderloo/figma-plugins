@@ -198,18 +198,21 @@ function populateStoreWithGraphs(
 }
 
 // ---------------------------------------------------------------------------
-// Helper: switch to Graphs tab
+// Helper: verify Graphs panel is visible
 //
-// Waits for the tab button to be present and aria-selected before proceeding.
-// If the tab is hidden (graphsNull=true), the button is absent — callers should
-// NOT call switchToGraphsTab when the tab is expected to be hidden.
+// Sprint 5 Task 5.2 / 5.16: TabStrip removed; stacked UCard panels.
+// Graphs panel is visible when graphs slice has at least one model present.
+// No tab interaction needed — just wait for the heading.
 // ---------------------------------------------------------------------------
 
 async function switchToGraphsTab(q: ReturnType<typeof within>) {
-  const graphsTab = q.getByRole('tab', { name: /^graphs$/i });
-  await fireEvent.click(graphsTab);
+  // In the stacked-panel layout, the Graphs panel is always visible when
+  // showGraphs is true. Wait for the Graphs panel heading to appear.
   await waitFor(() => {
-    expect((graphsTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
+    const graphsHeading = q.queryByRole('heading', { name: /^graphs$/i });
+    if (!graphsHeading) {
+      throw new Error('Graphs panel heading not found yet');
+    }
   });
 }
 
@@ -314,43 +317,42 @@ describe('3. journey only → only journey block, no table block', () => {
 });
 
 // ===========================================================================
-// 4. graphs.value === null → Graphs tab hidden (TabStrip promotes)
+// 4. graphs.value === null → Graphs panel absent (stacked panel v-if gating)
+//
+// Sprint 5 Task 5.2 / 5.16: TabStrip removed. Graphs panel is v-if-gated
+// by showGraphs computed (graphs !== null && at least one model present).
 // ===========================================================================
 
-describe('4. graphs.value === null → Graphs tab hidden by TabStrip', () => {
-  it('Graphs tab button is absent from the tablist when graphs is null', () => {
+describe('4. graphs.value === null → Graphs panel not rendered', () => {
+  it('Graphs panel heading is absent when graphs is null', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    // Pass graphs=null → graphsNull computed = true → TabStrip hides the tab.
     populateStoreWithGraphs(store, null);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    // The tab should not be present (TabStrip removes hidden tabs from the tablist).
-    const graphsTab = q.queryByRole('tab', { name: /^graphs$/i });
-    expect(graphsTab).toBeNull();
+    // No "Graphs" heading — UCard panel is not rendered.
+    expect(q.queryByRole('heading', { name: /^graphs$/i })).toBeNull();
   });
 });
 
 // ===========================================================================
-// 5. Both fields null → Graphs tab hidden by TabStrip
+// 5. Both fields null → Graphs panel absent (v-if gating on model presence)
 // ===========================================================================
 
-describe('5. both tableModel and journeyModel null → Graphs tab hidden by TabStrip', () => {
-  it('Graphs tab button is absent when both table and journey models are null', () => {
+describe('5. both tableModel and journeyModel null → Graphs panel not rendered', () => {
+  it('Graphs panel heading is absent when both table and journey models are null', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    // Both fields null → graphsNull computed = true.
     populateStoreWithGraphs(store, GRAPHS_BOTH_NULL);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    const graphsTab = q.queryByRole('tab', { name: /^graphs$/i });
-    expect(graphsTab).toBeNull();
+    expect(q.queryByRole('heading', { name: /^graphs$/i })).toBeNull();
   });
 });
 

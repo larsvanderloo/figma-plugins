@@ -177,10 +177,11 @@ function populateStoreWithContent(
 }
 
 async function switchToContentTab(q: ReturnType<typeof within>) {
-  const contentTab = q.getByRole('tab', { name: /^content$/i });
-  await fireEvent.click(contentTab);
+  // Sprint 5 Task 5.2 / 5.16: TabStrip removed; stacked UCard panels.
+  // Content panel is visible when content slice is non-null — no tab click needed.
   await waitFor(() => {
-    expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
+    const contentHeading = q.queryByRole('heading', { name: /^content$/i });
+    if (!contentHeading) throw new Error('Content panel heading not found yet');
   });
 }
 

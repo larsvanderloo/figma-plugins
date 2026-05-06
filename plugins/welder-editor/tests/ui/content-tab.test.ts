@@ -170,14 +170,22 @@ function populateStoreWithContent(
 }
 
 // ---------------------------------------------------------------------------
-// Helper: switch to Content tab
+// Helper: verify Content panel is visible
+//
+// Sprint 5 Task 5.2 / 5.16: TabStrip removed; stacked UCard panels.
+// Content panel is visible as long as content slice is non-null and a slide
+// is selected — no tab interaction needed.
 // ---------------------------------------------------------------------------
 
 async function switchToContentTab(q: ReturnType<typeof within>) {
-  const contentTab = q.getByRole('tab', { name: /^content$/i });
-  await fireEvent.click(contentTab);
+  // In the stacked-panel layout, the Content panel is always visible when
+  // content is non-null. Wait for the Content panel heading to appear.
   await waitFor(() => {
-    expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
+    const contentHeading = q.queryByRole('heading', { name: /^content$/i });
+    if (!contentHeading) {
+      // Panel not yet rendered — store reconcile may still be pending.
+      throw new Error('Content panel heading not found yet');
+    }
   });
 }
 
