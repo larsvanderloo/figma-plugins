@@ -196,6 +196,70 @@ jobs:
             exit 1
           fi
 
+  frame-trace-perf:
+    name: Frame-trace perf gate — TableEditor (R1)
+    runs-on: [self-hosted, macOS, ARM64]
+    # Run after the main node job so the lockfile install is cached.
+    needs: node
+    if: |
+      (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
+      (
+        github.event_name != 'pull_request' ||
+        contains(join(github.event.pull_request.labels.*.name, ','), 'perf') ||
+        true
+      )
+    env:
+      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
+    #
+    # Gating policy (R1 from docs/perf/welder-editor.md §"Frame-trace perf gate"):
+    #
+    #   BLOCKING — each PropertyPanel collapsible toggle on a 50-row × 6-col
+    #   TableEditor fixture must complete in < 16 ms (one frame at 60 Hz).
+    #   Failure = job fails = PR blocked.
+    #
+    # Path trigger: this job always runs (path filtering is not natively
+    # supported in job-level `if` without the changed-files action).
+    # The job is fast (~30 s) so the cost of running it on every non-draft PR
+    # is acceptable. Narrowing to path-specific runs can be added in a follow-up
+    # when the changed-files action is available on the self-hosted runner.
+    #
+    # Affected paths (documented for reviewers; not programmatic):
+    #   sections/TableEditor/**
+    #   components/src/PropertyPanel/**
+    #   plugins/welder-editor/code/wrappers/TableWrap.ts
+    #   plugins/welder-editor/ui/App.vue
+    #
+    # Determinism note (see docs/perf/welder-editor.md §"Frame-trace perf gate"):
+    #   The benchmark uses performance.now() in jsdom. jsdom does not execute
+    #   real CSS transitions or layout; the timing covers only Vue's reactive
+    #   update cycle and synchronous JS triggered by the toggle. Toggle 1 has
+    #   a cold-start JIT penalty (~2 ms on a warm CI runner); toggles 2–10
+    #   are in the 0.1–0.6 ms range. The gate asserts all 10 (including the
+    #   first) are < 16 ms, providing an 8× budget over the observed max.
+    #   No warm-up discard is applied; the cold-start cost is well within budget
+    #   and discarding it would mask any JIT-path regression.
+    #
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Versions
+        run: |
+          node --version
+          pnpm --version
+
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      - name: Frame-trace perf gate (TableEditor R1)
+        # Runs tests/perf.test.ts via vitest --reporter=verbose.
+        # Per-toggle timings are printed via console.warn inside the test
+        # (search for "[perf-gate]" in the job log for the timing table).
+        # The test fails (exit non-zero) if any toggle exceeds 16 ms.
+        run: |
+          pnpm --filter @figma-plugins/sections-table-editor exec \
+            vitest run --reporter=verbose tests/perf.test.ts
+
   python:
     name: Python — ruff + mypy + pytest
     runs-on: [self-hosted, macOS, ARM64]

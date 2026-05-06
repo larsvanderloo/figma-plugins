@@ -144,6 +144,57 @@ See ADR-0003 §Per-layer reduction targets — ui-side for the full detail. Summ
 
 ---
 
+## Frame-trace perf gate (R1)
+
+**Status:** Active (Sprint 4)
+**CI job:** "Frame-trace perf gate — TableEditor (R1)" in `.github/workflows/validate.yml`
+**Owner:** plugin-tester (gate definition + CI wiring); ui-engineer (regression response)
+
+### What it tests
+
+Mounts a 50-row x 6-col `TableEditor` fixture and fires 10 click events on the first PropertyPanel collapsible toggle button (Width panel). Each click + `nextTick()` round is timed with `performance.now()`. All 10 durations are printed to the job log under the `[perf-gate]` prefix.
+
+The test file lives at `sections/TableEditor/tests/perf.test.ts` (landed in PR #40, Sprint 4 task 4.1). It runs in jsdom — the timing covers Vue's reactive update cycle and any synchronous JS triggered by the toggle event, not CSS transitions or layout (jsdom does not execute either). This is the correct layer to measure the T42.21 regression fix (the jank was in Vue's diff path, not in CSS animation).
+
+### Pass criterion
+
+Every toggle must complete in < 16 ms (one frame at 60 Hz). This is the R1 merge-blocking gate for the Sprint 4 TableEditor RC. Failing the gate blocks PR merge.
+
+### Determinism design
+
+The benchmark does NOT use `vi.useFakeTimers()`. The real `performance.now()` is used because the goal is to catch actual JS-thread cost increases, not to produce reproducible mock timestamps. The benchmark runs N=10 toggles and gates on MAX < 16 ms. The MAX approach is deliberately strict: a single toggle spiking above 16 ms (e.g. due to a warm-up JIT miss on toggle 1) still fails the gate. This is intentional — the warm-up cost on the real jsdom runner is well within budget (observed cold-start peak: ~2.38 ms on the macOS arm64 runner).
+
+No warm-up discard is applied. Rationale: discard logic would mask a regression where toggle 1 starts spiking due to expensive initialization. The cold-start cost today is ~2.38 ms — 6.7x headroom against the 16 ms budget. If cold-start variance becomes a problem on slower CI machines, this decision is revisited via ADR.
+
+### Baseline evidence (PR #40 findings, 2026-05-05)
+
+Run on macOS arm64, jsdom environment, vitest 1.6.1:
+
+| Metric           | Value   |
+| ---------------- | ------- |
+| Max (10 toggles) | 2.06 ms |
+| Avg (10 toggles) | 0.37 ms |
+| Budget           | < 16 ms |
+| Headroom vs max  | 7.8x    |
+| Headroom vs avg  | 43x     |
+
+Both T42.21 fixes that produced these numbers:
+
+- **Finding 1** — offset-based stable `bodyRows` reference: no `slice()` on `bodyRows` per render cycle, no new array reference, no v-for re-key, no forced layout from Reka's `getBoundingClientRect()`.
+- **Finding 3** — memoized `truncationFlags` computed map: only re-runs when `bodyRows` or `colCount` changes, not on toggle events.
+
+### Failure handling
+
+A gate failure means a toggle exceeded 16 ms. Escalation path:
+
+1. Check the `[perf-gate]` timing table in the job log. Identify which toggle(s) failed and by how much.
+2. If the regression is in Vue's reactive diff (new computed dependency, new watcher, added reactive state): escalate to **ui-engineer**. The suspect area is `TableEditor.vue`, `PropertyPanel.vue`, or any composable called during the toggle.
+3. If the regression is in the code-side message-bus round-trip (an unintended postMessage triggered by the toggle): escalate to **figma-api-engineer**.
+4. plugin-tester files the bug on the Bugs Queue board, severity P1 (blocking, next sprint) unless the max exceeds 50 ms (one rendering frame equivalent at 20 Hz), in which case P0.
+5. The PR is blocked until the regression is resolved and the gate is green.
+
+---
+
 ## Sprint 2 measurement (post-assembly)
 
 **Measured:** 2026-05-05 — commit 2ca82e9 (PR #23, App.vue assembly, all 7 sections wired)
