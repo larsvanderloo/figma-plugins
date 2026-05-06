@@ -35,18 +35,19 @@ editor_types = ["figma", "slides"]  # matches manifest.json; FigJam excluded by 
 owner_agent = "ui-engineer"
 
 [monday]
-# TODO(project-pm): create Monday folder + duplicate the Scrum Team
-# template into workspace 6325546, then fill the IDs below and flip
-# enabled = true. See runbooks/monday-workflow.md §"Onboarding playbook".
-enabled = false
+# Monday folder "placeholder-plugin team" in workspace 6325546, duplicated
+# from the standard Scrum Team template. Sync target is the Tasks board
+# (PR events update task_status + link). Other board IDs are recorded for
+# context — the sync script only writes to Tasks.
+enabled = true
 workspace_id = "6325546"
-folder_id = ""              # TODO(project-pm): set after folder creation
-tasks_board_id = ""         # TODO(project-pm): from duplicated Scrum Team template
-sprints_board_id = ""       # TODO(project-pm)
-epics_board_id = ""         # TODO(project-pm)
-bugs_board_id = ""          # TODO(project-pm)
-retros_board_id = ""        # TODO(project-pm)
-capacity_board_id = ""      # TODO(project-pm)
+folder_id = "2996351"
+tasks_board_id = "5095985440"
+sprints_board_id = "5095985443"
+epics_board_id = "5095985447"
+bugs_board_id = "5095985444"
+retros_board_id = "5095985439"
+capacity_board_id = "5095985442"
 
 [validation]
 # Architecture: this plugin reuses the chunked-text-loader pattern (see

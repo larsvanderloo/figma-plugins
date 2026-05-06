@@ -12,7 +12,7 @@ Onboarding debt that still needs to be paid down:
 
 - **Lockfile migration.** The zip ships `package-lock.json` (npm) and the `name` field in `package.json` is `_placeholder-plugin` — neither matches the org's pnpm workspace + `@figma-plugins/...` naming convention. Until migrated, build with `npm install && npm run build` from inside this folder. TODO(project-pm + ui-engineer): migrate to pnpm workspace member, rename to `@figma-plugins/_placeholder-plugin`, drop `package-lock.json`. The `pnpm-workspace.yaml` `plugins/*` glob already picks this folder up; only the per-plugin `package.json` and lockfile need to change.
 - **Layout refactor.** Move `widget-src/code.ts` → `code/main.ts`, `widget-src/ui/` → `ui/`, `widget-src/{types,constants,slide-machine}.ts` → `shared/`, and rewire `vite.config.ts` + `esbuild.config.mjs`. See the import ADR for scope.
-- **Monday folder + Scrum Team boards.** `plugin.toml` currently has `[monday] enabled = false` with `TODO(project-pm)` placeholders for every board ID. Create the folder in workspace 6325546 and duplicate the Scrum Team template per `runbooks/monday-workflow.md`.
+- ~~**Monday folder + Scrum Team boards.**~~ Done — folder `placeholder-plugin team` (id 2996351) with the standard Scrum Team boards is wired in `plugin.toml [monday]`. Sync targets the Tasks board (id 5095985440) on PR events that carry `Resolves MON-<id>`.
 - **Real (gzipped) bundle budgets.** The numbers in `plugin.toml` `[validation]` are raw-byte placeholders pulled from the imported zip. A measured gzipped pass is required before the next release; see `docs/perf/budget.md`.
 
 ## Layout (current — deviation from canonical, see import ADR)
