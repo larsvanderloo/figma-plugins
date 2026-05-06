@@ -37,6 +37,25 @@ try {
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/vue';
 
+// ---------------------------------------------------------------------------
+// scrollIntoView shim
+//
+// jsdom does not implement Element.prototype.scrollIntoView. reka-ui's
+// ComboboxContent calls scrollIntoView on the highlighted item as the user
+// navigates with keyboard or the listbox opens. Without this shim, opening a
+// USelectMenu dropdown in tests throws "TypeError: highlightedElement.value.
+// scrollIntoView is not a function" as an unhandled error, which makes vitest
+// exit non-zero even when all test assertions pass.
+//
+// The shim is a no-op; the actual scroll behaviour is irrelevant in headless
+// jsdom tests.
+// ---------------------------------------------------------------------------
+if (typeof Element.prototype.scrollIntoView === 'undefined') {
+  Element.prototype.scrollIntoView = function (): void {
+    /* no-op in jsdom */
+  };
+}
+
 afterEach(() => {
   cleanup();
 });

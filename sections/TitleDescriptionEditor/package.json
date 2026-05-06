@@ -15,8 +15,7 @@
   "dependencies": {
     "vue": "^3.4.0",
     "@nuxt/ui": "^4.0.0",
-    "pinia": "^3",
-    "@figma-plugins/components": "workspace:*"
+    "pinia": "^3"
   },
   "devDependencies": {
     "@testing-library/vue": "^8.0.0",
