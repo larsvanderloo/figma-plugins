@@ -239,9 +239,13 @@ describe('1. Slide pick → all general sections populate', () => {
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    // Click on SLIDE_A in the picker (native <select> — fireEvent.change with value).
-    const picker = q.getByRole('combobox');
-    await fireEvent.change(picker, { target: { value: SLIDE_A.id } });
+    // Simulate slide selection via message bus (USelectMenu replaced native <select> — PR #58).
+    expect(capturedMessageHandler).not.toBeNull();
+    capturedMessageHandler!({
+      type: 'selection-changed',
+      version: 1,
+      payload: { selectedNodeIds: [SLIDE_A.id] },
+    });
 
     // Wait for the async bridge call to resolve and reactivity to flush.
     await waitFor(() => {
@@ -271,8 +275,13 @@ describe('1. Slide pick → all general sections populate', () => {
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    const picker = q.getByRole('combobox');
-    await fireEvent.change(picker, { target: { value: SLIDE_A.id } });
+    // Simulate slide selection via message bus (USelectMenu replaced native <select> — PR #58).
+    expect(capturedMessageHandler).not.toBeNull();
+    capturedMessageHandler!({
+      type: 'selection-changed',
+      version: 1,
+      payload: { selectedNodeIds: [SLIDE_A.id] },
+    });
 
     await waitFor(() => {
       expect(q.getByRole('textbox', { name: /badge label/i })).toBeDefined();
@@ -281,7 +290,9 @@ describe('1. Slide pick → all general sections populate', () => {
     expect(q.getByRole('button', { name: /replace image/i })).toBeDefined();
   });
 
-  it('active tab defaults to General after slide pick', async () => {
+  it('General and Content panels visible after slide pick (stacked panels)', async () => {
+    // Sprint 5 Task 5.2: TabStrip removed; stacked UCard panels.
+    // Both panels visible simultaneously when both slices are loaded.
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
@@ -301,22 +312,27 @@ describe('1. Slide pick → all general sections populate', () => {
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    const picker = q.getByRole('combobox');
-    await fireEvent.change(picker, { target: { value: SLIDE_A.id } });
-
-    await waitFor(() => {
-      // General tab should be the selected tab (aria-selected="true").
-      const generalTab = q.getByRole('tab', { name: /^general$/i });
-      expect((generalTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
+    // Simulate slide selection via message bus (USelectMenu replaced native <select> — PR #58).
+    expect(capturedMessageHandler).not.toBeNull();
+    capturedMessageHandler!({
+      type: 'selection-changed',
+      version: 1,
+      payload: { selectedNodeIds: [SLIDE_A.id] },
     });
 
-    // General content visible: heading input is accessible (not inside a hidden panel).
+    await waitFor(() => {
+      // General panel heading present in stacked layout.
+      const generalHeading = q.getByRole('heading', { name: /^general$/i });
+      expect(generalHeading).toBeDefined();
+    });
+
+    // General content visible: heading input accessible.
     const headingInput = q.queryByRole('textbox', { name: /heading/i });
     expect(headingInput).not.toBeNull();
 
-    // Content tab exists but is not selected (General is the default active tab).
-    const contentTab = q.getByRole('tab', { name: /^content$/i });
-    expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('false');
+    // Content panel also visible (CONTENT_FIXTURE loaded).
+    const contentHeading = q.queryByRole('heading', { name: /^content$/i });
+    expect(contentHeading).not.toBeNull();
   });
 });
 
@@ -324,10 +340,8 @@ describe('1. Slide pick → all general sections populate', () => {
 // Scenario 2: Slide pick with partial wrappers → empty sections absent
 // ---------------------------------------------------------------------------
 
-describe('2. Slide pick with partial wrappers → Badge+Image absent, General tab visible', () => {
+describe('2. Slide pick with partial wrappers → Badge+Image absent, General panel visible', () => {
   it('renders TitleDescriptionEditor but not BadgeEditor or ImageEditor when only CopyWrap present', async () => {
-    // Mount with store already showing the partial general state.
-    // (Avoids the async load path; store state is canonical for rendering.)
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
@@ -336,15 +350,13 @@ describe('2. Slide pick with partial wrappers → Badge+Image absent, General ta
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    // CopyWrap is present.
     expect(q.getByRole('textbox', { name: /heading/i })).toBeDefined();
-
-    // Badge and Image are absent.
     expect(q.queryByRole('textbox', { name: /badge label/i })).toBeNull();
     expect(q.queryByRole('button', { name: /replace image/i })).toBeNull();
   });
 
-  it('General tab is still visible (not hidden) when at least CopyWrap is present', async () => {
+  it('General panel is visible (not hidden) when at least CopyWrap is present', async () => {
+    // Sprint 5 Task 5.2: stacked panels; v-if on store.general !== null.
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
@@ -353,13 +365,13 @@ describe('2. Slide pick with partial wrappers → Badge+Image absent, General ta
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    // generalNull = false (GENERAL_COPY_ONLY !== null) so General tab is rendered.
-    const generalTab = q.queryByRole('tab', { name: /^general$/i });
-    expect(generalTab).not.toBeNull();
+    // General panel UCard heading present.
+    const generalHeading = q.queryByRole('heading', { name: /^general$/i });
+    expect(generalHeading).not.toBeNull();
   });
 
-  it('Content and Graphs tabs are hidden when their slices are null', async () => {
-    // general is present (partial); content + graphs are null.
+  it('Content and Graphs panels absent when their slices are null', async () => {
+    // Sprint 5 Task 5.2: stacked panels v-if-gated on slice non-null.
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
@@ -373,9 +385,9 @@ describe('2. Slide pick with partial wrappers → Badge+Image absent, General ta
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    // TabStrip hide-empty rule: tabs for null slices are not rendered.
-    expect(q.queryByRole('tab', { name: /^content$/i })).toBeNull();
-    expect(q.queryByRole('tab', { name: /^graphs$/i })).toBeNull();
+    // No UCard panels for Content or Graphs.
+    expect(q.queryByRole('heading', { name: /^content$/i })).toBeNull();
+    expect(q.queryByRole('heading', { name: /^graphs$/i })).toBeNull();
   });
 });
 
@@ -383,12 +395,11 @@ describe('2. Slide pick with partial wrappers → Badge+Image absent, General ta
 // Scenario 3: Slide pick with NO wrappers → empty state shown
 // ---------------------------------------------------------------------------
 
-describe('3. Slide pick with NO wrappers → empty state message, no tabs visible', () => {
+describe('3. Slide pick with NO wrappers → empty state message, no Content/Graphs panels', () => {
   it('shows "No editable general elements" message when general is non-null but all fields null', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    // general is present (generalNull = false) but all sub-fields are null.
     populateStore(store, {
       activeSlideId: SLIDE_A.id,
       general: GENERAL_EMPTY,
@@ -399,7 +410,6 @@ describe('3. Slide pick with NO wrappers → empty state message, no tabs visibl
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    // App.vue renders the section-empty StatusMessage for this case.
     const emptyMsg = q.getByText(/no editable general elements/i);
     expect(emptyMsg).toBeDefined();
   });
@@ -423,7 +433,8 @@ describe('3. Slide pick with NO wrappers → empty state message, no tabs visibl
     expect(q.queryByRole('button', { name: /replace image/i })).toBeNull();
   });
 
-  it('does not render Content or Graphs tabs when their slices are null', () => {
+  it('does not render Content or Graphs panels when their slices are null', () => {
+    // Sprint 5 Task 5.2: stacked panels; panels absent when slices are null.
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
@@ -437,8 +448,8 @@ describe('3. Slide pick with NO wrappers → empty state message, no tabs visibl
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    expect(q.queryByRole('tab', { name: /^content$/i })).toBeNull();
-    expect(q.queryByRole('tab', { name: /^graphs$/i })).toBeNull();
+    expect(q.queryByRole('heading', { name: /^content$/i })).toBeNull();
+    expect(q.queryByRole('heading', { name: /^graphs$/i })).toBeNull();
   });
 });
 
@@ -593,15 +604,18 @@ describe('5. Edit heading fails → store rolls back to pre-edit value', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Scenario 6: Tab switch → only active tab content visible
+// Scenario 6: Stacked panels — both General + Content visible simultaneously
+//
+// Sprint 5 Task 5.2: TabStrip removed. Panels are v-if-gated on store slices.
+// Both panels render simultaneously when both slices are non-null. No tab
+// switch concept exists.
 // ---------------------------------------------------------------------------
 
-describe('6. Tab switch → active tab content visible, inactive hidden', () => {
-  it('switching to Content tab shows Sprint 3 placeholder; General editors are hidden', async () => {
+describe('6. Stacked panels — General + Content both visible when both slices present', () => {
+  it('both General and Content panels visible when both slices are populated', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    // Both general and content populated so both tabs are rendered.
     populateStore(store, {
       activeSlideId: SLIDE_A.id,
       general: GENERAL_ALL,
@@ -611,63 +625,36 @@ describe('6. Tab switch → active tab content visible, inactive hidden', () => 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    // Initially on General tab — heading input visible.
+    // Both panel headings present simultaneously.
+    expect(q.getByRole('heading', { name: /^general$/i })).toBeDefined();
+    expect(q.getByRole('heading', { name: /^content$/i })).toBeDefined();
+
+    // General editors accessible.
     expect(q.getByRole('textbox', { name: /heading/i })).toBeDefined();
-
-    // Switch to Content tab.
-    const contentTab = q.getByRole('tab', { name: /^content$/i });
-    await fireEvent.click(contentTab);
-
-    // Content tab is now active. General section editors are gone.
-    // (Content tab shows the real content panel, not the old placeholder.)
-    await waitFor(() => {
-      // contentTab aria-selected=true confirms the switch landed.
-      expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
-    });
-
-    // General section editors are no longer visible.
-    expect(q.queryByRole('textbox', { name: /heading/i })).toBeNull();
   });
 
-  it('switching back to General tab from Content restores General tab as selected', async () => {
+  it('only General panel visible when content slice is null', () => {
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
     populateStore(store, {
       activeSlideId: SLIDE_A.id,
       general: GENERAL_ALL,
-      content: CONTENT_FIXTURE,
+      content: null,
     });
 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    // Switch to Content.
-    const contentTab = q.getByRole('tab', { name: /^content$/i });
-    await fireEvent.click(contentTab);
+    expect(q.getByRole('heading', { name: /^general$/i })).toBeDefined();
+    expect(q.queryByRole('heading', { name: /^content$/i })).toBeNull();
 
-    await waitFor(() => {
-      // Content tab is now selected.
-      expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
-    });
-
-    // Switch back to General.
-    const generalTab = q.getByRole('tab', { name: /^general$/i });
-    await fireEvent.click(generalTab);
-
-    await waitFor(() => {
-      // General tab is selected again; heading input is accessible (not hidden).
-      expect((generalTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
-      expect(q.getByRole('textbox', { name: /heading/i })).toBeDefined();
-    });
-
-    // Content tab is deselected.
-    expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('false');
+    // General editors still accessible.
+    expect(q.getByRole('textbox', { name: /heading/i })).toBeDefined();
   });
 
-  it('local activeTab ref is not stored in Pinia (no store mutation on tab switch)', async () => {
-    // Tab state is local ref in App.vue (per PR #6 / ADR-0010 §3.1 ESLint rule).
-    // Verifying: store has no "activeTab" or similar property that changes.
+  it('store sync state unchanged when viewing populated panels (no bridge call)', () => {
+    // Verifying: viewing panels does not trigger any store mutation.
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
@@ -679,17 +666,11 @@ describe('6. Tab switch → active tab content visible, inactive hidden', () => 
 
     const syncBefore = { ...store.sync };
 
-    const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
+    render(App, { global: { plugins: [pinia] } });
 
-    const contentTab = q.getByRole('tab', { name: /^content$/i });
-    await fireEvent.click(contentTab);
-
-    // sync state should be unchanged (no bridge call, no request pending).
+    // sync state unchanged (no bridge call, no request pending from rendering alone).
     expect(store.sync.inFlightRequestId).toBe(syncBefore.inFlightRequestId);
     expect(store.sync.reconciling).toBe(syncBefore.reconciling);
-
-    // activeSlideId should be unchanged (switching tabs doesn't change the slide).
     expect(store.activeSlideId).toBe(SLIDE_A.id);
   });
 });
@@ -743,8 +724,7 @@ describe('7. selection-changed bridge message → active slide updates in SlideP
 
     mockPostAndWait.mockResolvedValueOnce(makeSlideLoadResult(SLIDE_B.id, GENERAL_COPY_ONLY));
 
-    const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
+    render(App, { global: { plugins: [pinia] } });
 
     expect(capturedMessageHandler).not.toBeNull();
 
@@ -754,10 +734,10 @@ describe('7. selection-changed bridge message → active slide updates in SlideP
       payload: { selectedNodeIds: [SLIDE_B.id] },
     });
 
-    // Wait for the picker's selected value to update to slide B.
+    // Wait for the store's activeSlideId to update to slide B.
+    // USelectMenu replaced native <select> (PR #58); picker.value no longer applies.
     await waitFor(() => {
-      const picker = q.getByRole('combobox') as HTMLSelectElement;
-      expect(picker.value).toBe(SLIDE_B.id);
+      expect(store.activeSlideId).toBe(SLIDE_B.id);
     });
   });
 

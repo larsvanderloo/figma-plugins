@@ -189,10 +189,11 @@ function populateStoreWithGraphs(
 }
 
 async function switchToGraphsTab(q: ReturnType<typeof within>) {
-  const graphsTab = q.getByRole('tab', { name: /^graphs$/i });
-  await fireEvent.click(graphsTab);
+  // Sprint 5 Task 5.2 / 5.16: TabStrip removed; stacked UCard panels.
+  // Graphs panel visible when showGraphs is true — no tab click needed.
   await waitFor(() => {
-    expect((graphsTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
+    const graphsHeading = q.queryByRole('heading', { name: /^graphs$/i });
+    if (!graphsHeading) throw new Error('Graphs panel heading not found yet');
   });
 }
 
@@ -665,7 +666,9 @@ describe('6. Concurrent: table and journey optimisticallyApply are slice-indepen
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithGraphs(store, GRAPHS_BOTH);
+    // general: null — GENERAL_MINIMAL renders a "Heading" textbox (General panel)
+    // that causes getByRole('textbox',{name:/heading/i}) to find multiple elements.
+    populateStoreWithGraphs(store, GRAPHS_BOTH, null);
 
     // Mark a request as in-flight (simulates concurrent dispatch state).
     store.recordPendingRequest('corr-concurrent-ui', 'graphs');
