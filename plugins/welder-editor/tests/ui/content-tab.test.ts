@@ -170,14 +170,22 @@ function populateStoreWithContent(
 }
 
 // ---------------------------------------------------------------------------
-// Helper: switch to Content tab
+// Helper: verify Content panel is visible
+//
+// Sprint 5 Task 5.2 / 5.16: TabStrip removed; stacked UCard panels.
+// Content panel is visible as long as content slice is non-null and a slide
+// is selected — no tab interaction needed.
 // ---------------------------------------------------------------------------
 
 async function switchToContentTab(q: ReturnType<typeof within>) {
-  const contentTab = q.getByRole('tab', { name: /^content$/i });
-  await fireEvent.click(contentTab);
+  // In the stacked-panel layout, the Content panel is always visible when
+  // content is non-null. Wait for the Content panel heading to appear.
   await waitFor(() => {
-    expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
+    const contentHeading = q.queryByRole('heading', { name: /^content$/i });
+    if (!contentHeading) {
+      // Panel not yet rendered — store reconcile may still be pending.
+      throw new Error('Content panel heading not found yet');
+    }
   });
 }
 
@@ -318,7 +326,10 @@ describe('5. selecting a card in CardList → CardEditor renders that card', () 
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // Pass general: null so the General panel (with its own "Heading" textbox) does
+    // not render. Without this, getByRole('textbox', { name: /heading/i }) finds both
+    // the slide TitleDescriptionEditor heading and the CardEditor heading (ambiguous).
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
@@ -348,7 +359,9 @@ describe('6. CardEditor update:heading → useEditorActions.applyCard dispatched
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_CARDS_ONLY);
+    // Pass general: null — isolate the Content panel so the only "Heading" textbox is
+    // the CardEditor's, preventing getByRole ambiguity with TitleDescriptionEditor.
+    populateStoreWithContent(store, CONTENT_CARDS_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_CARD_SUCCESS);
 
@@ -401,7 +414,10 @@ describe('7. TimelineEditor update:itemHeading → useEditorActions.applyTimelin
     const pinia = createPinia();
     setActivePinia(pinia);
     const store = useEditorStore();
-    populateStoreWithContent(store, CONTENT_TIMELINE_ONLY);
+    // Pass general: null — without this, GENERAL_ALL renders TitleDescriptionEditor whose
+    // "Heading" input is the first match of getAllByRole('textbox',{name:/heading/i})[0],
+    // so the test edits the slide heading instead of the Step 1 timeline heading.
+    populateStoreWithContent(store, CONTENT_TIMELINE_ONLY, null);
 
     mockPostAndWait.mockResolvedValue(APPLY_TIMELINE_SUCCESS);
 

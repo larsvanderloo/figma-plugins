@@ -29,7 +29,11 @@ export function useRouter(): { push: () => void; replace: () => void } {
   };
 }
 
-export function useRoute(): { path: string; query: Record<string, string>; params: Record<string, string> } {
+export function useRoute(): {
+  path: string;
+  query: Record<string, string>;
+  params: Record<string, string>;
+} {
   return { path: '/', query: {}, params: {} };
 }
 

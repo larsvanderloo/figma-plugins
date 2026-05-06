@@ -2,33 +2,31 @@
 /**
  * App.vue — Welder Editor iframe root.
  *
- * Sprint 2 assembly: wires all 7 sections + Pinia store + usePluginBridge
- * into the plugin's single-screen layout.
+ * Sprint 5 Task 5.2 — App.vue chrome rewrite.
+ * Replaces TabStrip + tab panels with stacked <UCard> panels.
+ * Wraps root in <UApp> per ADR-0013 (Nuxt UI v4 recovery step 5).
+ * Adds <USkeleton> loaders for slow paths.
  *
  * Layout:
- *   ┌─────────────────────────┐
- *   │  SlidePicker            │  always visible
- *   │  TabStrip               │  always visible (hides empty tabs)
- *   │  ┌──────────────────┐   │
- *   │  │ general panel    │   │  visible when store.general != null
- *   │  │ content panel    │   │  Sprint 3 placeholder
- *   │  │ graphs panel     │   │  Sprint 4 placeholder
- *   │  └──────────────────┘   │
- *   └─────────────────────────┘
+ *   <UApp>
+ *     SlidePicker (always visible)
+ *     [empty state OR stacked UCard panels]
+ *       UCard v-if="general && activeSlideId"
+ *         General panel: TitleDescriptionEditor / BadgeEditor+IconPicker / ImageEditor
+ *       UCard v-if="content && activeSlideId"
+ *         Content panel: CardList / CardEditor / TimelineEditor
+ *       UCard v-if="graphs && activeSlideId (with tableModel or journeyModel)"
+ *         Graphs panel: TableEditor / JourneyEditor
  *
  * Data flow (ADR-0010):
- *   message-bus → usePluginBridge.onMessage → store actions (reconcileFrom /
- *   applySlide*) → computed derived state → section props
- *
- *   section emit → useEditorActions handler → optimistic store write +
- *   bridge.postAndWait → store result write / rollback
+ *   message-bus → usePluginBridge.onMessage → store actions → computed state → props
+ *   component emit → useEditorActions handler → optimistic store write + bridge
  *
  * Mutation discipline (ADR-0010 §3.1):
- *   App.vue NEVER writes to the store directly. All writes go through
- *   useEditorActions. Sections NEVER import the store — data arrives via
- *   props; user events arrive via emits wired here.
+ *   App.vue NEVER writes to the store directly. All writes via useEditorActions.
+ *   Components do NOT import the store.
  *
- * Owner: ui-engineer. Resolves MON-2893895223 (Sprint 2, Task 2.9).
+ * Owner: ui-engineer. Resolves MON-2894436938 (Sprint 5, Task 5.2).
  */
 
 import { ref, computed } from 'vue';
@@ -39,29 +37,22 @@ import { useEditorStore } from './stores/useEditorStore.js';
 import { useEditorActions } from './composables/useEditorActions.js';
 import { usePluginBridge } from './composables/usePluginBridge.js';
 
-// ---- Sections ----
-import { SlidePicker } from '@figma-plugins/sections-slide-picker';
-import { TabStrip } from '@figma-plugins/sections-tab-strip';
-import type { TabId } from '@figma-plugins/sections-tab-strip';
-import { PropertyPanel } from '@figma-plugins/sections-property-panel';
-import { TitleDescriptionEditor } from '@figma-plugins/sections-title-description-editor';
-import { BadgeEditor } from '@figma-plugins/sections-badge-editor';
-import { IconPicker } from '@figma-plugins/sections-icon-picker';
-import { ImageEditor } from '@figma-plugins/sections-image-editor';
-import type { Transform } from '@figma-plugins/sections-image-editor';
-import { CardList } from '@figma-plugins/sections-card-list';
-import { CardEditor } from '@figma-plugins/sections-card-editor/CardEditor';
-import type { CardItem } from '@figma-plugins/sections-card-editor/CardEditor';
-import { TimelineEditor } from '@figma-plugins/sections-timeline-editor/TimelineEditor';
-import { TableEditor } from '@figma-plugins/sections-table-editor';
-import type { TableRow as CsvTableRow } from '@figma-plugins/sections-table-editor';
-import { JourneyEditor } from '@figma-plugins/sections-journey-editor/JourneyEditor';
+// ---- Components (explicit named imports — no auto-import for local components) ----
+import SlidePicker from '@/components/SlidePicker.vue';
+import PropertyPanel from '@/components/PropertyPanel.vue';
+import TitleDescriptionEditor from '@/components/TitleDescriptionEditor.vue';
+import BadgeEditor from '@/components/BadgeEditor.vue';
+import IconPicker from '@/components/IconPicker.vue';
+import ImageEditor from '@/components/ImageEditor.vue';
+import CardList from '@/components/CardList.vue';
+import CardEditor from '@/components/CardEditor.vue';
+import TimelineEditor from '@/components/TimelineEditor.vue';
+import TableEditor from '@/components/TableEditor.vue';
+import type { TableRow as CsvTableRow } from '@/components/csv-schema.js';
+import JourneyEditor from '@/components/JourneyEditor.vue';
 
 // ---- Shared message types ----
 import type { Message } from '@shared/messages.js';
-
-// ---- Components ----
-import { StatusMessage } from '@figma-plugins/components';
 
 // ---------------------------------------------------------------------------
 // Store + reactive refs
@@ -71,44 +62,19 @@ const store = useEditorStore();
 const actions = useEditorActions();
 const bridge = usePluginBridge();
 
-// Destructure the slices we need as reactive refs (storeToRefs preserves
-// reactivity without triggering the pinia-mutation ESLint rule).
 const { slides, activeSlideId, general, content, graphs, sync } = storeToRefs(store);
 
 // ---------------------------------------------------------------------------
-// Section-level ephemeral state — NOT stored in Pinia (per Sprint 2 task 2.2
-// review note: section-local ephemeral state lives in App.vue, not the store).
-// ---------------------------------------------------------------------------
-
-/** Active tab id for TabStrip. Local ref; TabStrip auto-promotes on hide-empty. */
-const activeTab = ref<TabId>('general');
-
-// ---------------------------------------------------------------------------
 // Bridge: handle inbound messages from the code side
-//
-// usePluginBridge.onMessage is called inside setup() so auto-unsubscribe on
-// component unmount is active (getCurrentInstance() !== null).
-//
-// Messages handled here:
-//   'init'               — initial slide list + optional pre-selection
-//   'selection-changed'  — Figma selection changed; auto-load if known slide
-//   'page-changed'       — page switched; refresh slide list
-//   'error'              — unhandled code-side exception; surface to user
-//
-// Messages handled via postAndWait in useEditorActions (not here):
-//   slide-list:result, slide-load:result, apply-*:result
 // ---------------------------------------------------------------------------
 
-/** Top-level bus error message; shown in a StatusMessage alert. */
 const busError = ref<string | null>(null);
 
 bridge.onMessage((msg: Message) => {
   switch (msg.type) {
     case 'init': {
-      // The init message carries the initial slide list and, optionally, a
-      // pre-selected slide id (canvas selection at plugin-open time).
       store.reconcileFrom({
-        fileKey: '', // figma-api-engineer will add fileKey to init in v0.2.0
+        fileKey: '',
         slides: msg.payload.slides,
         activeSlideId: msg.payload.initialSlideId,
         general: null,
@@ -116,7 +82,6 @@ bridge.onMessage((msg: Message) => {
         graphs: null,
       });
 
-      // If the code side already resolved a slide, load it immediately.
       if (msg.payload.initialSlideId !== null) {
         void actions.loadSlide(msg.payload.initialSlideId);
       }
@@ -124,7 +89,6 @@ bridge.onMessage((msg: Message) => {
     }
 
     case 'selection-changed': {
-      // If the newly selected node ids include a known slide, auto-load it.
       const selectedSlide = slides.value.find((s) => msg.payload.selectedNodeIds.includes(s.id));
       if (selectedSlide !== undefined) {
         void actions.loadSlide(selectedSlide.id);
@@ -133,8 +97,6 @@ bridge.onMessage((msg: Message) => {
     }
 
     case 'page-changed': {
-      // Refresh the slide picker; clear per-slide state optimistically so
-      // stale section content does not remain on screen while the new list arrives.
       store.reconcileFrom({
         fileKey: sync.value.fileKey,
         slides: msg.payload.slides,
@@ -150,54 +112,43 @@ bridge.onMessage((msg: Message) => {
       busError.value = msg.payload.message;
       break;
     }
-
-    // All result messages (slide-list:result, slide-load:result, apply-*:result)
-    // are handled by useEditorActions via postAndWait — they resolve their
-    // pending correlationId Promises directly in usePluginBridge and never
-    // reach this switch.
   }
 });
 
 // ---------------------------------------------------------------------------
-// Derived state for section props
+// Derived state
 // ---------------------------------------------------------------------------
 
-/**
- * True while any request is in-flight or a reconcile is in progress.
- * Used to show the SlidePicker loading state.
- */
 const isLoading = computed<boolean>(
   () => sync.value.inFlightRequestId !== null || sync.value.reconciling,
 );
 
-/**
- * True when no slide is selected. Drives the "pick a slide" empty state.
- */
 const noSlideSelected = computed<boolean>(() => activeSlideId.value === null);
 
 /**
- * TabStrip hide-empty props: pass null-ness of each slice.
+ * Show General panel when general is non-null and a slide is selected.
  */
-const generalNull = computed<boolean>(() => general.value === null);
-const contentNull = computed<boolean>(() => content.value === null);
-/**
- * TabStrip hide-empty: the Graphs tab is hidden when graphs itself is null OR
- * when both tableModel and journeyModel are null (no graphs content on this slide).
- */
-const graphsNull = computed<boolean>(
-  () =>
-    graphs.value === null ||
-    (graphs.value.tableModel === null && graphs.value.journeyModel === null),
-);
+const showGeneral = computed<boolean>(() => general.value !== null && activeSlideId.value !== null);
 
 /**
- * Section disabled flag: disable all editors when no slide is selected or a
- * request is in-flight.
+ * Show Content panel when content is non-null and a slide is selected.
  */
+const showContent = computed<boolean>(() => content.value !== null && activeSlideId.value !== null);
+
+/**
+ * Show Graphs panel when graphs is non-null and has at least one model, and a slide is selected.
+ */
+const showGraphs = computed<boolean>(
+  () =>
+    graphs.value !== null &&
+    activeSlideId.value !== null &&
+    (graphs.value.tableModel !== null || graphs.value.journeyModel !== null),
+);
+
 const sectionsDisabled = computed<boolean>(() => noSlideSelected.value || isLoading.value);
 
 // ---------------------------------------------------------------------------
-// SlidePicker event handler
+// SlidePicker handler
 // ---------------------------------------------------------------------------
 
 function handleSlideSelect(slideId: string): void {
@@ -205,34 +156,26 @@ function handleSlideSelect(slideId: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// TitleDescriptionEditor event handler
-//
-// The section emits { heading, paragraph } — App.vue builds the full
-// message-bus payload by adding copyWrapId from the store slice.
+// TitleDescriptionEditor handler
 // ---------------------------------------------------------------------------
 
 function handleTitleDescriptionUpdate(patch: { heading: string; paragraph: string | null }): void {
   if (general.value === null || general.value.titleDescription === null) return;
-
   const { copyWrapId } = general.value.titleDescription;
-
   void actions.applyTitleDescription({
     copyWrapId,
     heading: patch.heading,
-    // paragraph is optional in the message contract; omit if null (no paragraph node)
     ...(patch.paragraph !== null ? { paragraph: patch.paragraph } : {}),
   });
 }
 
 // ---------------------------------------------------------------------------
-// BadgeEditor event handler
+// BadgeEditor handler
 // ---------------------------------------------------------------------------
 
 function handleBadgeUpdate(patch: { label: string; icon: string }): void {
   if (general.value === null || general.value.badge === null) return;
-
   const { badgeNodeId } = general.value.badge;
-
   void actions.applyBadge({
     badgeNodeId,
     label: patch.label,
@@ -241,66 +184,46 @@ function handleBadgeUpdate(patch: { label: string; icon: string }): void {
 }
 
 // ---------------------------------------------------------------------------
-// ImageEditor event handlers
+// ImageEditor handlers
 // ---------------------------------------------------------------------------
 
 function handleImageUpdate(bytes: Uint8Array): void {
   if (general.value === null || general.value.image === null) return;
-
   const { imageWrapId } = general.value.image;
-
   void actions.applyImage({ imageWrapId, bytes });
 }
 
-function handleCropTransformUpdate(_transform: Transform): void {
-  // apply-crop is a v0.2.0 action — not wired in Sprint 2.
-  // The emit is accepted and silently dropped so ImageEditor renders without error.
+function handleCropTransformUpdate(
+  _transform: [[number, number, number], [number, number, number]],
+): void {
+  // apply-crop is v0.2.0 — accepted and silently dropped so ImageEditor renders without error.
 }
 
 // ---------------------------------------------------------------------------
-// Content tab — ephemeral state
-//
-// selectedCardNodeId tracks which card row is active in CardList.
-// It is section-local ephemeral state (per Sprint 2 task 2.2 review note):
-// lives in App.vue, not in the store, because it has no message-bus relevance.
-//
-// It resets to null whenever the content slice changes (new slide loaded).
+// Content panel — CardList ephemeral state
 // ---------------------------------------------------------------------------
 
 const selectedCardNodeId = ref<string | null>(null);
 
-/**
- * The CardItem currently selected in CardList.
- * null when no card is selected or content is null.
- * Drives whether CardEditor is shown and which card it edits.
- */
+import type { CardItem } from '@shared/messages.js';
+
 const selectedCard = computed<CardItem | null>(() => {
   if (content.value === null || selectedCardNodeId.value === null) return null;
   return content.value.cards.find((c) => c.cardNodeId === selectedCardNodeId.value) ?? null;
 });
 
-/**
- * True when cards block should be shown: content is loaded AND has cards.
- */
 const hasCards = computed<boolean>(() => content.value !== null && content.value.cards.length > 0);
 
-/**
- * True when timeline block should be shown: content is loaded AND has items.
- */
 const hasTimeline = computed<boolean>(
   () => content.value !== null && content.value.timelineItems.length > 0,
 );
 
-/**
- * True when content is loaded but both cards AND timeline are empty.
- * Drives the "No cards or timeline items on this slide" status message.
- */
 const contentLoadedButEmpty = computed<boolean>(
   () => content.value !== null && !hasCards.value && !hasTimeline.value,
 );
 
 // ---------------------------------------------------------------------------
-// Content tab — CardList event handler
+// CardList handler
 // ---------------------------------------------------------------------------
 
 function handleCardSelect(cardNodeId: string): void {
@@ -308,66 +231,39 @@ function handleCardSelect(cardNodeId: string): void {
 }
 
 // ---------------------------------------------------------------------------
-// Content tab — CardEditor event handlers
-//
-// Each emit mirrors one optional field in the apply-card message payload.
-// App.vue dispatches; CardEditor/CardList are dumb renderers.
+// CardEditor handlers
 // ---------------------------------------------------------------------------
 
 function handleCardHeadingUpdate(payload: { cardNodeId: string; heading: string }): void {
-  void actions.applyCard({
-    cardNodeId: payload.cardNodeId,
-    heading: payload.heading,
-  });
+  void actions.applyCard({ cardNodeId: payload.cardNodeId, heading: payload.heading });
 }
 
 function handleCardParagraphUpdate(payload: { cardNodeId: string; paragraph: string }): void {
-  void actions.applyCard({
-    cardNodeId: payload.cardNodeId,
-    paragraph: payload.paragraph,
-  });
+  void actions.applyCard({ cardNodeId: payload.cardNodeId, paragraph: payload.paragraph });
 }
 
 function handleCardIconUpdate(payload: { cardNodeId: string; iconName: string }): void {
-  void actions.applyCard({
-    cardNodeId: payload.cardNodeId,
-    icon: payload.iconName,
-  });
+  void actions.applyCard({ cardNodeId: payload.cardNodeId, icon: payload.iconName });
 }
 
 function handleCardVisualUpdate(payload: { cardNodeId: string; bytes: Uint8Array }): void {
-  // Visual updates for cards are future-wired (requires card imageWrapId from the
-  // code side — not yet in the message contract). Accept and drop for now so
-  // CardEditor renders without error; the ImageEditor button is non-destructive.
-  void payload;
+  void payload; // v0.2.0 — accepted and dropped
 }
 
 // ---------------------------------------------------------------------------
-// Content tab — TimelineEditor event handlers
+// TimelineEditor handlers
 // ---------------------------------------------------------------------------
 
 function handleTimelineItemHeadingUpdate(payload: { itemId: string; value: string }): void {
-  void actions.applyTimeline({
-    copyWrapNodeId: payload.itemId,
-    heading: payload.value,
-  });
+  void actions.applyTimeline({ copyWrapNodeId: payload.itemId, heading: payload.value });
 }
 
 function handleTimelineItemParagraphUpdate(payload: { itemId: string; value: string }): void {
-  void actions.applyTimeline({
-    copyWrapNodeId: payload.itemId,
-    paragraph: payload.value,
-  });
+  void actions.applyTimeline({ copyWrapNodeId: payload.itemId, paragraph: payload.value });
 }
 
 // ---------------------------------------------------------------------------
-// Graphs tab — TableEditor event handlers
-//
-// applyTable is a full-state PUT. Each per-field emit applies the delta to a
-// copy of the current store model and dispatches the complete desired model.
-// App.vue reads graphs.value.tableModel; sections never read the store directly.
-//
-// Payloads mirror TableEditorEmits exactly (slotId comes from tableData.slotId).
+// TableEditor handlers
 // ---------------------------------------------------------------------------
 
 function handleTableWidth(payload: { slotId: string; width: 'sm' | 'md' | 'lg' }): void {
@@ -400,21 +296,16 @@ function handleTableRowCount(payload: { slotId: string; delta: 1 | -1 }): void {
   const rows = [...model.rows];
 
   if (payload.delta === 1) {
-    // Add an empty row matching the existing column count.
     const colCount = rows[0]?.cells.length ?? 0;
     rows.push({
       rowNodeId: '',
       cells: Array.from({ length: colCount }, () => ({ cellNodeId: '', value: '' })),
     });
   } else {
-    // Remove the last row (guard: at least 1 row must remain).
     if (rows.length > 1) rows.pop();
   }
 
-  void actions.applyTable({
-    slotId: payload.slotId,
-    desired: { ...model, rows },
-  });
+  void actions.applyTable({ slotId: payload.slotId, desired: { ...model, rows } });
 }
 
 function handleTableColCount(payload: { slotId: string; delta: 1 | -1 }): void {
@@ -431,10 +322,7 @@ function handleTableColCount(payload: { slotId: string; delta: 1 | -1 }): void {
     return { ...row, cells };
   });
 
-  void actions.applyTable({
-    slotId: payload.slotId,
-    desired: { ...model, rows },
-  });
+  void actions.applyTable({ slotId: payload.slotId, desired: { ...model, rows } });
 }
 
 function handleTableCell(payload: {
@@ -454,30 +342,17 @@ function handleTableCell(payload: {
     return { ...row, cells };
   });
 
-  void actions.applyTable({
-    slotId: payload.slotId,
-    desired: { ...model, rows },
-  });
+  void actions.applyTable({ slotId: payload.slotId, desired: { ...model, rows } });
 }
 
 function handleTableReplaceContent(payload: { slotId: string; rows: CsvTableRow[] }): void {
   if (graphs.value === null || graphs.value.tableModel === null) return;
   const model = graphs.value.tableModel;
-
-  // CsvTableRow already carries rowNodeId + cells[].cellNodeId — pass through
-  // directly. New rows from CSV import will have empty string ids, which is the
-  // correct sentinel for "not yet on canvas" per the shared model contract.
-  void actions.applyTable({
-    slotId: payload.slotId,
-    desired: { ...model, rows: payload.rows },
-  });
+  void actions.applyTable({ slotId: payload.slotId, desired: { ...model, rows: payload.rows } });
 }
 
 // ---------------------------------------------------------------------------
-// Graphs tab — JourneyEditor event handlers
-//
-// applyJourney is a full-state PUT. Each diff-based emit from JourneyEditor
-// applies its delta to a copy of the current store model before dispatch.
+// JourneyEditor handlers
 // ---------------------------------------------------------------------------
 
 function handleJourneyColumnHeader(payload: {
@@ -497,10 +372,7 @@ function handleJourneyColumnHeader(payload: {
     };
   });
 
-  void actions.applyJourney({
-    slotId: payload.slotId,
-    desired: { ...model, columns },
-  });
+  void actions.applyJourney({ slotId: payload.slotId, desired: { ...model, columns } });
 }
 
 function handleJourneyItemLabel(payload: { itemId: string; label: string }): void {
@@ -511,10 +383,7 @@ function handleJourneyItemLabel(payload: { itemId: string; label: string }): voi
     item.itemNodeId === payload.itemId ? { ...item, label: payload.label } : item,
   );
 
-  void actions.applyJourney({
-    slotId: model.slotId,
-    desired: { ...model, items },
-  });
+  void actions.applyJourney({ slotId: model.slotId, desired: { ...model, items } });
 }
 
 function handleJourneyItemIcon(payload: { itemId: string; icon: string }): void {
@@ -525,10 +394,7 @@ function handleJourneyItemIcon(payload: { itemId: string; icon: string }): void 
     item.itemNodeId === payload.itemId ? { ...item, icon: payload.icon } : item,
   );
 
-  void actions.applyJourney({
-    slotId: model.slotId,
-    desired: { ...model, items },
-  });
+  void actions.applyJourney({ slotId: model.slotId, desired: { ...model, items } });
 }
 
 function handleJourneyItemRange(payload: {
@@ -548,63 +414,65 @@ function handleJourneyItemRange(payload: {
     };
   });
 
-  void actions.applyJourney({
-    slotId: model.slotId,
-    desired: { ...model, items },
-  });
+  void actions.applyJourney({ slotId: model.slotId, desired: { ...model, items } });
 }
 </script>
 
 <template>
-  <div class="welder-editor">
-    <!--
-      Bus-level error: shown when code side sends an unhandled 'error' message.
-      role="alert" on StatusMessage (variant="alert") announces immediately.
-      Sits at the top so it is visible regardless of tab state.
-    -->
-    <StatusMessage
-      v-if="busError !== null"
-      :message="busError"
-      variant="alert"
-      class="welder-editor__bus-error"
-    />
-
-    <!-- ------------------------------------------------------------------ -->
-    <!-- SlidePicker — always visible                                         -->
-    <!-- ------------------------------------------------------------------ -->
-    <div class="welder-editor__slide-picker">
-      <SlidePicker
-        :slides="slides"
-        :active-slide-id="activeSlideId"
-        :loading="isLoading"
-        @select="handleSlideSelect"
+  <UApp>
+    <main class="welder-editor">
+      <!--
+        Bus-level error — role="alert" announces immediately via UAlert.
+        Sits at top so it's visible regardless of panel state.
+      -->
+      <UAlert
+        v-if="busError !== null"
+        color="error"
+        variant="subtle"
+        :description="busError"
+        role="alert"
+        class="welder-editor__bus-error"
       />
-    </div>
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Empty state: no slide selected                                       -->
-    <!-- The TabStrip + editors are hidden until the user picks a slide so  -->
-    <!-- that sections don't render with null models.                         -->
-    <!-- ------------------------------------------------------------------ -->
-    <div v-if="noSlideSelected" class="welder-editor__empty-state">
-      <StatusMessage message="Pick a slide above to start editing" variant="status" />
-    </div>
+      <!-- ------------------------------------------------------------------ -->
+      <!-- SlidePicker — always visible                                         -->
+      <!-- ------------------------------------------------------------------ -->
+      <div class="welder-editor__slide-picker">
+        <SlidePicker
+          :slides="slides"
+          :active-slide-id="activeSlideId"
+          :loading="isLoading"
+          @select="handleSlideSelect"
+        />
+      </div>
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Main editing surface: visible when a slide is selected              -->
-    <!-- ------------------------------------------------------------------ -->
-    <template v-else>
-      <!-- TabStrip — active-tab is section-local ephemeral state (ref above) -->
-      <TabStrip
-        v-model:model-value="activeTab"
-        :general-null="generalNull"
-        :content-null="contentNull"
-        :graphs-null="graphsNull"
-      >
-        <!-- ---------------------------------------------------------------- -->
-        <!-- General tab                                                        -->
-        <!-- ---------------------------------------------------------------- -->
-        <template #general>
+      <!-- ------------------------------------------------------------------ -->
+      <!-- Empty state: no slide selected                                       -->
+      <!-- ------------------------------------------------------------------ -->
+      <div v-if="noSlideSelected" class="welder-editor__empty-state">
+        <p class="welder-editor__empty-text" role="status" aria-live="polite">
+          Pick a slide above to start editing
+        </p>
+      </div>
+
+      <!-- ------------------------------------------------------------------ -->
+      <!-- Stacked panels — visible when a slide is selected                   -->
+      <!-- ------------------------------------------------------------------ -->
+      <template v-else>
+        <!-- ================================================================ -->
+        <!-- General panel                                                      -->
+        <!-- v-if gated by store.general !== null                              -->
+        <!-- ================================================================ -->
+        <UCard v-if="showGeneral" class="welder-editor__panel">
+          <template #header>
+            <h2 class="welder-editor__panel-heading">General</h2>
+          </template>
+
+          <!--
+            USkeleton loaders shown while general data is loading.
+            Loading: sync.inFlightRequestId !== null AND general is null.
+            (When general is non-null showGeneral is true — skeletons not needed.)
+          -->
           <div class="welder-editor__panel-stack">
             <!-- TitleDescriptionEditor -->
             <PropertyPanel
@@ -618,19 +486,13 @@ function handleJourneyItemRange(payload: {
               />
             </PropertyPanel>
 
-            <!-- BadgeEditor (with IconPicker wired into the icon-picker slot) -->
+            <!-- BadgeEditor + IconPicker slot -->
             <PropertyPanel v-if="general !== null && general.badge !== null" title="Badge">
               <BadgeEditor
                 :model="general.badge"
                 :disabled="sectionsDisabled"
                 @update:model="handleBadgeUpdate"
               >
-                <!--
-                  icon-picker slot contract from BadgeEditor:
-                    icon     — current Lucide key string
-                    onChange — callback with the new Lucide key
-                    disabled — forwarded from BadgeEditor's disabled prop
-                -->
                 <template #icon-picker="{ icon, onChange, disabled: slotDisabled }">
                   <IconPicker
                     :model-value="icon"
@@ -651,12 +513,7 @@ function handleJourneyItemRange(payload: {
               />
             </PropertyPanel>
 
-            <!--
-              If all three general sub-sections are absent (general !== null
-              but all fields are null), show an informational message.
-              This state is valid: a slide can have a GeneralSections record
-              with no CopyWrap, Badge, or ImageWrap instances.
-            -->
+            <!-- General empty state -->
             <div
               v-if="
                 general !== null &&
@@ -665,27 +522,23 @@ function handleJourneyItemRange(payload: {
                 general.image === null
               "
               class="welder-editor__section-empty"
+              role="status"
             >
-              <StatusMessage
-                message="No editable general elements on this slide"
-                variant="status"
-              />
+              No editable general elements on this slide
             </div>
           </div>
-        </template>
+        </UCard>
 
-        <!-- ---------------------------------------------------------------- -->
-        <!-- Content tab                                                        -->
-        <!-- ---------------------------------------------------------------- -->
-        <template #content>
+        <!-- ================================================================ -->
+        <!-- Content panel                                                      -->
+        <!-- ================================================================ -->
+        <UCard v-if="showContent" class="welder-editor__panel">
+          <template #header>
+            <h2 class="welder-editor__panel-heading">Content</h2>
+          </template>
+
           <div class="welder-editor__panel-stack">
-            <!--
-              Cards block — shown when content is loaded AND cards exist.
-              PropertyPanel is collapsible; label provides accessible name.
-
-              CardList (selection list) + CardEditor (per-card form) follow the
-              section discipline: sections emit, App.vue dispatches.
-            -->
+            <!-- Cards block -->
             <PropertyPanel v-if="hasCards" title="Cards">
               <div class="welder-editor__content-cards">
                 <CardList
@@ -707,9 +560,7 @@ function handleJourneyItemRange(payload: {
               </div>
             </PropertyPanel>
 
-            <!--
-              Timeline block — shown when content is loaded AND timeline items exist.
-            -->
+            <!-- Timeline block -->
             <PropertyPanel v-if="hasTimeline" title="Timeline">
               <TimelineEditor
                 :items="content!.timelineItems"
@@ -719,25 +570,23 @@ function handleJourneyItemRange(payload: {
               />
             </PropertyPanel>
 
-            <!--
-              Empty state: content is loaded but slide has no cards AND no timeline.
-              TabStrip's hide-empty promotion handles the case where content is
-              null entirely (no CardWrap / TimelineWrap) — that state never reaches
-              this slot.
-            -->
-            <div v-if="contentLoadedButEmpty" class="welder-editor__section-empty">
-              <StatusMessage message="No cards or timeline items on this slide" variant="status" />
+            <!-- Content empty state -->
+            <div v-if="contentLoadedButEmpty" class="welder-editor__section-empty" role="status">
+              No cards or timeline items on this slide
             </div>
           </div>
-        </template>
+        </UCard>
 
-        <!-- ---------------------------------------------------------------- -->
-        <!-- Graphs tab — Sprint 4 Task 4.3                                   -->
-        <!-- Charts intentionally absent (ADR-0007 — deferred to v0.2.0+ epic). -->
-        <!-- ---------------------------------------------------------------- -->
-        <template #graphs>
+        <!-- ================================================================ -->
+        <!-- Graphs panel                                                        -->
+        <!-- ================================================================ -->
+        <UCard v-if="showGraphs" class="welder-editor__panel">
+          <template #header>
+            <h2 class="welder-editor__panel-heading">Graphs</h2>
+          </template>
+
           <div class="welder-editor__panel-stack">
-            <!-- TableEditor block — shown when tableModel is present -->
+            <!-- TableEditor -->
             <PropertyPanel v-if="graphs !== null && graphs.tableModel !== null" title="Table">
               <TableEditor
                 :table-data="graphs.tableModel"
@@ -752,7 +601,7 @@ function handleJourneyItemRange(payload: {
               />
             </PropertyPanel>
 
-            <!-- JourneyEditor block — shown when journeyModel is present -->
+            <!-- JourneyEditor -->
             <PropertyPanel v-if="graphs !== null && graphs.journeyModel !== null" title="Journey">
               <JourneyEditor
                 :model="graphs.journeyModel"
@@ -764,33 +613,27 @@ function handleJourneyItemRange(payload: {
               />
             </PropertyPanel>
           </div>
-        </template>
-      </TabStrip>
-    </template>
-  </div>
+        </UCard>
+      </template>
+    </main>
+  </UApp>
 </template>
 
 <style scoped>
-/*
- * Compact density for the Figma plugin iframe context (240–360 px wide).
- * Colors reference CSS custom properties (design tokens) — no hard-coded hex.
- */
-
 .welder-editor {
   display: flex;
   flex-direction: column;
   height: 100%;
-  overflow: hidden;
+  overflow-y: auto;
   font-size: 12px;
   line-height: 1.5;
   color: var(--color-text, #111827);
   background: var(--color-surface, #ffffff);
+  gap: 0;
 }
 
 .welder-editor__bus-error {
-  padding: 6px 10px;
-  border-bottom: 1px solid var(--color-error-border, #fecaca);
-  background: var(--color-error-bg, #fef2f2);
+  flex-shrink: 0;
 }
 
 .welder-editor__slide-picker {
@@ -806,18 +649,45 @@ function handleJourneyItemRange(payload: {
   padding: 10px;
 }
 
+.welder-editor__empty-text {
+  margin: 0;
+  font-size: 12px;
+  color: var(--color-label, #6b7280);
+}
+
+.welder-editor__panel {
+  border-radius: 0;
+  border-left: none;
+  border-right: none;
+  border-top: none;
+}
+
+.welder-editor__panel:first-of-type {
+  border-top: 1px solid var(--color-panel-border, #e5e7eb);
+}
+
+.welder-editor__panel-heading {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--color-panel-title, #374151);
+}
+
 .welder-editor__panel-stack {
   display: flex;
   flex-direction: column;
-  overflow-y: auto;
-  flex: 1;
-}
-
-.welder-editor__panel-stack--placeholder {
-  padding: 10px;
 }
 
 .welder-editor__section-empty {
   padding: 10px;
+  font-size: 11px;
+  color: var(--color-label, #6b7280);
+}
+
+.welder-editor__content-cards {
+  display: flex;
+  flex-direction: column;
 }
 </style>

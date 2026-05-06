@@ -23,7 +23,7 @@
 // Owner: ui-engineer. Resolves MON-2893895223.
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, within, fireEvent } from '@testing-library/vue';
+import { render, within } from '@testing-library/vue';
 import { createPinia, setActivePinia } from 'pinia';
 import { mount } from '@vue/test-utils';
 import axe from 'axe-core';
@@ -194,10 +194,10 @@ describe('App.vue — assembly smoke tests', () => {
     it('renders the slide picker combobox', () => {
       const { pinia } = setupPinia();
       const { container } = render(App, { global: { plugins: [pinia] } });
-      const q = within(container as HTMLElement);
-      // SlidePicker renders a native <select> (role="combobox").
-      const select = q.getByRole('combobox');
-      expect(select).toBeDefined();
+      // USelectMenu renders a <button aria-haspopup="listbox"> trigger (not
+      // role="combobox" on an <input>). Query the trigger button directly.
+      const picker = (container as HTMLElement).querySelector('[aria-haspopup="listbox"]');
+      expect(picker).not.toBeNull();
     });
 
     it('shows empty-state message when no slide is selected', () => {
@@ -232,11 +232,15 @@ describe('App.vue — assembly smoke tests', () => {
       });
 
       const { container } = render(App, { global: { plugins: [pinia] } });
-      const q = within(container as HTMLElement);
 
-      // The slide names appear as <option> text in the native <select>.
-      expect(q.getByText(SLIDE_A.name)).toBeDefined();
-      expect(q.getByText(SLIDE_B.name)).toBeDefined();
+      // USelectMenu renders a <button aria-haspopup="listbox"> trigger (not
+      // role="combobox" on an <input>). Dropdown items are portal-rendered and
+      // only visible when the listbox is open; verify slide data via store state.
+      const picker = (container as HTMLElement).querySelector('[aria-haspopup="listbox"]');
+      expect(picker).not.toBeNull();
+      expect(store.slides.length).toBe(2);
+      expect(store.slides[0]!.name).toBe(SLIDE_A.name);
+      expect(store.slides[1]!.name).toBe(SLIDE_B.name);
     });
   });
 
@@ -322,30 +326,29 @@ describe('App.vue — assembly smoke tests', () => {
     });
   });
 
-  // ---- 4. Active tab switch ------------------------------------------------
+  // ---- 4. Stacked panels — panel presence (replaces tab switch) ---------------
+  //
+  // Sprint 5 Task 5.2: TabStrip removed; stacked UCard panels replace it.
+  // Panels are always visible when their data slice is non-null and a slide
+  // is selected. No tab switching — just v-if gating on store slices.
 
-  describe('4. active tab switch', () => {
-    it('switching to Content tab shows the content panel (empty-state message when no cards or timeline)', async () => {
+  describe('4. stacked panels present', () => {
+    it('Content panel heading visible when content slice is populated', () => {
       const { pinia, store } = setupPinia();
-      // Content is populated so the tab is visible (contentNull = false).
-      // CONTENT_FIXTURE has empty cards + timelineItems → shows the empty-state StatusMessage.
       populateStoreWithSlide(store, SLIDE_A.id, GENERAL_ALL, CONTENT_FIXTURE);
       const { container } = render(App, { global: { plugins: [pinia] } });
       const q = within(container as HTMLElement);
 
-      const contentTab = q.getByRole('tab', { name: /content/i });
-      await fireEvent.click(contentTab);
+      // Content panel UCard header contains "Content" heading.
+      const contentHeading = q.getByRole('heading', { name: /^content$/i });
+      expect(contentHeading).toBeDefined();
 
-      // Content tab is now selected.
-      expect((contentTab as HTMLElement).getAttribute('aria-selected')).toBe('true');
-      // Empty-state message is visible (no cards or timeline items in fixture).
-      const emptyMsg = q.getByText(/no cards or timeline items on this slide/i);
-      expect(emptyMsg).toBeDefined();
+      // Empty-state message visible (CONTENT_FIXTURE has no cards or timeline).
+      expect(q.getByText(/no cards or timeline items on this slide/i)).toBeDefined();
     });
 
-    it('switching to Graphs tab shows the graphs panel (Sprint 4 — TableEditor visible when tableModel present)', async () => {
+    it('Graphs panel with TableEditor visible when tableModel is present', () => {
       const { pinia, store } = setupPinia();
-      // Graphs fixture with a real tableModel so graphsNull=false → tab is visible.
       const graphsWithTable: GraphItems = {
         tableModel: {
           slotId: 'slot-t1',
@@ -358,53 +361,63 @@ describe('App.vue — assembly smoke tests', () => {
       };
       populateStoreWithSlide(store, SLIDE_A.id, GENERAL_ALL, null, graphsWithTable);
       const { container } = render(App, { global: { plugins: [pinia] } });
-      const q = within(container as HTMLElement);
 
-      const graphsTab = q.getByRole('tab', { name: /graphs/i });
-      await fireEvent.click(graphsTab);
+      // Graphs panel visible
+      const graphsHeading = within(container as HTMLElement).getByRole('heading', {
+        name: /^graphs$/i,
+      });
+      expect(graphsHeading).toBeDefined();
 
-      // Sprint 4 Task 4.3 — TableEditor renders under a "Table" PropertyPanel.
-      // The placeholder text is gone now that the section is wired.
-      expect(q.queryByText(/graphs editing.*sprint 4/i)).toBeNull();
-      // The table section renders (heading inside the table-editor section).
-      const tableSection = container.querySelector('.table-editor');
-      expect(tableSection).not.toBeNull();
+      // TableEditor rendered
+      expect(container.querySelector('.table-editor')).not.toBeNull();
     });
   });
 
-  // ---- 5. Hide-empty-tab ---------------------------------------------------
+  // ---- 5. Panel visibility gating (replaces hide-empty-tab) ----------------
+  //
+  // Sprint 5 Task 5.2: stacked UCard panels v-if-gated by store slices.
+  // When a slice is null the panel UCard is not rendered at all.
 
-  describe('5. hide-empty-tab', () => {
-    it('does not render General tab when general slice is null', () => {
+  describe('5. panel visibility gating', () => {
+    it('does not render General panel when general slice is null', () => {
       const { pinia, store } = setupPinia();
-      // general is null, content is populated.
       populateStoreWithSlide(store, SLIDE_A.id, null, CONTENT_FIXTURE);
       const { container } = render(App, { global: { plugins: [pinia] } });
       const q = within(container as HTMLElement);
 
-      // The General tab trigger should not be present in the tab list.
-      const generalTab = q.queryByRole('tab', { name: /^general$/i });
-      expect(generalTab).toBeNull();
+      // No "General" heading in the DOM.
+      expect(q.queryByRole('heading', { name: /^general$/i })).toBeNull();
     });
 
-    it('does not render Content tab when content slice is null', () => {
+    it('does not render Content panel when content slice is null', () => {
       const { pinia, store } = setupPinia();
       populateStoreWithSlide(store, SLIDE_A.id, GENERAL_ALL, null, GRAPHS_FIXTURE);
       const { container } = render(App, { global: { plugins: [pinia] } });
       const q = within(container as HTMLElement);
 
-      const contentTab = q.queryByRole('tab', { name: /^content$/i });
-      expect(contentTab).toBeNull();
+      expect(q.queryByRole('heading', { name: /^content$/i })).toBeNull();
     });
 
-    it('does not render Graphs tab when graphs slice is null', () => {
+    it('does not render Graphs panel when graphs slice is null', () => {
       const { pinia, store } = setupPinia();
       populateStoreWithSlide(store, SLIDE_A.id, GENERAL_ALL, CONTENT_FIXTURE, null);
       const { container } = render(App, { global: { plugins: [pinia] } });
       const q = within(container as HTMLElement);
 
-      const graphsTab = q.queryByRole('tab', { name: /^graphs$/i });
-      expect(graphsTab).toBeNull();
+      expect(q.queryByRole('heading', { name: /^graphs$/i })).toBeNull();
+    });
+
+    it('does not render Graphs panel when both tableModel and journeyModel are null', () => {
+      const { pinia, store } = setupPinia();
+      // graphs.value is non-null but both model fields are null
+      populateStoreWithSlide(store, SLIDE_A.id, GENERAL_ALL, null, {
+        tableModel: null,
+        journeyModel: null,
+      });
+      const { container } = render(App, { global: { plugins: [pinia] } });
+      const q = within(container as HTMLElement);
+
+      expect(q.queryByRole('heading', { name: /^graphs$/i })).toBeNull();
     });
   });
 
