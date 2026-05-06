@@ -10,5 +10,5 @@
 packages:
   - 'plugins/*'
   - '!plugins/_template'
-  - '!plugins/_placeholder-plugin'
+  - '!plugins/welder-editor'
   - 'packages/*'

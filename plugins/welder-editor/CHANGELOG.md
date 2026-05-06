@@ -1,4 +1,4 @@
-# Changelog — Placeholder Plugin
+# Changelog — Welder Editor
 
 All notable changes to this plugin will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/)
@@ -18,7 +18,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Changed
 
-- The pnpm workspace `plugins/*` glob in `pnpm-workspace.yaml` automatically picks this folder up; no edit to that file was needed. The `package.json` `name` is currently `_placeholder-plugin` (not `@figma-plugins/_placeholder-plugin`) and is excluded from pnpm dependency resolution today; rename is a follow-up.
+- The pnpm workspace `plugins/*` glob in `pnpm-workspace.yaml` automatically picks this folder up; no edit to that file was needed. The `package.json` `name` is currently `welder-editor` (not `@figma-plugins/welder-editor`) and is excluded from pnpm dependency resolution today; rename is a follow-up.
 
 ### Fixed
 
@@ -26,7 +26,7 @@ This project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.htm
 
 ### Onboarding debt (tracked, not yet paid)
 
-- `package-lock.json` (npm) → migrate to pnpm workspace + `@figma-plugins/_placeholder-plugin` rename.
+- `package-lock.json` (npm) → migrate to pnpm workspace + `@figma-plugins/welder-editor` rename.
 - `widget-src/` → split into canonical `code/` + `ui/` + `shared/` (`T_REFACTOR_LAYOUT` per import ADR).
 - ~~`[monday]` placeholders~~ Done — folder `placeholder-plugin team` (id 2996351) created from the standard Scrum Team template, IDs filled in `plugin.toml`, `enabled = true`. Tasks board id 5095985440.
 - `[validation]` budgets → run gzipped re-measurement and ratify in a budget ADR (model after ADR-0003 / ADR-0014 for `welder-editor`).

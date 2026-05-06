@@ -1,4 +1,4 @@
-# Threading overview — \_placeholder-plugin
+# Threading overview — welder-editor
 
 **Status:** Pointer (onboarding placeholder)
 **Date:** 2026-05-06

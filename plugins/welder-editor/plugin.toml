@@ -4,7 +4,11 @@
 #
 # Monday workspace structure (per runbooks/monday-workflow.md):
 #   workspace_id = 6325546 (Figma Plugins)
-#     └── folder/_placeholder-plugin/  (folder_id TBD — see [monday] below)
+#     └── folder/placeholder-plugin team/  (folder_id 2996351; renamed from
+#         the placeholder-only era — see CHANGELOG and the import ADR for
+#         history. The Monday folder display name still reads
+#         "placeholder-plugin team"; rename it from the Monday UI when
+#         convenient.)
 #           ├── Epics             — strategic tracks, multi-sprint
 #           ├── Sprints           — sprint container
 #           ├── Tasks             — work items (sync target for PRs)
@@ -12,16 +16,16 @@
 #           ├── Bugs Queue        — bug intake
 #           └── Capacity          — sprint capacity planning
 #
-# Onboarding note: this plugin was imported from an external zip and parked
-# under a placeholder slug to keep it out of the pnpm workspace until
-# T_PNPM_MIGRATION lands. See CHANGELOG.md and the import ADR. Several
-# fields below are placeholders pending follow-up work — search for
-# `TODO(project-pm)` to find them.
+# Onboarding note: this plugin was imported from an external v0.2.1 zip,
+# initially parked under a `_placeholder-plugin` slug, then renamed to
+# `welder-editor` once the previous welder-editor scaffold was deleted
+# (see CHANGELOG and ADR-0017). It remains excluded from the pnpm
+# workspace until T_PNPM_MIGRATION + T_REFACTOR_LAYOUT land.
 
 [plugin]
-slug = "_placeholder-plugin"
-name = "Placeholder Plugin"
-class_prefix = "PlaceholderPlugin"
+slug = "welder-editor"
+name = "Welder Editor"
+class_prefix = "WelderEditor"
 version = "0.2.1"
 editor_types = ["figma", "slides"]  # matches manifest.json; FigJam excluded by external scaffold
 
@@ -31,14 +35,15 @@ editor_types = ["figma", "slides"]  # matches manifest.json; FigJam excluded by 
 #   plugin-tester | release-engineer | product-researcher
 #
 # UI-heavy plugin (Vue 3 + Nuxt UI v4 iframe with sub-editors for general,
-# content, charts, table, journey) — same call as welder-editor.
+# content, charts, table, journey).
 owner_agent = "ui-engineer"
 
 [monday]
-# Monday folder "placeholder-plugin team" in workspace 6325546, duplicated
-# from the standard Scrum Team template. Sync target is the Tasks board
-# (PR events update task_status + link). Other board IDs are recorded for
-# context — the sync script only writes to Tasks.
+# Monday folder (id 2996351, current display name "placeholder-plugin team")
+# in workspace 6325546, duplicated from the standard Scrum Team template.
+# Sync target is the Tasks board (PR events update task_status + link).
+# Other board IDs are recorded for context — the sync script only writes
+# to Tasks. Rename the folder display name in the Monday UI when convenient.
 enabled = true
 workspace_id = "6325546"
 folder_id = "2996351"

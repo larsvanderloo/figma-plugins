@@ -1,4 +1,4 @@
-# API-spec overview — \_placeholder-plugin
+# API-spec overview — welder-editor
 
 **Status:** Pointer (onboarding placeholder)
 **Date:** 2026-05-06

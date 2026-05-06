@@ -1,10 +1,10 @@
-# \_placeholder-plugin — performance budget
+# welder-editor — performance budget
 
 **Status:** Placeholder (post-import; needs gzipped re-measurement)
 **Date:** 2026-05-06
 **Owners:** figma-api-engineer (code-side), ui-engineer (ui-side)
 
-This is the day-to-day reference for performance budgets on `_placeholder-plugin`. The numbers below are placeholder budgets carried over from the imported zip — they are **raw (non-gzipped) bytes** and they are NOT the canonical budget. Before the next release, a canonical gzipped pass must be run and ratified in a budget ADR (model after ADR-0003 and ADR-0014 for `welder-editor`).
+This is the day-to-day reference for performance budgets on `welder-editor`. The numbers below are placeholder budgets carried over from the imported zip — they are **raw (non-gzipped) bytes** and they are NOT the canonical budget. Before the next release, a canonical gzipped pass must be run and ratified in a budget ADR (model after ADR-0003 and ADR-0014 for `welder-editor`).
 
 ---
 
@@ -42,13 +42,13 @@ The org convention (per `plugins/welder-editor/docs/perf/welder-editor.md` and A
 ### Measurement command (to run before next release)
 
 ```sh
-# From plugins/_placeholder-plugin/
+# From plugins/welder-editor/
 npm run build           # builds dist/code.js + dist/ui.html
 gzip -c dist/code.js  | wc -c
 gzip -c dist/ui.html  | wc -c
 ```
 
-Post results here, then file a budget ADR in `plugins/_placeholder-plugin/docs/adr/` (plugin-scoped — per CLAUDE.md plugin-scoped ADRs go under the plugin's `docs/adr/`, not the top-level `docs/adr/`).
+Post results here, then file a budget ADR in `plugins/welder-editor/docs/adr/` (plugin-scoped — per CLAUDE.md plugin-scoped ADRs go under the plugin's `docs/adr/`, not the top-level `docs/adr/`).
 
 ---
 

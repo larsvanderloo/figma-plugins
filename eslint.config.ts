@@ -24,7 +24,7 @@ export default [
       // Excluded plugin (out of pnpm workspace; npm-driven; ADR-0017).
       // Lint runs against this folder via its own npm script `typecheck:ui`,
       // not the monorepo-wide pass.
-      'plugins/_placeholder-plugin/**',
+      'plugins/welder-editor/**',
     ],
   },
   {

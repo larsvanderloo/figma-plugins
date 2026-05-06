@@ -1,4 +1,4 @@
-# Placeholder Plugin
+# Welder Editor
 
 Figma plugin for editing existing Welder-branded slides in Figma Design and Figma Slides. The user picks a slide on the current page from a dropdown, then edits its content across three tabs (General / Content / Graphs) wiring up sub-editors for TitleDescription, Badge, Image, Card list, Chart, Table, and Journey/Timeline. Consolidates the predecessors `welder-table` v0.2.0 (plugin) and `chart-builder` v0.3.0 (widget) — those tags remain in their respective repos as a rollback path.
 
@@ -6,11 +6,11 @@ The full product specification is in [`spec.md`](./spec.md) (Dutch, ~2300 lines)
 
 ## Imported from external scaffold
 
-This plugin was imported from an external zip carrying the working v0.2.1 Placeholder Plugin build, then fitted with the canonical org bookkeeping non-destructively. The original `widget-src/` layout is retained pending a follow-up refactor to the canonical `code/` + `ui/` + `shared/` split — see the import ADR in the top-level `docs/adr/` for the rationale and the planned `T_REFACTOR_LAYOUT` task.
+This plugin was imported from an external zip carrying the working v0.2.1 Welder Editor build, then fitted with the canonical org bookkeeping non-destructively. The original `widget-src/` layout is retained pending a follow-up refactor to the canonical `code/` + `ui/` + `shared/` split — see the import ADR in the top-level `docs/adr/` for the rationale and the planned `T_REFACTOR_LAYOUT` task.
 
 Onboarding debt that still needs to be paid down:
 
-- **Lockfile migration.** The zip ships `package-lock.json` (npm) and the `name` field in `package.json` is `_placeholder-plugin` — neither matches the org's pnpm workspace + `@figma-plugins/...` naming convention. Until migrated, build with `npm install && npm run build` from inside this folder. TODO(project-pm + ui-engineer): migrate to pnpm workspace member, rename to `@figma-plugins/_placeholder-plugin`, drop `package-lock.json`. The `pnpm-workspace.yaml` `plugins/*` glob already picks this folder up; only the per-plugin `package.json` and lockfile need to change.
+- **Lockfile migration.** The zip ships `package-lock.json` (npm) and the `name` field in `package.json` is `welder-editor` — neither matches the org's pnpm workspace + `@figma-plugins/...` naming convention. Until migrated, build with `npm install && npm run build` from inside this folder. TODO(project-pm + ui-engineer): migrate to pnpm workspace member, rename to `@figma-plugins/welder-editor`, drop `package-lock.json`. The `pnpm-workspace.yaml` `plugins/*` glob already picks this folder up; only the per-plugin `package.json` and lockfile need to change.
 - **Layout refactor.** Move `widget-src/code.ts` → `code/main.ts`, `widget-src/ui/` → `ui/`, `widget-src/{types,constants,slide-machine}.ts` → `shared/`, and rewire `vite.config.ts` + `esbuild.config.mjs`. See the import ADR for scope.
 - ~~**Monday folder + Scrum Team boards.**~~ Done — folder `placeholder-plugin team` (id 2996351) with the standard Scrum Team boards is wired in `plugin.toml [monday]`. Sync targets the Tasks board (id 5095985440) on PR events that carry `Resolves MON-<id>`.
 - **Real (gzipped) bundle budgets.** The numbers in `plugin.toml` `[validation]` are raw-byte placeholders pulled from the imported zip. A measured gzipped pass is required before the next release; see `docs/perf/budget.md`.
@@ -18,7 +18,7 @@ Onboarding debt that still needs to be paid down:
 ## Layout (current — deviation from canonical, see import ADR)
 
 ```
-_placeholder-plugin/
+welder-editor/
 ├── plugin.toml          # Plugin metadata (slug, owner_agent, monday, budgets, message-bus version)
 ├── manifest.json        # Figma plugin manifest (editorType: figma + slides; documentAccess: dynamic-page)
 ├── package.json         # npm-managed today; TODO migrate to pnpm workspace
@@ -56,11 +56,11 @@ npm install                                          # installs from package-loc
 npm run build                                        # build:ui (vite) + build:widget (esbuild)
 npm run watch                                        # parallel watch mode (concurrently)
 # In Figma desktop: Plugins → Development → Import plugin from manifest…
-# Select plugins/_placeholder-plugin/manifest.json
-# Plugin appears under Plugins → Development → Placeholder Plugin
+# Select plugins/welder-editor/manifest.json
+# Plugin appears under Plugins → Development → Welder Editor
 ```
 
-After the pnpm migration the canonical commands will be `pnpm --filter @figma-plugins/_placeholder-plugin build` etc., matching `welder-editor`.
+After the pnpm migration the canonical commands will be `pnpm --filter @figma-plugins/welder-editor build` etc., matching `welder-editor`.
 
 ## Validation
 

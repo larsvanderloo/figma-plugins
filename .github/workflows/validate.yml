@@ -51,10 +51,10 @@ jobs:
                 echo "Skipping $manifest (template)"
                 continue
                 ;;
-              plugins/_placeholder-plugin/manifest.json)
+              plugins/welder-editor/manifest.json)
                 # Out-of-band npm-driven plugin (excluded from pnpm workspace).
-                # Manifest + artifacts are validated in the npm-plugin-placeholder job.
-                echo "Skipping $manifest (handled by npm-plugin-placeholder job)"
+                # Manifest + artifacts are validated in the npm-plugin-welder-editor job.
+                echo "Skipping $manifest (handled by npm-plugin-welder-editor job)"
                 continue
                 ;;
             esac
@@ -144,11 +144,11 @@ jobs:
                 echo "Skipping $manifest (template)"
                 continue
                 ;;
-              plugins/_placeholder-plugin/manifest.json)
+              plugins/welder-editor/manifest.json)
                 # Out-of-band npm-driven plugin (excluded from pnpm workspace,
                 # so `pnpm build` above doesn't produce its dist/). Validated
-                # in the npm-plugin-placeholder job which builds with npm first.
-                echo "Skipping $manifest (handled by npm-plugin-placeholder job)"
+                # in the npm-plugin-welder-editor job which builds with npm first.
+                echo "Skipping $manifest (handled by npm-plugin-welder-editor job)"
                 continue
                 ;;
             esac
@@ -158,194 +158,25 @@ jobs:
           echo ""
           echo "All plugin build artifacts valid."
 
-  axe:
-    name: Accessibility — axe-core WCAG 2.1 AA (welder-editor)
-    runs-on: [self-hosted, macOS, ARM64]
-    # Run after the main node job so the lock-file install is cached.
-    needs: node
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    env:
-      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
-    #
-    # Gating policy (matches plugins/welder-editor/tests/ui/axe.test.ts):
-    #
-    #   BLOCKING NOW   — axe violations at impact "serious" or "critical".
-    #                    These fail the test and therefore fail this job.
-    #
-    #   WARN ONLY NOW  — axe violations at impact "moderate" or "minor".
-    #                    Logged as console.warn; test passes; job passes.
-    #                    Promoted to BLOCKING at Sprint 2 RC, when ui-engineer
-    #                    has had a full sprint to address them.
-    #
-    # Why jsdom instead of headless Chromium:
-    #   jsdom is already in the lockfile (jsdom@24.1.3 via vitest).
-    #   Adding Playwright/Chromium would add ~300 MB to the runner and require
-    #   a separate browser-install step. axe-core's WCAG 2.1 AA rule coverage
-    #   is equivalent in jsdom for the rules that matter at this stage: ARIA
-    #   labels, role semantics, focus management. Color-contrast (which needs
-    #   real CSS layout) is supplemented by the manual VoiceOver pass at RC.
-    #   Revisit this decision if a component needs real CSS layout for a11y
-    #   evaluation (file an ADR at that point).
-    #
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+  # ---------------------------------------------------------------------------
+  # The previous `axe`, `bundle-size`, and `frame-trace-perf` jobs lived here.
+  # They were hardcoded against the deleted pnpm-driven welder-editor
+  # (`pnpm --filter @figma-plugins/welder-editor`, `dist/ui/index.html`,
+  # `tests/ui/axe.test.ts`, `tests/perf.test.ts`). The current welder-editor
+  # is npm-driven with a widget-src/ layout and has none of those tests yet.
+  # Re-introduce equivalents (axe scan on widget-src/ui, gzipped bundle gate,
+  # perf gate on a chosen surface) when the testing surface is stood up,
+  # ideally as part of T_REFACTOR_LAYOUT (see ADR-0017).
+  # ---------------------------------------------------------------------------
 
-      - name: Versions
-        run: |
-          node --version
-          pnpm --version
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Run axe scan (welder-editor)
-        # Runs tests/ui/axe.test.ts via vitest. The test file enforces the
-        # blocking/advisory policy documented above and in the test source.
-        run: pnpm --filter @figma-plugins/welder-editor exec vitest run tests/ui/axe.test.ts
-
-  bundle-size:
-    name: Bundle-size gate — welder-editor (ADR-0003)
-    runs-on: [self-hosted, macOS, ARM64]
-    # Runs after the node job so we know the lockfile is consistent.
-    # The node job already ran `pnpm build`; we rebuild here because jobs
-    # do not share filesystem state — each job gets a fresh checkout.
-    needs: node
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    env:
-      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
-    #
-    # Budgets (anti-pattern 0004 architecture: code.js embeds ui HTML as chunks):
-    #   code-side  dist/code.js        ≤ 330 KB gzipped  (was 60 KB; revised for embedded UI)
-    #   ui-side    dist/ui/index.html  ≤ 280 KB gzipped  (secondary artifact; was gating non-existent dist/ui.js)
-    #
-    # Architecture note (anti-pattern 0004): Figma's plugin sandbox has a
-    # string-literal parser limit. Our 1.2 MB ui.html exceeds it when Figma
-    # tries to inject it as the __html__ constant. Fix: embed ui/index.html
-    # in code.js as ≤60 KB string chunks (chunked-text-loader pattern from
-    # v0.2.1 reference build). code.js now carries ~11 KB code + ~269 KB
-    # embedded UI HTML ≈ 280 KB gzip. 330 KB budget gives 18% headroom.
-    # dist/ui/index.html is still produced by the build but is a secondary
-    # artifact; Figma no longer needs to download it separately.
-    #
-    # Combined budget: 330 KB + 280 KB = 610 KB (was 60 KB + 320 KB = 380 KB).
-    # The increase reflects the dual-copy architecture. A future optimisation
-    # is to remove manifest.ui entirely once we confirm Figma accepts showUI()
-    # without the field, eliminating the 280 KB secondary download.
-    #
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Versions
-        run: |
-          node --version
-          pnpm --version
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Build all plugins
-        run: pnpm build
-
-      - name: Bundle-size gate (code-side)
-        # code.js now embeds ui/index.html as ≤60 KB string chunks (anti-pattern 0004).
-        # Budget revised from 60 KB to 330 KB to accommodate the embedded UI HTML.
-        run: |
-          BYTES=$(gzip -c plugins/welder-editor/dist/code.js | wc -c)
-          BUDGET=$((450 * 1024))
-          echo "code.js gzip = $BYTES bytes (budget $BUDGET)"
-          if [ "$BYTES" -gt "$BUDGET" ]; then
-            echo "::error::dist/code.js gzipped $BYTES bytes exceeds 330 KB budget (anti-pattern 0004 architecture)"
-            exit 1
-          fi
-
-      - name: Bundle-size gate (ui-side)
-        # Gates dist/ui/index.html — the singlefile-inlined UI bundle (secondary
-        # artifact in the chunked-text-loader architecture; primary is code.js).
-        # Was incorrectly gating the non-existent dist/ui.js. Fixed in this PR.
-        # Budget 280 KB (269 KB actual gzip + ~4% headroom).
-        run: |
-          BYTES=$(gzip -c plugins/welder-editor/dist/ui/index.html | wc -c)
-          BUDGET=$((280 * 1024))
-          echo "ui/index.html gzip = $BYTES bytes (budget $BUDGET)"
-          if [ "$BYTES" -gt "$BUDGET" ]; then
-            echo "::error::dist/ui/index.html gzipped $BYTES bytes exceeds 280 KB budget"
-            exit 1
-          fi
-
-  frame-trace-perf:
-    name: Frame-trace perf gate — TableEditor (R1)
-    runs-on: [self-hosted, macOS, ARM64]
-    # Run after the main node job so the lockfile install is cached.
-    needs: node
-    if: |
-      (github.event_name != 'pull_request' || github.event.pull_request.draft == false) &&
-      (
-        github.event_name != 'pull_request' ||
-        contains(join(github.event.pull_request.labels.*.name, ','), 'perf') ||
-        true
-      )
-    env:
-      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
-    #
-    # Gating policy (R1 from docs/perf/welder-editor.md §"Frame-trace perf gate"):
-    #
-    #   BLOCKING — each PropertyPanel collapsible toggle on a 50-row × 6-col
-    #   TableEditor fixture must complete in < 16 ms (one frame at 60 Hz).
-    #   Failure = job fails = PR blocked.
-    #
-    # Path trigger: this job always runs (path filtering is not natively
-    # supported in job-level `if` without the changed-files action).
-    # The job is fast (~30 s) so the cost of running it on every non-draft PR
-    # is acceptable. Narrowing to path-specific runs can be added in a follow-up
-    # when the changed-files action is available on the self-hosted runner.
-    #
-    # Affected paths (documented for reviewers; not programmatic):
-    #   sections/TableEditor/**
-    #   components/src/PropertyPanel/**
-    #   plugins/welder-editor/code/wrappers/TableWrap.ts
-    #   plugins/welder-editor/ui/App.vue
-    #
-    # Determinism note (see docs/perf/welder-editor.md §"Frame-trace perf gate"):
-    #   The benchmark uses performance.now() in jsdom. jsdom does not execute
-    #   real CSS transitions or layout; the timing covers only Vue's reactive
-    #   update cycle and synchronous JS triggered by the toggle. Toggle 1 has
-    #   a cold-start JIT penalty (~2 ms on a warm CI runner); toggles 2–10
-    #   are in the 0.1–0.6 ms range. The gate asserts all 10 (including the
-    #   first) are < 16 ms, providing an 8× budget over the observed max.
-    #   No warm-up discard is applied; the cold-start cost is well within budget
-    #   and discarding it would mask any JIT-path regression.
-    #
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Versions
-        run: |
-          node --version
-          pnpm --version
-
-      - name: Install
-        run: pnpm install --frozen-lockfile
-
-      - name: Frame-trace perf gate (TableEditor R1)
-        # Runs tests/perf.test.ts via vitest --reporter=verbose.
-        # Per-toggle timings are printed via console.warn inside the test
-        # (search for "[perf-gate]" in the job log for the timing table).
-        # The test fails (exit non-zero) if any toggle exceeds 16 ms.
-        run: |
-          pnpm --filter @figma-plugins/sections-table-editor exec \
-            vitest run --reporter=verbose tests/perf.test.ts
-
-  npm-plugin-placeholder:
-    name: npm plugin — _placeholder-plugin
+  npm-plugin-welder-editor:
+    name: welder-editor (npm-driven)
     runs-on: [self-hosted, macOS, ARM64]
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     env:
       PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
     #
-    # The placeholder plugin is intentionally excluded from the pnpm workspace
+    # welder-editor is intentionally excluded from the pnpm workspace
     # (ADR-0017) — it uses npm + Vite 8 + vue-tsc 3, diverging from the rest
     # of the monorepo. CI runs build + typecheck + manifest/artifact
     # validation here in isolation. The pnpm-driven `manifest` and
@@ -360,7 +191,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install (npm ci with lockfile fallback)
-        working-directory: plugins/_placeholder-plugin
+        working-directory: plugins/welder-editor
         # Prefer `npm ci` (frozen-lockfile semantics). Fall back to
         # `npm install` if the lockfile drifts so a transient mismatch
         # doesn't block the gate; the fallback emits a warning so it
@@ -372,15 +203,15 @@ jobs:
           fi
 
       - name: Build + typecheck
-        working-directory: plugins/_placeholder-plugin
+        working-directory: plugins/welder-editor
         run: |
           npm run build
           npm run typecheck:ui
 
       - name: Validate manifest + build artifacts
         run: |
-          python3 tools/validate_manifest.py plugins/_placeholder-plugin/manifest.json
-          python3 tools/validate_manifest.py --build-artifacts plugins/_placeholder-plugin/manifest.json
+          python3 tools/validate_manifest.py plugins/welder-editor/manifest.json
+          python3 tools/validate_manifest.py --build-artifacts plugins/welder-editor/manifest.json
 
   python:
     name: Python — ruff + mypy + pytest

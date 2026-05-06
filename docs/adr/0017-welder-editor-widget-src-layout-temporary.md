@@ -1,16 +1,16 @@
-# ADR 0017 — \_placeholder-plugin retains widget-src/ layout temporarily
+# ADR 0017 — \welder-editor retains widget-src/ layout temporarily
 
 **Status:** Accepted
 **Date:** 2026-05-06
 **Decision-makers:** project-pm
 **Supersedes:** —
-**References:** CLAUDE.md §"Hierarchical structure"; ADR-0001 (monorepo structure); `learnings/anti-patterns/0002-figma-plugin-load-debugging.md` (chunked-text-loader); `plugins/_placeholder-plugin/`; `plugins/_placeholder-plugin/spec.md`
+**References:** CLAUDE.md §"Hierarchical structure"; ADR-0001 (monorepo structure); `learnings/anti-patterns/0002-figma-plugin-load-debugging.md` (chunked-text-loader); `plugins/welder-editor/`; `plugins/welder-editor/spec.md`
 
 ---
 
 ## Context
 
-`_placeholder-plugin` v0.2.1 was imported from an external scaffold zip on 2026-05-06. The import is intentionally **non-destructive**: every file from the zip (`manifest.json`, `package.json`, `package-lock.json`, `vite.config.ts`, `esbuild.config.mjs`, `tsconfig.json`, `tsconfig.ui.json`, `app.config.ts`, `spec.md`, `widget-src/`, `.reviews/`, `.gitignore`) is preserved unchanged. The org bookkeeping (`plugin.toml`, `README.md`, `CHANGELOG.md`, `docs/api-spec/`, `docs/threading/`, `docs/perf/`, `tests/.gitkeep`, `validation/.gitkeep`) is added alongside.
+`welder-editor` v0.2.1 was imported from an external scaffold zip on 2026-05-06. The import is intentionally **non-destructive**: every file from the zip (`manifest.json`, `package.json`, `package-lock.json`, `vite.config.ts`, `esbuild.config.mjs`, `tsconfig.json`, `tsconfig.ui.json`, `app.config.ts`, `spec.md`, `widget-src/`, `.reviews/`, `.gitignore`) is preserved unchanged. The org bookkeeping (`plugin.toml`, `README.md`, `CHANGELOG.md`, `docs/api-spec/`, `docs/threading/`, `docs/perf/`, `tests/.gitkeep`, `validation/.gitkeep`) is added alongside.
 
 The repository convention established in `CLAUDE.md` §"Hierarchical structure" and ADR-0001 mandates a three-way split for every plugin:
 
@@ -36,9 +36,9 @@ Doing the refactor during the import would conflate "fit into monorepo" with "re
 
 ## Decision
 
-**Import as-is.** The `widget-src/` layout is retained for `_placeholder-plugin` for a bounded deviation window. The canonical bookkeeping (`plugin.toml`, `README.md`, `CHANGELOG.md`, `docs/`, `tests/`, `validation/`) is added alongside.
+**Import as-is.** The `widget-src/` layout is retained for `welder-editor` for a bounded deviation window. The canonical bookkeeping (`plugin.toml`, `README.md`, `CHANGELOG.md`, `docs/`, `tests/`, `validation/`) is added alongside.
 
-A follow-up task **`T_REFACTOR_LAYOUT`** is created (to be filed on the `_placeholder-plugin` Tasks board once the Monday folder is provisioned per `plugin.toml [monday]` TODOs). Its scope:
+A follow-up task **`T_REFACTOR_LAYOUT`** is created (to be filed on the `welder-editor` Tasks board once the Monday folder is provisioned per `plugin.toml [monday]` TODOs). Its scope:
 
 - Move `widget-src/code.ts` → `code/main.ts` (and split helper modules under `code/` as appropriate).
 - Move `widget-src/ui/` → `ui/`.
@@ -47,13 +47,13 @@ A follow-up task **`T_REFACTOR_LAYOUT`** is created (to be filed on the `_placeh
 - Move `widget-src/chart-core/csv/` → `code/chart-core/csv/` if the parser runs in the sandbox, or `ui/chart-core/csv/` if it runs in the iframe (read the spec; current understanding: CSV parsing happens in the iframe, so this likely lives in `ui/`).
 - Rewire `vite.config.ts` and `esbuild.config.mjs` accordingly. Decide as part of the same task whether to drop the chunked-text-loader and switch to `__html__` + `vite-plugin-singlefile` like `welder-editor` (recommended; cross-link to `learnings/anti-patterns/0002-figma-plugin-load-debugging.md`).
 - Author the canonical `shared/messages.ts` carrying the discriminated unions currently in `widget-src/types.ts`, plus `MESSAGE_BUS_VERSION = 1`, plus typed error envelopes (`Result<T, WelderError>` per `welder-editor` precedent).
-- Author the canonical api-spec brief in `plugins/_placeholder-plugin/docs/api-spec/_placeholder-plugin.md` modeled after `plugins/welder-editor/docs/api-spec/welder-editor.md`.
+- Author the canonical api-spec brief in `plugins/welder-editor/docs/api-spec/welder-editor.md` modeled after `plugins/welder-editor/docs/api-spec/welder-editor.md`.
 
 `T_REFACTOR_LAYOUT` is a Quality task (per `runbooks/monday-workflow.md` task types), size L, owned jointly by `figma-api-engineer` (code-side + shared) and `ui-engineer` (ui-side). It does not block any feature work that does not touch `widget-src/` cross-cuttingly, but it should land before any new top-level surface (toolbar, command, panel) is added.
 
 ## Constraints during the deviation window
 
-These are blocking review constraints for any PR that touches `_placeholder-plugin`:
+These are blocking review constraints for any PR that touches `welder-editor`:
 
 1. **No other plugin may copy this layout.** New plugins continue to follow `code/` + `ui/` + `shared/` per ADR-0001 and `plugins/_template/`. A new plugin that proposes the `widget-src/` layout requires an ADR explicitly superseding ADR-0001 for that plugin — `project-pm` will reject any such proposal absent compelling rationale.
 
@@ -68,7 +68,7 @@ These are blocking review constraints for any PR that touches `_placeholder-plug
 
 4. **The chunked-text-loader stays for the deviation window.** Replacing it is part of `T_REFACTOR_LAYOUT`. PRs that selectively replace the loader without doing the full layout move are rejected — see constraint 3.
 
-5. **Lockfile and package-name mismatches stay flagged.** `package.json` `name` is `_placeholder-plugin` (not `@figma-plugins/_placeholder-plugin`) and `package-lock.json` is npm. Migration to pnpm workspace + `@figma-plugins/...` naming is a sibling task to `T_REFACTOR_LAYOUT` (call it `T_PNPM_MIGRATION`). It can ship before, after, or with `T_REFACTOR_LAYOUT` — `project-pm`'s call at the time of scheduling. The `pnpm-workspace.yaml` `plugins/*` glob already picks up this folder; the only required edits are this plugin's `package.json` and lockfile.
+5. **Lockfile and package-name mismatches stay flagged.** `package.json` `name` is `welder-editor` (not `@figma-plugins/welder-editor`) and `package-lock.json` is npm. Migration to pnpm workspace + `@figma-plugins/...` naming is a sibling task to `T_REFACTOR_LAYOUT` (call it `T_PNPM_MIGRATION`). It can ship before, after, or with `T_REFACTOR_LAYOUT` — `project-pm`'s call at the time of scheduling. The `pnpm-workspace.yaml` `plugins/*` glob already picks up this folder; the only required edits are this plugin's `package.json` and lockfile.
 
 6. **Bundle budgets are placeholders.** `plugin.toml [validation]` carries raw-byte placeholders, not gzipped budgets. A gzipped re-measurement and budget ADR (model after ADR-0003 / ADR-0014) must land before the next release tag. This is `T_BUDGET_REMEASURE` and is independent of `T_REFACTOR_LAYOUT`.
 
@@ -125,10 +125,10 @@ If `T_REFACTOR_LAYOUT` is not feasible within two minor releases (i.e., not land
 
 - `CLAUDE.md` §"Hierarchical structure" — establishes `code/` + `ui/` + `shared/` as the canonical layout
 - ADR-0001 — monorepo structure
-- `plugins/_template/` — canonical scaffold (compare against `plugins/_placeholder-plugin/widget-src/`)
+- `plugins/_template/` — canonical scaffold (compare against `plugins/welder-editor/widget-src/`)
 - `plugins/welder-editor/` — canonical-layout reference plugin
 - `learnings/anti-patterns/0002-figma-plugin-load-debugging.md` — chunked-text-loader pattern and the `__html__` alternative
-- `plugins/_placeholder-plugin/spec.md` — imported product spec (Dutch)
-- `plugins/_placeholder-plugin/.reviews/perf-investigation-2026-04-26.md` — pre-import perf investigation
-- `plugins/_placeholder-plugin/plugin.toml` — placeholders for Monday IDs and bundle budgets
-- `plugins/_placeholder-plugin/CHANGELOG.md` — onboarding-debt list
+- `plugins/welder-editor/spec.md` — imported product spec (Dutch)
+- `plugins/welder-editor/.reviews/perf-investigation-2026-04-26.md` — pre-import perf investigation
+- `plugins/welder-editor/plugin.toml` — placeholders for Monday IDs and bundle budgets
+- `plugins/welder-editor/CHANGELOG.md` — onboarding-debt list
