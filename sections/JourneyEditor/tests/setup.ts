@@ -1,6 +1,7 @@
 // sections/JourneyEditor/tests/setup.ts — Vitest global setup for JourneyEditor tests.
 //
 // Owner: ui-engineer.
+// Resolves: MON-2894486835 (Sprint 5, Task 5.8).
 //
 // Node 25 localStorage shim — same rationale as CardEditor/tests/setup.ts.
 // Pinia@3 / @vue/devtools-kit calls localStorage.getItem() at module-evaluation
@@ -37,58 +38,126 @@ import { afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/vue';
 
 // ---------------------------------------------------------------------------
-// Mock @figma-plugins/components (InputField)
+// Mock @nuxt/ui
 //
-// InputField stub: renders a <label> + <input> pair using the label prop as
-// the accessible name. Emits 'update:modelValue' on input events.
-// Forwards type, min, max, step, disabled, aria-valuemin, aria-valuemax,
-// aria-valuenow attributes so axe can verify numeric input accessibility.
+// Stubs mirror Nuxt UI's accessibility semantics using the wrapping-label
+// pattern. A <label> wrapping an <input> provides an accessible name via the
+// label's text content without requiring a for/id pair — valid HTML and
+// WCAG 1.3.1 H44 compliant.
+//
+// UFormField stub:
+//   Renders <label style="display:flex;flex-direction:column">
+//     <span>label text</span>
+//     <slot />
+//   </label>
+//   This gives any <input> inside the slot its accessible name from the <span>
+//   text content. screen.getByRole('textbox', { name: 'Step 1 label' }) and
+//   screen.getByRole('spinbutton', { name: 'Step 1 start %' }) resolve correctly.
+//
+// UInput stub:
+//   Renders <input type="text" ...> — must be rendered INSIDE a UFormField
+//   (the wrapping label provides the name).
+//
+// UInputNumber stub:
+//   Renders <input type="number" ...> with all ARIA numeric attributes forwarded
+//   for axe spinbutton validation (WCAG 4.1.2).
+//
+// UButton stub:
+//   Renders <button type="button" ...> with slot content and aria-label passthrough.
 // ---------------------------------------------------------------------------
 
-vi.mock('@figma-plugins/components', () => ({
-  InputField: {
-    name: 'InputField',
+vi.mock('@nuxt/ui', () => ({
+  UFormField: {
+    name: 'UFormField',
     props: {
-      label: { type: String, required: true },
+      label: { type: String, default: '' },
+      name: { type: String, default: undefined },
+      required: { type: Boolean, default: false },
+    },
+    // Wrapping <label> pattern: gives the slot's first focusable control its
+    // accessible name via the <span> text without needing for/id wiring.
+    // display:contents on outer div avoids breaking the label's wrapping semantics.
+    template: `
+      <div class="u-form-field-stub" style="display:contents">
+        <label style="display:flex;flex-direction:column;gap:4px;font-size:11px">
+          <span>{{ label }}</span>
+          <slot />
+        </label>
+      </div>
+    `,
+  },
+
+  UInput: {
+    name: 'UInput',
+    props: {
       modelValue: { type: String, default: '' },
-      type: { type: String, default: 'text' },
       disabled: { type: Boolean, default: false },
-      multiline: { type: Boolean, default: false },
-      rows: { type: Number, default: undefined },
-      min: { type: [Number, String], default: undefined },
-      max: { type: [Number, String], default: undefined },
-      step: { type: [Number, String], default: undefined },
-      autocomplete: { type: String, default: undefined },
+      size: { type: String, default: 'md' },
+      placeholder: { type: String, default: undefined },
+      type: { type: String, default: 'text' },
+    },
+    emits: ['update:modelValue'],
+    template: `
+      <input
+        :type="type || 'text'"
+        :value="modelValue"
+        :disabled="disabled"
+        :placeholder="placeholder"
+        v-bind="$attrs"
+        @input="$emit('update:modelValue', $event.target.value)"
+      />
+    `,
+  },
+
+  UInputNumber: {
+    name: 'UInputNumber',
+    props: {
+      modelValue: { type: Number, default: 0 },
+      disabled: { type: Boolean, default: false },
+      min: { type: Number, default: undefined },
+      max: { type: Number, default: undefined },
+      step: { type: Number, default: 1 },
+      size: { type: String, default: 'md' },
       'aria-valuemin': { type: [Number, String], default: undefined },
       'aria-valuemax': { type: [Number, String], default: undefined },
       'aria-valuenow': { type: [Number, String], default: undefined },
     },
     emits: ['update:modelValue'],
+    // Emits a number (or null for empty). NaN guard in the component handler
+    // prevents emitting on non-numeric input.
     template: `
-      <div class="input-field-stub" data-testid="input-field">
-        <label :for="label + '-input'" style="display:block;font-size:11px">{{ label }}</label>
-        <input
-          :id="label + '-input'"
-          :type="type || 'text'"
-          :value="modelValue"
-          :disabled="disabled"
-          :min="min"
-          :max="max"
-          :step="step"
-          :aria-label="label"
-          v-bind="$attrs"
-          @input="$emit('update:modelValue', $event.target.value)"
-        />
-      </div>
+      <input
+        type="number"
+        :value="modelValue"
+        :disabled="disabled"
+        :min="min"
+        :max="max"
+        :step="step"
+        v-bind="$attrs"
+        @input="$emit('update:modelValue', $event.target.value === '' ? null : parseFloat($event.target.value))"
+      />
     `,
   },
-  StatusMessage: {
-    name: 'StatusMessage',
+
+  UButton: {
+    name: 'UButton',
     props: {
-      message: { type: String, default: '' },
-      variant: { type: String, default: 'status' },
+      color: { type: String, default: 'neutral' },
+      variant: { type: String, default: 'solid' },
+      icon: { type: String, default: undefined },
+      size: { type: String, default: 'md' },
+      disabled: { type: Boolean, default: false },
+      block: { type: Boolean, default: false },
     },
-    template: `<p v-if="message" role="status" aria-live="polite" aria-atomic="true">{{ message }}</p>`,
+    emits: ['click'],
+    template: `
+      <button
+        type="button"
+        :disabled="disabled"
+        v-bind="$attrs"
+        @click="$emit('click', $event)"
+      ><slot /></button>
+    `,
   },
 }));
 

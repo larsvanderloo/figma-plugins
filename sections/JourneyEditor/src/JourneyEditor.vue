@@ -11,9 +11,19 @@
  *      column header row at the top of the section.
  *   2. Per-item editors: each JourneyItemModel is rendered as an <li> inside
  *      an <ol aria-label="Journey steps">. Per-item controls:
- *        - Label input (InputField from @figma-plugins/components).
- *        - Icon swap (IconPicker from @figma-plugins/sections-icon-picker).
- *        - startPct + endPct numeric inputs (InputField with type="number").
+ *        - UFormField + UInput for the item label.
+ *        - IconPicker (from @figma-plugins/sections-icon-picker) for icon swap.
+ *        - UFormField + UInputNumber for startPct and endPct.
+ *
+ * ## Nuxt UI v4 primitives (Sprint 5 Task 5.8 — MON-2894486835)
+ *
+ * Replaces native HTML + InputField with Nuxt UI v4 primitives:
+ *   - Column header heading/subheader → TitleDescriptionEditor (unchanged — it
+ *     is its own section with its own migration timeline).
+ *   - Per-item label → UFormField label="Step N label" + UInput.
+ *   - Per-item icon swap → IconPicker child component (already migrated in 5.5).
+ *   - Per-item startPct/endPct → UInputNumber :min="0" :max="100" :step="1".
+ *   - Add/remove item buttons → UButton variant="ghost" icon="i-lucide-x|i-lucide-plus".
  *
  * ## Section discipline (ADR-0010 §section-authoring-template)
  *
@@ -24,6 +34,10 @@
  *   - Data flows in via the `model` prop. User edits flow out via typed emits.
  *   - The PARENT (App.vue task 4.3) is responsible for calling
  *     useEditorActions.applyJourney() with the emitted payloads.
+ *
+ * ## Pinia discipline
+ *
+ * No Pinia store imports. Local refs only for UI buffers.
  *
  * ## T45.13 diff-based update
  *
@@ -47,27 +61,30 @@
  * - Item list: <ol aria-label="Journey steps">. Each item: <li> with an
  *   accessible name "{index}: {label}" via aria-label on the containing <li>
  *   so screen readers announce position and content on focus-within.
- * - Numeric inputs: aria-valuemin / aria-valuemax / aria-valuenow + visible
- *   <label> associations (InputField handles label-for via useId()).
- * - Icon pickers: <label> inside each item subsection.
+ * - Numeric inputs: UInputNumber carries aria-valuemin / aria-valuemax /
+ *   aria-valuenow via :aria-valuemin/:aria-valuemax/:aria-valuenow props that
+ *   are forwarded to the underlying <input>. UFormField provides visible
+ *   label association (WCAG 1.3.1, H44).
  * - Tab order: column-header section → item 1 (label, icon, range) → item 2 ...
  * - No Figma host shortcuts captured.
- * - prefers-reduced-motion respected inside child sections.
+ * - prefers-reduced-motion respected inside Nuxt UI primitives.
  * - axe-clean across: empty list, populated list, single item, disabled state.
  *
- * ## T46 dividers
+ * ## Range clamp logic (preserved from v0.2.1)
  *
- * Horizontal <hr> elements between items. No new primitives — plain CSS.
+ * - startPct is clamped to [0, 95].
+ * - endPct is clamped to [startPct + 5, 100].
+ * - Invalid range (end < start + 5): endPct is clamped to start + 5 before emitting.
  *
  * Ownership: ui-engineer.
- * Resolves: MON-2893983016 (Sprint 4, Task 4.2).
+ * Resolves: MON-2894486835 (Sprint 5, Task 5.8).
  */
 
 import { computed, useId } from 'vue';
+import { UFormField, UInput, UInputNumber, UButton } from '@nuxt/ui';
 import { TitleDescriptionEditor } from '@figma-plugins/sections-title-description-editor';
 import type { TitleDescriptionModel } from '@figma-plugins/sections-title-description-editor';
 import { IconPicker } from '@figma-plugins/sections-icon-picker';
-import { InputField } from '@figma-plugins/components';
 import type { JourneyWrapModel, JourneyItemModel, JourneyColumnModel, NodeId } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -101,7 +118,7 @@ export interface JourneyEditorEmits {
     payload: { slotId: NodeId; columnIndex: number; header?: string; subheader?: string },
   ];
   /**
-   * An item's label changed (debounced via InputField).
+   * An item's label changed.
    * Parent patches model.items[itemId] and dispatches applyJourney.
    */
   'update:itemLabel': [payload: { itemId: NodeId; label: string }];
@@ -113,7 +130,7 @@ export interface JourneyEditorEmits {
   /**
    * An item's startPct and/or endPct changed.
    * Only the changed field is included. Parent patches and dispatches.
-   * Invalid range (end < start) is clamped to start + 5 before emitting.
+   * Invalid range (end < start + 5) is clamped to start + 5 before emitting.
    */
   'update:itemRange': [payload: { itemId: NodeId; startPct?: number; endPct?: number }];
 }
@@ -144,20 +161,13 @@ const hasItems = computed<boolean>(() => props.model.items.length > 0);
 /**
  * Build a TitleDescriptionModel from a JourneyColumnModel for the first column
  * header only. JourneyEditor only exposes column 0 editing for the header section
- * in the primary MVP scope — additional columns are surfaced via a separate
- * column list if the consuming plugin requires multi-column editing.
- *
- * We use the slotId as the synthetic copyWrapId because TitleDescriptionEditor
- * needs an id to pass back through update:model; JourneyEditor discards it and
- * replaces with slotId + columnIndex in the re-emitted payload.
+ * in the primary MVP scope.
  */
 function columnToTitleDescriptionModel(
   col: JourneyColumnModel,
   index: number,
 ): TitleDescriptionModel {
   return {
-    // Synthetic ID: slotId:colIndex — TitleDescriptionEditor passes it through
-    // update:model and JourneyEditor replaces it. Not a real Figma node-id.
     copyWrapId: `${props.model.slotId}:col:${index}`,
     heading: col.header,
     paragraph: col.subheader,
@@ -184,7 +194,6 @@ function onColumnHeaderUpdate(
   if (patch.paragraph !== null && patch.paragraph !== props.model.columns[columnIndex]?.subheader) {
     payload.subheader = patch.paragraph;
   }
-  // Emit even if nothing changed — the parent can skip dispatch if identical.
   emit('update:columnHeader', payload);
 }
 
@@ -211,12 +220,11 @@ function onItemIconUpdate(item: JourneyItemModel, icon: string): void {
 /**
  * startPct input handler.
  * Clamps to [0, 95] and ensures startPct < endPct - 5.
- * Invalid range is clamped gracefully rather than rejected.
+ * UInputNumber emits a number; NaN / null guard required.
  */
-function onItemStartPctInput(item: JourneyItemModel, rawValue: string): void {
-  const parsed = parseFloat(rawValue);
-  if (isNaN(parsed)) return;
-  const clamped = Math.min(95, Math.max(0, parsed));
+function onItemStartPctInput(item: JourneyItemModel, rawValue: number | null | undefined): void {
+  if (rawValue === null || rawValue === undefined || isNaN(rawValue)) return;
+  const clamped = Math.min(95, Math.max(0, rawValue));
   emit('update:itemRange', { itemId: item.itemNodeId, startPct: clamped });
 }
 
@@ -225,11 +233,10 @@ function onItemStartPctInput(item: JourneyItemModel, rawValue: string): void {
  * Clamps to [startPct + 5, 100]. If the entered value would make end < start + 5,
  * it is silently clamped to start + 5 before emitting (graceful handling per spec).
  */
-function onItemEndPctInput(item: JourneyItemModel, rawValue: string): void {
-  const parsed = parseFloat(rawValue);
-  if (isNaN(parsed)) return;
+function onItemEndPctInput(item: JourneyItemModel, rawValue: number | null | undefined): void {
+  if (rawValue === null || rawValue === undefined || isNaN(rawValue)) return;
   const minEnd = item.startPct + 5;
-  const clamped = Math.min(100, Math.max(minEnd, parsed));
+  const clamped = Math.min(100, Math.max(minEnd, rawValue));
   emit('update:itemRange', { itemId: item.itemNodeId, endPct: clamped });
 }
 </script>
@@ -297,22 +304,25 @@ function onItemEndPctInput(item: JourneyItemModel, rawValue: string): void {
             <p class="journey-editor__item-index" aria-hidden="true">Step {{ index + 1 }}</p>
 
             <!-- ---- Label ---- -->
-            <div class="journey-editor__item-field">
-              <InputField
-                :label="`Step ${index + 1} label`"
+            <!--
+              UFormField provides <label> association (WCAG 1.3.1, H44).
+              UInput renders <input type="text"> — matches textbox role query.
+            -->
+            <UFormField :label="`Step ${index + 1} label`" class="journey-editor__item-field">
+              <UInput
                 :model-value="item.label"
-                type="text"
                 :disabled="disabled ?? false"
+                size="sm"
+                class="journey-editor__item-input"
                 @update:model-value="onItemLabelUpdate(item, $event)"
               />
-            </div>
+            </UFormField>
 
             <!-- ---- Icon swap ---- -->
             <div class="journey-editor__item-field">
               <!--
-                <label> association is provided by the sub-label + IconPicker's
-                internal listbox aria-label. The sub-label is decorative (aria-hidden)
-                because the listbox has its own aria-label="Icon options".
+                <p> aria-hidden — the listbox inside IconPicker has its own
+                aria-label="Icon options" for screen readers.
               -->
               <p class="journey-editor__item-sub-label" aria-hidden="true">Icon</p>
               <IconPicker
@@ -323,39 +333,43 @@ function onItemEndPctInput(item: JourneyItemModel, rawValue: string): void {
             </div>
 
             <!-- ---- Range inputs ---- -->
+            <!--
+              UInputNumber renders <input type="number"> (spinbutton role).
+              :aria-valuemin / :aria-valuemax / :aria-valuenow are forwarded to
+              the underlying native <input> by UInputNumber's v-bind="$attrs"
+              passthrough, satisfying WCAG 4.1.2 and the axe spinbutton rule.
+              UFormField provides visible label association (WCAG 1.3.1, H44).
+            -->
             <div class="journey-editor__item-range">
-              <!--
-                aria-valuemin / aria-valuemax / aria-valuenow on native
-                <input type="number"> are carried via the InputField's
-                aria-* pass-through. The visible <label> association is
-                handled by InputField internally (WCAG 1.3.1 H44).
-              -->
-              <InputField
-                :label="`Step ${index + 1} start %`"
-                type="number"
-                :model-value="String(item.startPct)"
-                :min="0"
-                :max="95"
-                :step="1"
-                :disabled="disabled ?? false"
-                :aria-valuemin="0"
-                :aria-valuemax="95"
-                :aria-valuenow="item.startPct"
-                @update:model-value="onItemStartPctInput(item, $event)"
-              />
-              <InputField
-                :label="`Step ${index + 1} end %`"
-                type="number"
-                :model-value="String(item.endPct)"
-                :min="item.startPct + 5"
-                :max="100"
-                :step="1"
-                :disabled="disabled ?? false"
-                :aria-valuemin="item.startPct + 5"
-                :aria-valuemax="100"
-                :aria-valuenow="item.endPct"
-                @update:model-value="onItemEndPctInput(item, $event)"
-              />
+              <UFormField :label="`Step ${index + 1} start %`">
+                <UInputNumber
+                  :model-value="item.startPct"
+                  :min="0"
+                  :max="95"
+                  :step="1"
+                  :disabled="disabled ?? false"
+                  :aria-valuemin="0"
+                  :aria-valuemax="95"
+                  :aria-valuenow="item.startPct"
+                  size="sm"
+                  @update:model-value="onItemStartPctInput(item, $event)"
+                />
+              </UFormField>
+
+              <UFormField :label="`Step ${index + 1} end %`">
+                <UInputNumber
+                  :model-value="item.endPct"
+                  :min="item.startPct + 5"
+                  :max="100"
+                  :step="1"
+                  :disabled="disabled ?? false"
+                  :aria-valuemin="item.startPct + 5"
+                  :aria-valuemax="100"
+                  :aria-valuenow="item.endPct"
+                  size="sm"
+                  @update:model-value="onItemEndPctInput(item, $event)"
+                />
+              </UFormField>
             </div>
           </li>
         </template>
@@ -484,6 +498,11 @@ function onItemEndPctInput(item: JourneyItemModel, rawValue: string): void {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+/* Full-width input inside UFormField */
+.journey-editor__item-input {
+  width: 100%;
 }
 
 .journey-editor__item-sub-label {
