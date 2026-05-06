@@ -85,6 +85,13 @@ export default defineConfig({
     // emptyOutDir: true.  Clearing again here would wipe dist/ui/index.html.
     outDir: 'dist',
     emptyOutDir: false,
+    // ES2017 target: Figma's plugin sandbox parser does NOT accept ES2020+
+    // syntax — optional chaining `?.`, nullish coalescing `??`, etc. — and
+    // throws "SyntaxError: Unexpected token" at plugin load. v0.2.1 reference
+    // build documents this constraint in its esbuild.config.mjs. Transpile
+    // down to ES2017 so these features become equivalent ternary/`if` chains
+    // that the sandbox can parse.
+    target: 'es2017',
     lib: {
       entry: resolve(root, 'code/main.ts'),
       formats: ['iife'],
