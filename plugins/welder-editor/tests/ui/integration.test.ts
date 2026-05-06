@@ -239,9 +239,15 @@ describe('1. Slide pick → all general sections populate', () => {
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    // Click on SLIDE_A in the picker (native <select> — fireEvent.change with value).
-    const picker = q.getByRole('combobox');
-    await fireEvent.change(picker, { target: { value: SLIDE_A.id } });
+    // Simulate slide selection via the message bus (selection-changed is the
+    // canonical trigger path; USelectMenu replaced the native <select> in PR #58,
+    // so fireEvent.change no longer applies to the combobox).
+    expect(capturedMessageHandler).not.toBeNull();
+    capturedMessageHandler!({
+      type: 'selection-changed',
+      version: 1,
+      payload: { selectedNodeIds: [SLIDE_A.id] },
+    });
 
     // Wait for the async bridge call to resolve and reactivity to flush.
     await waitFor(() => {
@@ -271,8 +277,13 @@ describe('1. Slide pick → all general sections populate', () => {
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    const picker = q.getByRole('combobox');
-    await fireEvent.change(picker, { target: { value: SLIDE_A.id } });
+    // Simulate slide selection via message bus (USelectMenu replaced native <select> — PR #58).
+    expect(capturedMessageHandler).not.toBeNull();
+    capturedMessageHandler!({
+      type: 'selection-changed',
+      version: 1,
+      payload: { selectedNodeIds: [SLIDE_A.id] },
+    });
 
     await waitFor(() => {
       expect(q.getByRole('textbox', { name: /badge label/i })).toBeDefined();
@@ -301,8 +312,13 @@ describe('1. Slide pick → all general sections populate', () => {
     const { container } = render(App, { global: { plugins: [pinia] } });
     const q = within(container as HTMLElement);
 
-    const picker = q.getByRole('combobox');
-    await fireEvent.change(picker, { target: { value: SLIDE_A.id } });
+    // Simulate slide selection via message bus (USelectMenu replaced native <select> — PR #58).
+    expect(capturedMessageHandler).not.toBeNull();
+    capturedMessageHandler!({
+      type: 'selection-changed',
+      version: 1,
+      payload: { selectedNodeIds: [SLIDE_A.id] },
+    });
 
     await waitFor(() => {
       // General tab should be the selected tab (aria-selected="true").
@@ -743,8 +759,7 @@ describe('7. selection-changed bridge message → active slide updates in SlideP
 
     mockPostAndWait.mockResolvedValueOnce(makeSlideLoadResult(SLIDE_B.id, GENERAL_COPY_ONLY));
 
-    const { container } = render(App, { global: { plugins: [pinia] } });
-    const q = within(container as HTMLElement);
+    render(App, { global: { plugins: [pinia] } });
 
     expect(capturedMessageHandler).not.toBeNull();
 
@@ -754,10 +769,11 @@ describe('7. selection-changed bridge message → active slide updates in SlideP
       payload: { selectedNodeIds: [SLIDE_B.id] },
     });
 
-    // Wait for the picker's selected value to update to slide B.
+    // Wait for the store's activeSlideId to update to slide B.
+    // USelectMenu replaced the native <select> (PR #58); picker.value no longer applies.
+    // The store is the canonical truth for the selected slide.
     await waitFor(() => {
-      const picker = q.getByRole('combobox') as HTMLSelectElement;
-      expect(picker.value).toBe(SLIDE_B.id);
+      expect(store.activeSlideId).toBe(SLIDE_B.id);
     });
   });
 

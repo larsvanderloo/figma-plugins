@@ -234,9 +234,13 @@ describe('App.vue — assembly smoke tests', () => {
       const { container } = render(App, { global: { plugins: [pinia] } });
       const q = within(container as HTMLElement);
 
-      // The slide names appear as <option> text in the native <select>.
-      expect(q.getByText(SLIDE_A.name)).toBeDefined();
-      expect(q.getByText(SLIDE_B.name)).toBeDefined();
+      // SlidePicker uses USelectMenu (replaced native <select> in PR #58).
+      // Items in USelectMenu are portal-rendered and only visible when the dropdown is open.
+      // Verify via the combobox being present and the store reflecting the correct slides.
+      expect(q.getByRole('combobox')).toBeDefined();
+      expect(store.slides.length).toBe(2);
+      expect(store.slides[0]!.name).toBe(SLIDE_A.name);
+      expect(store.slides[1]!.name).toBe(SLIDE_B.name);
     });
   });
 
