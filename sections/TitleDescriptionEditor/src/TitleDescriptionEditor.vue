@@ -7,7 +7,7 @@
  *
  * - Renders a single-line heading input (required) and, when the model's
  *   `paragraph` field is non-null, a multi-line paragraph textarea (optional).
- * - Debounces outbound `update:model` emits by 300 ms to avoid flooding the
+ * - Debounces outbound `update:model` emits by 200 ms to avoid flooding the
  *   message bus on every keystroke.
  * - Does NOT dispatch messages directly. The consuming plugin view wires
  *   `@update:model="actions.applyTitleDescription"` (section discipline per
@@ -15,38 +15,38 @@
  * - Does NOT fetch data. Data flows in via the `model` prop from the plugin's
  *   Pinia store; user edits flow out via `update:model`.
  *
- * ## Primitives used (Sprint 3 migration — MON-2893969759)
+ * ## Primitives used (Sprint 5 migration — MON-2894475033)
  *
- * InputField (from @figma-plugins/components) replaces the inline
- * <label> + <input> and <label> + <textarea> patterns. The outer <fieldset>
- * is retained because `disabled` propagates to all descendant inputs via
- * the browser's native fieldset mechanism — InputField's own `disabled` prop
- * cannot replicate that without additional wiring.
- *
- * v-model on InputField feeds through the local draft refs. On each
- * update:modelValue event the handler updates the ref and calls scheduleEmit().
+ * UFormField + UInput + UTextarea (Nuxt UI v4) replace the @figma-plugins/components
+ * InputField primitive. UFormField generates stable <label for="…"> / <input id="…">
+ * pairs via Nuxt UI's internal id wiring (WCAG 1.3.1, Technique H44). The outer
+ * <fieldset> is retained because `disabled` propagates to all descendant inputs
+ * via the browser's native fieldset mechanism.
  *
  * ## Accessibility
  *
- * - InputField generates stable <label for="…"> / <input id="…"> pairs via
- *   Vue's useId() internally (WCAG 1.3.1, Technique H44).
- * - `disabled` propagates from <fieldset disabled> to InputField's controls.
+ * - UFormField generates stable <label for="…"> / <input id="…"> pairs
+ *   (WCAG 1.3.1, Technique H44).
+ * - `disabled` propagates from <fieldset disabled> to UInput/UTextarea controls.
  * - No host Figma shortcuts (Cmd-Z, Cmd-D, Cmd-A) are captured.
- * - `prefers-reduced-motion` is respected inside InputField.
+ * - `prefers-reduced-motion` is respected inside Nuxt UI components.
  *
  * ## Debounce
  *
- * 300 ms debounce on the UI side. The message-bus spec for `apply-title-
- * description` notes "Debounced 200 ms in TitleDescriptionEditor" — the 300 ms
- * here is intentionally slightly longer to absorb typical keystroke cadences
- * in Figma's compact panel before hitting the code side. See project-pm flag
- * below.
+ * 200 ms debounce — matches the v0.2.1 canonical reference and the message-bus
+ * spec for `apply-title-description`. Absorbs typical keystroke cadences
+ * in Figma's compact panel before hitting the code side.
+ *
+ * ## Accent ranges
+ *
+ * headingDim / accent-range editing is deferred per ADR-0008.
+ * No dim-words logic is included in this component.
  *
  * Ownership: ui-engineer.
+ * Resolves: MON-2894475033 (Sprint 5, Wave 3, Task 5.4).
  */
 
-import { ref, computed, watch, onUnmounted } from 'vue';
-import { InputField } from '@figma-plugins/components';
+import { ref, watch, onUnmounted } from 'vue';
 import type { TitleDescriptionModel } from './types.js';
 
 // ---------------------------------------------------------------------------
@@ -78,7 +78,7 @@ const props = withDefaults(defineProps<TitleDescriptionEditorProps>(), {
 
 export interface TitleDescriptionEditorEmits {
   /**
-   * Emitted (debounced 300 ms) when the user edits heading or paragraph.
+   * Emitted (debounced 200 ms) when the user edits heading or paragraph.
    * Carries only the changed text fields — copyWrapId is passed through
    * unchanged so the parent can build the full message-bus payload.
    * The parent (plugin view) is responsible for dispatching
@@ -93,35 +93,33 @@ const emit = defineEmits<TitleDescriptionEditorEmits>();
 // Local draft state
 //
 // We maintain internal refs that shadow the prop so the input isn't jarred by
-// prop updates coming in while the user is typing. When the prop changes (e.g.
-// slide changed), we sync the internal state.
+// prop updates coming in while the user is typing. Granular watchers below
+// sync individual fields — not the whole model object — so a debounce-echo
+// from the parent store doesn't reset the cursor mid-keystroke.
 // ---------------------------------------------------------------------------
 
 const localHeading = ref<string>(props.model.heading);
-const localParagraph = ref<string | null>(props.model.paragraph);
+const localParagraph = ref<string>(props.model.paragraph ?? '');
+const hasParagraph = ref<boolean>(props.model.paragraph !== null);
 
-/**
- * Sync internal state when the model prop changes from the outside
- * (e.g. a different slide was selected in SlidePicker).
- * We compare by copyWrapId so that debounce-triggered prop updates
- * (round-tripped through the store) don't reset the cursor position.
- */
+// Granular watcher for heading — only updates local ref when the external
+// value genuinely differs (prevents debounce-echo resetting the cursor).
 watch(
-  () => props.model,
+  () => props.model.heading,
   (next) => {
-    // If the CopyWrap identity changed, always reset.
-    localHeading.value = next.heading;
-    localParagraph.value = next.paragraph;
-    clearPending();
+    if (next !== localHeading.value) localHeading.value = next;
   },
 );
 
-// ---------------------------------------------------------------------------
-// Computed
-// ---------------------------------------------------------------------------
-
-/** True when this CopyWrap has a paragraph slot (paragraph !== null). */
-const hasParagraph = computed<boolean>(() => props.model.paragraph !== null);
+// Granular watcher for paragraph — syncs paragraph text and visibility
+// on slide switches.
+watch(
+  () => props.model.paragraph,
+  (next) => {
+    localParagraph.value = next ?? '';
+    hasParagraph.value = next !== null;
+  },
+);
 
 // ---------------------------------------------------------------------------
 // Debounce
@@ -142,9 +140,9 @@ function scheduleEmit(): void {
     debounceTimer = null;
     emit('update:model', {
       heading: localHeading.value,
-      paragraph: localParagraph.value,
+      paragraph: hasParagraph.value ? localParagraph.value : null,
     });
-  }, 300);
+  }, 200);
 }
 
 onUnmounted(() => {
@@ -155,13 +153,13 @@ onUnmounted(() => {
 // Handlers
 // ---------------------------------------------------------------------------
 
-function onHeadingInput(value: string): void {
-  localHeading.value = value;
+function onHeadingInput(value: string | number): void {
+  localHeading.value = String(value);
   scheduleEmit();
 }
 
-function onParagraphInput(value: string): void {
-  localParagraph.value = value;
+function onParagraphInput(value: string | number): void {
+  localParagraph.value = String(value);
   scheduleEmit();
 }
 </script>
@@ -177,29 +175,35 @@ function onParagraphInput(value: string): void {
 
     <!-- ------------------------------------------------------------------ -->
     <!-- Heading input — single-line, required                               -->
-    <!-- InputField handles <label for="…"> association internally.         -->
+    <!-- UFormField handles <label for="…"> association internally.         -->
     <!-- ------------------------------------------------------------------ -->
-    <InputField
-      label="Heading"
-      :model-value="localHeading"
-      type="text"
-      :disabled="disabled ?? false"
-      @update:model-value="onHeadingInput"
-    />
+    <div class="space-y-3">
+      <UFormField name="heading" label="Heading" size="md">
+        <UInput
+          :model-value="localHeading"
+          placeholder="Slide title"
+          :disabled="disabled"
+          class="w-full"
+          @update:model-value="onHeadingInput"
+        />
+      </UFormField>
 
-    <!-- ------------------------------------------------------------------ -->
-    <!-- Paragraph textarea — multi-line, optional                           -->
-    <!-- Hidden when model.paragraph === null (no paragraph slot on CopyWrap) -->
-    <!-- ------------------------------------------------------------------ -->
-    <InputField
-      v-if="hasParagraph"
-      label="Paragraph"
-      :model-value="localParagraph ?? ''"
-      :disabled="disabled ?? false"
-      :multiline="true"
-      :rows="3"
-      @update:model-value="onParagraphInput"
-    />
+      <!-- ---------------------------------------------------------------- -->
+      <!-- Paragraph textarea — multi-line, optional                         -->
+      <!-- Hidden when model.paragraph === null (no paragraph slot on CopyWrap) -->
+      <!-- ---------------------------------------------------------------- -->
+      <UFormField v-if="hasParagraph" name="paragraph" label="Paragraph" size="md">
+        <UTextarea
+          :model-value="localParagraph"
+          :rows="3"
+          :autoresize="true"
+          :disabled="disabled"
+          placeholder="Paragraph text"
+          class="w-full"
+          @update:model-value="onParagraphInput"
+        />
+      </UFormField>
+    </div>
   </fieldset>
 </template>
 
@@ -208,10 +212,9 @@ function onParagraphInput(value: string): void {
  * Compact density — matches the Figma plugin iframe context.
  * All colours reference CSS custom properties (design tokens) so they
  * adapt to Figma's light/dark themes without hard-coded hex codes.
- * Fallback values are the Tailwind slate palette equivalents.
  *
- * InputField owns its own label + control styling; this wrapper only
- * provides the fieldset reset and column gap.
+ * UFormField + UInput/UTextarea own their own label + control styling;
+ * this wrapper only provides the fieldset reset.
  */
 
 .title-description-editor {
@@ -220,10 +223,6 @@ function onParagraphInput(value: string): void {
   padding: 0;
   margin: 0;
   min-inline-size: 0;
-
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
 
 /* sr-only utility (Tailwind not available in scoped <style>) */

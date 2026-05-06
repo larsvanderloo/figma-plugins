@@ -7,7 +7,7 @@
 // Test contract (ADR-0010 §section-authoring-template):
 //   1. Renders heading input + paragraph textarea when paragraph !== null
 //   2. Hides paragraph textarea when paragraph === null
-//   3. Emits `update:model` on input (debounced 300 ms)
+//   3. Emits `update:model` on input (debounced 200 ms)
 //   4. Disabled state disables both inputs
 //   5. Labels properly associated (explicit <label for="…">)
 //   6. Model prop change syncs local state (slide switch)
@@ -127,7 +127,7 @@ describe('TitleDescriptionEditor — paragraph === null', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 3. Emits `update:model` on input — debounced 300 ms
+// 3. Emits `update:model` on input — debounced 200 ms
 // ---------------------------------------------------------------------------
 
 describe('TitleDescriptionEditor — update:model emit (debounced)', () => {
@@ -151,7 +151,7 @@ describe('TitleDescriptionEditor — update:model emit (debounced)', () => {
     expect(emitted('update:model')).toBeUndefined();
   });
 
-  it('emits update:model with updated heading after 300 ms', async () => {
+  it('emits update:model with updated heading after 200 ms', async () => {
     const { emitted } = render(TitleDescriptionEditor, {
       props: { model: MODEL_WITH_PARAGRAPH },
     });
@@ -159,7 +159,7 @@ describe('TitleDescriptionEditor — update:model emit (debounced)', () => {
     const input = screen.getByLabelText('Heading');
     await fireEvent.input(input, { target: { value: 'New Title' } });
 
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(200);
 
     const events = emitted('update:model') as [{ heading: string; paragraph: string | null }][];
     expect(events).toHaveLength(1);
@@ -175,18 +175,18 @@ describe('TitleDescriptionEditor — update:model emit (debounced)', () => {
 
     const input = screen.getByLabelText('Heading');
     await fireEvent.input(input, { target: { value: 'A' } });
-    vi.advanceTimersByTime(100);
+    vi.advanceTimersByTime(80);
     await fireEvent.input(input, { target: { value: 'Ab' } });
-    vi.advanceTimersByTime(100);
+    vi.advanceTimersByTime(80);
     await fireEvent.input(input, { target: { value: 'Abc' } });
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(200);
 
     const events = emitted('update:model') as unknown[] | undefined;
     // Only one emit despite three inputs.
     expect(events).toHaveLength(1);
   });
 
-  it('emits with updated paragraph after 300 ms', async () => {
+  it('emits with updated paragraph after 200 ms', async () => {
     const { emitted } = render(TitleDescriptionEditor, {
       props: { model: MODEL_WITH_PARAGRAPH },
     });
@@ -194,7 +194,7 @@ describe('TitleDescriptionEditor — update:model emit (debounced)', () => {
     const textarea = screen.getByLabelText('Paragraph');
     await fireEvent.input(textarea, { target: { value: 'Updated paragraph text.' } });
 
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(200);
 
     const events = emitted('update:model') as [{ heading: string; paragraph: string | null }][];
     expect(events).toHaveLength(1);
@@ -212,7 +212,7 @@ describe('TitleDescriptionEditor — update:model emit (debounced)', () => {
     const input = screen.getByLabelText('Heading');
     await fireEvent.input(input, { target: { value: 'Metrics Title' } });
 
-    vi.advanceTimersByTime(300);
+    vi.advanceTimersByTime(200);
 
     const events = emitted('update:model') as [{ heading: string; paragraph: string | null }][];
     expect(events).toHaveLength(1);
