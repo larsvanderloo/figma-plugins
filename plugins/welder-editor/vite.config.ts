@@ -28,7 +28,7 @@
 //   dist/code.js   — IIFE plugin code (written by vite.code.config.ts)
 //
 // Bundle visualizer: active only during production builds (`pnpm build`).
-// Outputs dist/bundle-stats.html — use it to check against the ADR-0003 budget.
+// Outputs dist/bundle-stats.html — use it to check against the ADR-0014 budget.
 // Never runs in dev/watch mode so it doesn't slow the edit loop.
 
 import { defineConfig } from 'vite';
@@ -38,17 +38,40 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 import { visualizer } from 'rollup-plugin-visualizer';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import welderTheme from './app.config';
 
 const root = fileURLToPath(new URL('.', import.meta.url));
 
 // `command` is 'build' for `pnpm build` / `pnpm preview` and 'serve' for
-// `pnpm dev`. Only attach the visualizer plugin during production builds so
+// `pnpm dev'. Only attach the visualizer plugin during production builds so
 // it never interferes with the HMR cycle or vitest.
 export default defineConfig(({ command, mode }) => ({
   plugins: [
     vue(),
-    ui({ ui: welderTheme }),
+    // Nuxt UI v4 Vite plugin — configures Tailwind CSS v4 preprocessing,
+    // registers the Nuxt UI component transform, and injects the theme.
+    //
+    // colorMode: false — force light mode.  Figma's iframe inherits the host
+    // OS prefers-color-scheme, but Welder branding is always light.  Disabling
+    // colorMode prevents the iframe from flipping to dark on dark-mode desktops.
+    //
+    // colors — Welder palette:
+    //   primary = 'orange'   → orange-500 (#ff6900 in Tailwind oklch) is the
+    //                          closest to Welder Oranje (#ff7700); all 11 shades
+    //                          (50–950) are available for hover/active/focus states
+    //                          on UButton, UInput focus ring, UBadge, USwitch, etc.
+    //   secondary = 'blue'   → accent colour for secondary actions (matches v0.2.1)
+    //   neutral  = 'neutral' → pure gray for panel backgrounds, disabled states,
+    //                          placeholder text, and border colours.
+    ui({
+      colorMode: false,
+      ui: {
+        colors: {
+          primary: 'orange',
+          secondary: 'blue',
+          neutral: 'neutral',
+        },
+      },
+    }),
     // viteSingleFile: inlines all JS and CSS into the HTML output.
     // This is required for Figma's plugin sandbox which loads the ui path as
     // a raw HTML string (__html__) with no server to resolve external assets.
@@ -81,6 +104,10 @@ export default defineConfig(({ command, mode }) => ({
     // cssCodeSplit: false ensures CSS is not split into separate chunks;
     // viteSingleFile will inline the single CSS into the HTML <style> tag.
     cssCodeSplit: false,
+    // Target modern Chromium — Figma's iframe sandbox is Chromium-based and
+    // supports ES2020+.  The ES2017 restriction applies only to code.js
+    // (the Figma plugin sandbox), not to the iframe.
+    target: 'es2020',
     rollupOptions: {
       input: resolve(root, 'ui/index.html'),
       output: {
