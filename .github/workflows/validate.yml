@@ -76,8 +76,14 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
-      - name: Lint (eslint + prettier check)
-        run: pnpm lint
+      - name: Build all plugins
+        # Build runs BEFORE typecheck because @nuxt/ui/vite (unplugin-vue-components
+        # + unplugin-auto-import) generates components.d.ts and auto-imports.d.ts
+        # during `vite build`. vue-tsc needs those files to resolve <UInput>,
+        # <UFormField> and composable globals. Without them, every Nuxt UI
+        # primitive is an "unknown global" and the typecheck fails.
+        # Ref: v0.2.1 audit (docs/learnings/anti-patterns/0003-*.md).
+        run: pnpm build
 
       - name: Type-check
         run: pnpm typecheck
@@ -85,8 +91,8 @@ jobs:
       - name: Unit + component tests
         run: pnpm test
 
-      - name: Build all plugins
-        run: pnpm build
+      - name: Lint (eslint + prettier check)
+        run: pnpm lint
 
   build-artifacts:
     name: Build artifact validation — IIFE + singlefile checks
