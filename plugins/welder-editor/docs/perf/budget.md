@@ -10,7 +10,7 @@ This is the day-to-day reference for performance budgets on `welder-editor`. The
 
 ## Build architecture (chunked-text-loader)
 
-This plugin reuses the chunked-text-loader pattern carried over from the external scaffold. It is the same pattern called out in `learnings/anti-patterns/0002-figma-plugin-load-debugging.md` (originally referred to in the import brief as "anti-pattern 0004"). Quoting the anti-pattern:
+This plugin reuses the chunked-text-loader pattern carried over from the external scaffold. It is the same pattern called out in `learnings/anti-patterns/0002-figma-plugin-load-debugging.md`. Quoting the anti-pattern:
 
 > "The external build's chunked-text-loader approach (embedding ui.html as JS string literals inside code.js) is an alternative but adds unnecessary complexity — the `__html__` global approach via `manifest.ui` is cleaner."
 

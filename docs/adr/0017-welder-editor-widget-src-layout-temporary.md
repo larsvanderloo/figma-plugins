@@ -1,4 +1,4 @@
-# ADR 0017 — \welder-editor retains widget-src/ layout temporarily
+# ADR 0017 — welder-editor retains widget-src/ layout temporarily
 
 **Status:** Accepted
 **Date:** 2026-05-06
@@ -21,7 +21,7 @@ plugins/<slug>/
 └── shared/    # types + message-bus schema — owned by figma-api-engineer
 ```
 
-The imported scaffold uses a different layout — a single `widget-src/` directory containing `code.ts` (the main-thread bundle), `ui/` (the iframe Vue app), `types.ts` + `constants.ts` + `slide-machine.ts` (de-facto shared contract), `editors/` (per-editor logic crossing both threads), and `chart-core/csv/` (CSV parsing). The build is wired around this layout: `vite.config.ts` builds `widget-src/ui/` to `dist/ui.html`, and `esbuild.config.mjs` bundles `widget-src/code.ts` to `dist/code.js` with a custom `chunkedTextLoader` plugin that splits `dist/ui.html` into ~60 KB string chunks and inlines them into `dist/code.js` (the chunked-text-loader pattern, originally referred to in the import brief as "anti-pattern 0004" — the actual canonical reference is `learnings/anti-patterns/0002-figma-plugin-load-debugging.md`, which `welder-editor` resolved by switching to `__html__` + `vite-plugin-singlefile`).
+The imported scaffold uses a different layout — a single `widget-src/` directory containing `code.ts` (the main-thread bundle), `ui/` (the iframe Vue app), `types.ts` + `constants.ts` + `slide-machine.ts` (de-facto shared contract), `editors/` (per-editor logic crossing both threads), and `chart-core/csv/` (CSV parsing). The build is wired around this layout: `vite.config.ts` builds `widget-src/ui/` to `dist/ui.html`, and `esbuild.config.mjs` bundles `widget-src/code.ts` to `dist/code.js` with a custom `chunkedTextLoader` plugin that splits `dist/ui.html` into ~60 KB string chunks and inlines them into `dist/code.js` (the chunked-text-loader pattern documented in `learnings/anti-patterns/0002-figma-plugin-load-debugging.md`; the prior welder-editor scaffold (deleted in `b842be1`, see ADR-0018) had resolved this by switching to `__html__` + `vite-plugin-singlefile` instead).
 
 A refactor to canonical layout would touch:
 
