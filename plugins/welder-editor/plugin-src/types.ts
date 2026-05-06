@@ -461,6 +461,13 @@ export interface JourneyWrapModel {
 export type UIToPluginMessage =
   | { type: 'ui-ready' }
   | { type: 'pick-slide'; slideId: string }
+  /**
+   * Iframe regained focus — sandbox should re-scan and post the current
+   * slide list. Belt-and-suspenders for the early-window after plugin
+   * open, before `documentchange` is registered (which requires
+   * loadAllPagesAsync to complete in dynamic-page mode).
+   */
+  | { type: 'refresh-slides' }
   | {
       type: 'update-general';
       slideId: string;

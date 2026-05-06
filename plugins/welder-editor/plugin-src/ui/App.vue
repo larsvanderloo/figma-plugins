@@ -16,7 +16,7 @@
     - Panels zelf blijven leeg — T7-T14 vullen de drie slots in.
 -->
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
+import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
 
 import SlideSelector from './components/SlideSelector.vue';
 import GeneralPanel from './components/GeneralPanel.vue';
@@ -103,6 +103,19 @@ bridge.onMessage((msg) => {
 
 onMounted(() => {
   bridge.post({ type: 'ui-ready' });
+});
+
+// Belt-and-suspenders for the loadAllPagesAsync window in the sandbox:
+// when the plugin iframe regains focus (user tabs back after creating
+// or renaming a slide outside), ask the sandbox to re-scan and post the
+// current slide list. Sandbox's `postSlideList` is debounced + dedup'd
+// so a redundant refresh on focus is cheap.
+function onWindowFocus(): void {
+  bridge.post({ type: 'refresh-slides' });
+}
+window.addEventListener('focus', onWindowFocus);
+onBeforeUnmount(() => {
+  window.removeEventListener('focus', onWindowFocus);
 });
 </script>
 

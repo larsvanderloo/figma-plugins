@@ -972,6 +972,14 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     return;
   }
 
+  if (msg.type === 'refresh-slides') {
+    // Iframe regained focus — re-scan and post the current list.
+    // Closes the gap during the loadAllPagesAsync window when
+    // `documentchange` is not yet registered.
+    postSlideList();
+    return;
+  }
+
   if (msg.type === 'pick-slide') {
     const slide = findSlideById(msg.slideId);
     if (slide === null) {
@@ -1590,34 +1598,40 @@ async function main(): Promise<void> {
     }
   });
 
-  // documentchange-registratie: zonder loadAllPagesAsync kan dit in
-  // dynamic-page mode falen met een runtime-exception. We registreren
-  // in een try/catch; bij fout is de polling-fallback (postSlideList via
-  // currentpagechange) voldoende om de slide-list vers te houden.
-  try {
-    figma.on('documentchange', (event: DocumentChangeEvent) => {
+  // documentchange-registratie: in dynamic-page mode vereist Figma dat
+  // loadAllPagesAsync gedraaid heeft voordat we kunnen subscribe'n.
+  // We doen die load in de achtergrond (non-blocking) zodat de plugin
+  // direct openbaar is. De `refresh-slides`-handler hieronder vangt de
+  // gap af tussen plugin-open en het moment dat documentchange live is
+  // (typisch <1s op kleine docs, 10-30s op grote docs).
+  figma
+    .loadAllPagesAsync()
+    .then(() => {
       try {
-        const relevant = event.documentChanges.some((change) => {
-          if (change.type === 'CREATE') return true;
-          if (change.type === 'DELETE') return true;
-          // Native skip-toggle in Figma's left-panel thumbnail muteert
-          // SlideNode.isSkippedSlide → PROPERTY_CHANGE op het SLIDE-node.
-          // Zonder deze branch zou het oogje in de plugin niet sync'en
-          // met de Figma-UI.
-          if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') return true;
-          return false;
+        figma.on('documentchange', (event: DocumentChangeEvent) => {
+          try {
+            const relevant = event.documentChanges.some((change) => {
+              if (change.type === 'CREATE') return true;
+              if (change.type === 'DELETE') return true;
+              // Native skip-toggle in Figma's left-panel thumbnail muteert
+              // SlideNode.isSkippedSlide → PROPERTY_CHANGE op het SLIDE-node.
+              // Slide-rename komt ook binnen als PROPERTY_CHANGE op SLIDE.
+              if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') return true;
+              return false;
+            });
+            if (!relevant) return;
+            postSlideList();
+          } catch (err: unknown) {
+            console.log('[welder-slide-editor] documentchange handler failed:', err);
+          }
         });
-        if (!relevant) return;
-        postSlideList();
       } catch (err: unknown) {
-        console.log('[welder-slide-editor] documentchange handler failed:', err);
+        console.log('[welder-slide-editor] documentchange registration failed:', err);
       }
+    })
+    .catch((err: unknown) => {
+      console.log('[welder-slide-editor] loadAllPagesAsync failed:', err);
     });
-  } catch (err: unknown) {
-    // Fallback: documentchange niet beschikbaar in dynamic-page mode zonder
-    // loadAllPagesAsync — poll-interval (currentpagechange) houdt de lijst vers.
-    console.log('[welder-slide-editor] documentchange registration skipped (dynamic-page):', err);
-  }
 
   // Auto-follow: when user navigates slides in Figma (Slides navigator click
   // or selecting content in a slide in Design), signal the UI to switch.
