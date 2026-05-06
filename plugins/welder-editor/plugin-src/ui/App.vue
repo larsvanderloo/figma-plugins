@@ -25,7 +25,6 @@ import GraphsPanel from './components/GraphsPanel.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
 import { usePluginView } from './stores/usePluginView';
 import welderLogo from './assets/welder-logo.svg';
-import type { SlideSummary } from '../types';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
@@ -50,21 +49,8 @@ const currentSlide = computed<string | null>({
   },
 });
 
-// Empty-state logic. Wanneer er geen slide gekozen is tonen we een
-// globale placeholder.
-const noSlide = computed(() => view.state.currentSlideId === null);
-
-// Summary van de actieve slide — gebruikt door de skip-toggle (eye-icon)
-// om `isSkipped` te lezen en het juiste icon + tooltip te tonen.
-const currentSummary = computed<SlideSummary | null>(() => {
-  const id = view.state.currentSlideId;
-  if (id === null) return null;
-  const match = view.state.slides.find((s) => s.id === id);
-  return match !== undefined ? match : null;
-});
-
 function toggleSkip(): void {
-  const summary = currentSummary.value;
+  const summary = view.currentSummary;
   if (summary === null) return;
   if (summary.isSkipped === null) return;
   bridge.post({
@@ -73,28 +59,6 @@ function toggleSkip(): void {
     skipped: !summary.isSkipped,
   });
 }
-
-// true wanneer de actieve slide in Figma op "skip bij presenteren" staat.
-// Alle editor-panels worden in dat geval gedisabled + gedempt — de user
-// moet eerst het oogje terugzetten om te editen.
-const isSkipped = computed<boolean>(() => {
-  const summary = currentSummary.value;
-  return summary !== null && summary.isSkipped === true;
-});
-
-// Panel filled? Bepaalt of we de placeholder tonen dan wel de slot-inhoud.
-const hasGeneral = computed(() => !noSlide.value && view.state.general !== null);
-const hasContent = computed(() => !noSlide.value && view.state.content !== null);
-const hasGraphs = computed(() => !noSlide.value && view.state.graphs !== null);
-
-// Gecombineerde empty-state wanneer alle drie panels null zijn.
-const allEmpty = computed(
-  () =>
-    !noSlide.value &&
-    view.state.general === null &&
-    view.state.content === null &&
-    view.state.graphs === null,
-);
 
 // Register bridge-handlers vóór de ui-ready handshake zodat we het init-
 // bericht niet missen (main kan onmiddellijk terugantwoorden).
@@ -191,14 +155,14 @@ onMounted(() => {
               <div class="flex items-center gap-2">
                 <SlideSelector v-model="currentSlide" :slides="view.state.slides" class="flex-1" />
                 <UButton
-                  v-if="currentSummary && currentSummary.isSkipped !== null"
-                  :icon="currentSummary.isSkipped ? 'i-lucide-eye-off' : 'i-lucide-eye'"
+                  v-if="view.currentSummary && view.currentSummary.isSkipped !== null"
+                  :icon="view.currentSummary.isSkipped ? 'i-lucide-eye-off' : 'i-lucide-eye'"
                   variant="ghost"
                   color="neutral"
                   size="md"
                   class="shrink-0"
                   :title="
-                    currentSummary.isSkipped
+                    view.currentSummary.isSkipped
                       ? 'Slide is uitgesloten — klik om terug te zetten'
                       : 'Slide overslaan bij presenteren'
                   "
@@ -234,7 +198,7 @@ onMounted(() => {
           <template v-else>
             <!-- No slide selected -->
             <section
-              v-if="noSlide"
+              v-if="view.noSlide"
               class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
             >
               <p class="text-sm text-muted">Selecteer een slide om te beginnen.</p>
@@ -242,7 +206,7 @@ onMounted(() => {
 
             <!-- Slide selected but nothing editable -->
             <section
-              v-else-if="allEmpty"
+              v-else-if="view.allEmpty"
               class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
             >
               <p class="text-sm text-muted">Geen bewerkbare inhoud op deze slide.</p>
@@ -259,13 +223,15 @@ onMounted(() => {
                  blokkeert de form-controls, niet de container-klikken). -->
             <fieldset
               v-else
-              :disabled="isSkipped"
-              :class="isSkipped ? 'space-y-3 opacity-50 pointer-events-none' : 'contents space-y-3'"
+              :disabled="view.isSkipped"
+              :class="
+                view.isSkipped ? 'space-y-3 opacity-50 pointer-events-none' : 'contents space-y-3'
+              "
               style="border: 0; padding: 0; margin: 0; min-width: 0"
             >
-              <GeneralPanel v-if="hasGeneral" />
-              <ContentPanel v-if="hasContent" />
-              <GraphsPanel v-if="hasGraphs" />
+              <GeneralPanel v-if="view.hasGeneral" />
+              <ContentPanel v-if="view.hasContent" />
+              <GraphsPanel v-if="view.hasGraphs" />
             </fieldset>
           </template>
         </div>

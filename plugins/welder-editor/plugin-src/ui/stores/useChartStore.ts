@@ -13,6 +13,12 @@
 // Mutaties lopen direct op `state.<veld> = ...` dankzij Vue's deep
 // reactivity.
 //
+// Chart-type-strip: een interne watcher op `state.chartType` knipt
+// manualDataPoints en csvDataPoints terug naar `getMaxDataPoints`.
+// Door deze regel in de store te plaatsen geldt de strip ongeacht
+// welke component chartType muteert (USelectMenu in ChartTypeSelector
+// of een toekomstige API-action).
+//
 // Verschillen t.o.v. chart-builder:
 //   - State leeft naast de usePluginView-store; ChartEditor bindt
 //     de twee in GraphsPanel.
@@ -20,10 +26,10 @@
 //     stuurt `update-graph` via usePluginBridge met debounce.
 // ============================================================
 
-import { reactive } from 'vue';
+import { reactive, watch } from 'vue';
 import { defineStore } from 'pinia';
 import type { ChartData, CsvSource, DataPoint } from '../../types';
-import { DEFAULT_CHART_DATA } from '../../chart-core/constants';
+import { DEFAULT_CHART_DATA, getMaxDataPoints } from '../../chart-core/constants';
 
 /** Diepe kopie van een DataPoint-array. */
 function cloneDataPoints(points: DataPoint[]): DataPoint[] {
@@ -92,6 +98,22 @@ function syncDataPoints(state: ChartData): void {
 
 export const useChartStore = defineStore('chartEditor', () => {
   const state = reactive<ChartData>(cloneChartData(DEFAULT_CHART_DATA));
+
+  // Strip dataPoints to the new chart-type's max whenever chartType changes.
+  // Lives in the store so any mutation path (USelectMenu v-model, future
+  // action, devtools) triggers the same strip.
+  watch(
+    () => state.chartType,
+    (chartType) => {
+      const max = getMaxDataPoints(chartType);
+      if (state.manualDataPoints && state.manualDataPoints.length > max) {
+        state.manualDataPoints = state.manualDataPoints.slice(0, max);
+      }
+      if (state.csvDataPoints && state.csvDataPoints.length > max) {
+        state.csvDataPoints = state.csvDataPoints.slice(0, max);
+      }
+    },
+  );
 
   /**
    * Overschrijf de volledige state met een nieuwe ChartData-payload.

@@ -2,8 +2,10 @@
 // usePluginView — centrale UI-store voor de drie-tab-editor.
 //
 // Pinia setup-store. State leeft als één `reactive()`-object onder
-// `state` zodat de bestaande consumer-API (`view.state.slides` etc.)
-// onaangetast blijft. Devtools tonen het state-object inline.
+// `state`. Derived state (noSlide, currentSummary, isSkipped, hasX,
+// allEmpty) wordt geëxposeerd als getters zodat consumers de
+// derivatie niet zelf hoeven te schrijven en future panels dezelfde
+// boolean-set delen.
 //
 // State-shape volgt spec §3.2 (PluginView). `general`/`content`/
 // `graphs` blijven `null` tot main-thread een `slide-loaded`-bericht
@@ -14,7 +16,7 @@
 // store thread-agnostisch en makkelijk te testen.
 // ============================================================
 
-import { reactive } from 'vue';
+import { reactive, computed } from 'vue';
 import { defineStore } from 'pinia';
 import type { ContentItems, GeneralSections, GraphItems, SlideSummary, TabId } from '../../types';
 
@@ -38,6 +40,33 @@ export const usePluginView = defineStore('pluginView', () => {
     graphs: null,
   });
 
+  // ── Getters ────────────────────────────────────────────────────────────
+  const noSlide = computed<boolean>(() => state.currentSlideId === null);
+
+  const currentSummary = computed<SlideSummary | null>(() => {
+    const id = state.currentSlideId;
+    if (id === null) return null;
+    const match = state.slides.find((s) => s.id === id);
+    return match !== undefined ? match : null;
+  });
+
+  const isSkipped = computed<boolean>(() => {
+    const summary = currentSummary.value;
+    return summary !== null && summary.isSkipped === true;
+  });
+
+  const hasGeneral = computed<boolean>(() => !noSlide.value && state.general !== null);
+  const hasContent = computed<boolean>(() => !noSlide.value && state.content !== null);
+  const hasGraphs = computed<boolean>(() => !noSlide.value && state.graphs !== null);
+  const allEmpty = computed<boolean>(
+    () =>
+      !noSlide.value &&
+      state.general === null &&
+      state.content === null &&
+      state.graphs === null,
+  );
+
+  // ── Actions ────────────────────────────────────────────────────────────
   /** Overschrijf de slidelist (bij `init` én `page-changed`). */
   function setSlides(slides: SlideSummary[]): void {
     state.slides = slides;
@@ -62,8 +91,8 @@ export const usePluginView = defineStore('pluginView', () => {
 
   /**
    * Vul de drie tab-payloads tegelijk — dit is wat main stuurt na
-   * `pick-slide`. Losse setters hieronder bestaan voor toekomstige
-   * per-section-refreshes (T8+).
+   * `pick-slide`. Per-section setters worden toegevoegd zodra T8+
+   * incremental refreshes nodig heeft.
    */
   function setSlidePayload(
     general: GeneralSections | null,
@@ -75,26 +104,20 @@ export const usePluginView = defineStore('pluginView', () => {
     state.graphs = graphs;
   }
 
-  function setGeneral(section: GeneralSections | null): void {
-    state.general = section;
-  }
-
-  function setContent(items: ContentItems | null): void {
-    state.content = items;
-  }
-
-  function setGraphs(items: GraphItems | null): void {
-    state.graphs = items;
-  }
-
   return {
     state,
+    // getters
+    noSlide,
+    currentSummary,
+    isSkipped,
+    hasGeneral,
+    hasContent,
+    hasGraphs,
+    allEmpty,
+    // actions
     setSlides,
     pickSlide,
     setActiveTab,
     setSlidePayload,
-    setGeneral,
-    setContent,
-    setGraphs,
   };
 });

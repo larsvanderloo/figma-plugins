@@ -36,7 +36,6 @@ import CsvImport from './chart/CsvImport.vue';
 import GeneralChartData from './chart/GeneralChartData.vue';
 import { useChartStore } from '../stores/useChartStore';
 import { usePluginBridge } from '../composables/usePluginBridge';
-import { getMaxDataPoints } from '../../chart-core/constants';
 
 interface Props {
   chartWrapId: string;
@@ -64,21 +63,6 @@ const activeTab = computed<'manual' | 'csv'>({
     store.setActiveDataTab(tab);
   },
 });
-
-// Chart-type-wissel: strip datapunten voorbij het max voor het nieuwe
-// type. Identieke logica als chart-builder's App.vue.
-watch(
-  () => store.state.chartType,
-  (chartType) => {
-    const max = getMaxDataPoints(chartType);
-    if (store.state.manualDataPoints && store.state.manualDataPoints.length > max) {
-      store.state.manualDataPoints = store.state.manualDataPoints.slice(0, max);
-    }
-    if (store.state.csvDataPoints && store.state.csvDataPoints.length > max) {
-      store.state.csvDataPoints = store.state.csvDataPoints.slice(0, max);
-    }
-  },
-);
 
 // Deep watcher met 300ms debounce (spec §5 update-graph). Eerste trigger
 // wordt overgeslagen om initial-load-dispatch te voorkomen — `primed`
