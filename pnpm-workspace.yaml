@@ -3,10 +3,11 @@
 #
 # Adding a plugin: bootstrap-plugin scaffolds it under plugins/<slug>/, which
 # is already covered by the `plugins/*` glob. No changes here required.
+#
+# ADR-0015: sections/* and components are excluded from the workspace.
+# UI components now live inside each plugin's ui/components/ folder.
+# Re-extract into workspace packages only when ≥2 plugins need to share them.
 packages:
   - "plugins/*"
   - "!plugins/_template"
-  - "components"
-  - "sections/*"
-  - "!sections/_template"
   - "packages/*"

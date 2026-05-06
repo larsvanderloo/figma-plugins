@@ -22,20 +22,7 @@
     "tailwindcss": "^4.2.4",
     "cropperjs": "^1.6.2",
     "vue-picture-cropper": "^1.0.0",
-    "@figma-plugins/components": "workspace:*",
     "@figma-plugins/figma-api": "workspace:*",
-    "@figma-plugins/sections-slide-picker": "workspace:*",
-    "@figma-plugins/sections-tab-strip": "workspace:*",
-    "@figma-plugins/sections-property-panel": "workspace:*",
-    "@figma-plugins/sections-title-description-editor": "workspace:*",
-    "@figma-plugins/sections-badge-editor": "workspace:*",
-    "@figma-plugins/sections-icon-picker": "workspace:*",
-    "@figma-plugins/sections-image-editor": "workspace:*",
-    "@figma-plugins/sections-card-list": "workspace:*",
-    "@figma-plugins/sections-card-editor": "workspace:*",
-    "@figma-plugins/sections-timeline-editor": "workspace:*",
-    "@figma-plugins/sections-table-editor": "workspace:*",
-    "@figma-plugins/sections-journey-editor": "workspace:*",
     "pinia": "^3",
     "pinia-plugin-persistedstate": "^4",
     "zod": "^3.22.0"
@@ -53,6 +40,7 @@
     "vite": "^5.2.0",
     "vite-plugin-singlefile": "^2.3.3",
     "vitest": "^1.5.0",
+    "vue-router": "^4.3.0",
     "vue-tsc": "^2.0.0"
   }
 }
