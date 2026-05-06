@@ -471,7 +471,9 @@ function updateColumnSubheader(index: number, value: string): void {
                 :min-steps-between-thumbs="minSpans[idx]"
                 size="md"
                 color="primary"
-                @update:model-value="(v: number[]) => updateItemRange(idx, [v[0], v[1]])"
+                @update:model-value="
+                  (v: number[] | undefined) => v && updateItemRange(idx, [v[0], v[1]])
+                "
               />
             </UFormField>
           </div>
