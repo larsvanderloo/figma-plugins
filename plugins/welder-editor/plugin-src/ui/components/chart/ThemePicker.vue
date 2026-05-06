@@ -17,7 +17,7 @@
 <script setup lang="ts">
 import type { ThemeId } from '../../../constants';
 import { THEMES } from '../../../constants';
-import { useChartStore } from '../../composables/useChartStore';
+import { useChartStore } from '../../stores/useChartStore';
 
 interface ThemeOption {
   id: ThemeId;

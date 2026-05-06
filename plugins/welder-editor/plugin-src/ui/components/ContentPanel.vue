@@ -34,7 +34,7 @@ import TimelineItemEditor from './TimelineItemEditor.vue';
 import JourneyEditor from './JourneyEditor.vue';
 import type { CardItem, TimelineItem, JourneyWrapModel } from '../../types';
 import { usePluginBridge } from '../composables/usePluginBridge';
-import { usePluginView } from '../composables/usePluginView';
+import { usePluginView } from '../stores/usePluginView';
 
 const bridge = usePluginBridge();
 const view = usePluginView();

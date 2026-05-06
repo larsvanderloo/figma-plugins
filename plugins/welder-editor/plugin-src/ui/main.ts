@@ -10,6 +10,7 @@
 
 import './main.css';
 import { createApp } from 'vue';
+import { createPinia } from 'pinia';
 import ui from '@nuxt/ui/vue-plugin';
 import { addCollection } from '@iconify/vue';
 import lucideIcons from '@iconify-json/lucide/icons.json';
@@ -20,6 +21,7 @@ import App from './App.vue';
 addCollection(lucideIcons as Parameters<typeof addCollection>[0]);
 
 const app = createApp(App);
+app.use(createPinia());
 app.use(ui);
 app.mount('#app');
 

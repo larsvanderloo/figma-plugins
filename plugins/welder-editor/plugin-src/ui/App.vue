@@ -23,7 +23,7 @@ import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
-import { usePluginView } from './composables/usePluginView';
+import { usePluginView } from './stores/usePluginView';
 import welderLogo from './assets/welder-logo.svg';
 import type { SlideSummary } from '../types';
 

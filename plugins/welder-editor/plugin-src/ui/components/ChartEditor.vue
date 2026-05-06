@@ -34,7 +34,7 @@ import ThemePicker from './chart/ThemePicker.vue';
 import DataEditor from './chart/DataEditor.vue';
 import CsvImport from './chart/CsvImport.vue';
 import GeneralChartData from './chart/GeneralChartData.vue';
-import { useChartStore } from '../composables/useChartStore';
+import { useChartStore } from '../stores/useChartStore';
 import { usePluginBridge } from '../composables/usePluginBridge';
 import { getMaxDataPoints } from '../../chart-core/constants';
 

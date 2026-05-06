@@ -23,7 +23,7 @@ import TitleDescriptionEditor, { type TitleDescriptionValue } from './TitleDescr
 import BadgeEditor, { type BadgeValue } from './BadgeEditor.vue';
 import ImageEditor, { type ImageValue } from './ImageEditor.vue';
 import { usePluginBridge } from '../composables/usePluginBridge';
-import { usePluginView } from '../composables/usePluginView';
+import { usePluginView } from '../stores/usePluginView';
 
 const bridge = usePluginBridge();
 const view = usePluginView();

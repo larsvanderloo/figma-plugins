@@ -5,7 +5,7 @@
 -->
 <script setup lang="ts">
 import type { SelectMenuItem } from '@nuxt/ui';
-import { useChartStore } from '../../composables/useChartStore';
+import { useChartStore } from '../../stores/useChartStore';
 
 const store = useChartStore();
 

@@ -9,7 +9,7 @@
 -->
 <script setup lang="ts">
 import { computed } from 'vue';
-import { useChartStore } from '../../composables/useChartStore';
+import { useChartStore } from '../../stores/useChartStore';
 
 const store = useChartStore();
 

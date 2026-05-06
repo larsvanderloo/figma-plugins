@@ -6,7 +6,7 @@
   validatie komt in een latere taak.
 -->
 <script setup lang="ts">
-import { useChartStore } from '../../composables/useChartStore';
+import { useChartStore } from '../../stores/useChartStore';
 
 const store = useChartStore();
 </script>

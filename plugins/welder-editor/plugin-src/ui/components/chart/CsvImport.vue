@@ -42,7 +42,7 @@ import type {
   CsvRowError,
 } from '../../../chart-core/csv';
 import { mapBlock, parseCSV, validateBlock, validateDataPoints } from '../../../chart-core/csv';
-import { useChartStore } from '../../composables/useChartStore';
+import { useChartStore } from '../../stores/useChartStore';
 import { getMaxDataPoints } from '../../../chart-core/constants';
 
 const store = useChartStore();

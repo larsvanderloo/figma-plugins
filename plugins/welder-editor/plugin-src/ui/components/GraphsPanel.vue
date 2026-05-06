@@ -23,9 +23,9 @@
 import { computed, watch } from 'vue';
 import ChartEditor from './ChartEditor.vue';
 import TableEditor from './TableEditor.vue';
-import { usePluginView } from '../composables/usePluginView';
+import { usePluginView } from '../stores/usePluginView';
 import { usePluginBridge } from '../composables/usePluginBridge';
-import { useChartStore } from '../composables/useChartStore';
+import { useChartStore } from '../stores/useChartStore';
 import { DEFAULT_CHART_DATA } from '../../chart-core/constants';
 import type { ChartData, GraphInstance, TableWrapModel } from '../../types';
 
