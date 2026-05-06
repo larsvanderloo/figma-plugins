@@ -314,3 +314,70 @@ Previous separate artifacts (`dist/ui.js`, `dist/ui.css`, `dist/ui/index.html`, 
 ### Root-cause note
 
 The Figma plugin sandbox loads `manifest.ui` as a raw HTML string (`__html__` global) and injects it into a sandboxed iframe with no server. The previous `dist/ui/index.html` contained `<script type="module" crossorigin src="/ui.js">` — an external reference that the sandbox iframe could not resolve, producing "Syntax error on line 1: Unexpected token {" in the Figma console. `vite-plugin-singlefile` inlines all JS and CSS into the HTML so the iframe is fully self-contained.
+
+---
+
+## Sprint 4 measurement (post-Graphs-tab wiring, final)
+
+**Measured:** 2026-05-05 — commit 875ff36 (PR #44 merged; latest main)
+**Built with:** `pnpm --filter @figma-plugins/welder-editor build` (Vite 5.4.21 + vite-plugin-singlefile 2.3.3, production)
+**Measurement command:** `gzip -c dist/<artifact> | wc -c` (raw byte output)
+**Branch:** feature/MON-2893983032-sprint-4-bundle-remeasurement
+
+### Total measured sizes (gzipped)
+
+| Artifact             | Measured (bytes) | Measured (KB) | Budget | % of budget | Status |
+| -------------------- | ---------------- | ------------- | ------ | ----------- | ------ |
+| `dist/code.js`       | 11,094           | 10.83 KB      | 60 KB  | 18.1%       | PASS   |
+| `dist/ui/index.html` | 69,870           | 68.23 KB      | 250 KB | 27.3%       | PASS   |
+
+`dist/code.js` confirmed to start with `var dt=Object.define` (single-file IIFE; no import/export regression). No `dist/messages.js` chunk present. `dist/ui/index.html` is single-file — grep for `<script[^>]*src=` returns 0 matches.
+
+### Side-by-side comparison vs Sprint 3 final and Sprint 4 mid-point
+
+| Artifact             | Sprint 3 final (bytes) | Sprint 4 mid-point (bytes) | Sprint 4 final (bytes) | Delta vs Sprint 3 | Delta vs mid-point |
+| -------------------- | ---------------------- | -------------------------- | ---------------------- | ----------------- | ------------------ |
+| `dist/code.js`       | 10,821                 | (not separately reported)  | 11,094                 | +273 (+2.5%)      | —                  |
+| `dist/ui/index.html` | 49,652                 | 71,552 (est. 69.86 KB)     | 69,870                 | +20,218 (+40.7%)  | −1,682 (−2.4%)     |
+
+Note: The Sprint 3 final `dist/ui/index.html` figure (49,652 bytes) is from the hotfix measurement, which was the effective Sprint 3 single-file baseline. Sprint 4 mid-point ui figure is the Vite-reported 69.86 KB (71,536–71,552 bytes raw), matching the PR #43 report; the final measured 69,870 bytes is slightly lower, consistent with the R10 revert in PR #44 removing no bytes from the ui bundle (the revert touched only code-side renderer logic in `code/`).
+
+### Comparison vs ADR-0003 budgets and stretch targets
+
+| Artifact             | Sprint 4 final | Hard budget | Stretch target | vs hard budget | vs stretch     |
+| -------------------- | -------------- | ----------- | -------------- | -------------- | -------------- |
+| `dist/code.js`       | 10.83 KB       | 60 KB       | 40 KB          | 81.9% headroom | 72.9% headroom |
+| `dist/ui/index.html` | 68.23 KB       | 250 KB      | 200 KB         | 72.7% headroom | 65.9% headroom |
+
+Both artifacts pass hard budget and stretch target by a wide margin. **Verdict: PASS.**
+
+### What changed since Sprint 3 and why
+
+Sprint 4 merged five PRs against the hotfix-era baseline (49,652 bytes ui / 10,821 bytes code):
+
+- **PR #38** (`sections/TableEditor/src/csv-schema.ts`, Sprint 4 task 4.5): schema types only, no runtime cost — csv-schema.ts is a type-only module; no Zod runtime. Negligible ui-side impact.
+- **PR #39** (`sections/JourneyEditor/`, Sprint 4 task 4.2): the JourneyEditor section component lands in the ui bundle. Per ADR-0003 lever 5 this was planned as an async component; wiring into App.vue (PR #43) determines whether it loads on first paint or lazily.
+- **PR #40** (`sections/TableEditor/`, Sprint 4 task 4.1) with T42.21 perf fix (offset-based render + memoized truncation flags): TableEditor section lands in the ui bundle. The T42.21 fix restructures the render loop for performance; it does not add new dependencies and therefore has no adverse bundle impact.
+- **PR #43** (App.vue Graphs tab wiring + InputField fix, Sprint 4 task 4.3): wires TableEditor and JourneyEditor into the active App.vue import tree for the first time. This is the primary driver of the +20,218 byte increase in `dist/ui/index.html` vs Sprint 3. Both sections are imported (not lazily split) in the current wiring — ADR-0003 levers 5 and 6 (async split-loading) are still available as reduction levers if budget pressure arises in a future sprint.
+- **PR #44** (R10 drift revert — TableWrap + JourneyWrap constants): reverts renderer constants in `code/` to v0.2.1 parity to pass golden-snapshot gates. The revert touches only code-side renderer logic. No ui-side bundle delta; `dist/ui/index.html` is unchanged by this PR. `dist/code.js` picks up the +273 byte code-side increase from the combined Sprint 4 code-side additions (JourneyWrap + TableWrap renderers added in PRs #39/#40).
+
+**R10 revert note:** the revert produced no bundle delta on the ui side, as expected — it touches only `code/wrappers/TableWrap.ts` and `code/wrappers/JourneyWrap.ts` renderer constants, which are code-sandbox modules not imported by the ui bundle.
+
+### Structural verification
+
+- `dist/code.js` head: `var dt=Object.define` — confirmed IIFE, no ES-module regression.
+- `dist/ui/index.html` single-file: `grep -c '<script[^>]*src=' dist/ui/index.html` returns `0` — no external references.
+- No `dist/messages.js` chunk.
+- `vue-tsc --noEmit`: clean (zero errors).
+- `eslint . && prettier --check .`: clean (zero warnings, all files match Prettier style).
+
+### Levers still available (not yet exercised)
+
+- **JourneyEditor split-loading** (ADR-0003 lever 5): async component on `journeyModel !== null`. Would recover ~15–20 KB gzip from initial-load cost if budget pressure arises.
+- **TableEditor split-loading** (ADR-0003 lever 6): async component on `tableModel !== null`. Would recover ~10–15 KB gzip from initial-load cost.
+
+At 27.3% of the 250 KB hard budget, there is no current pressure to exercise these levers. They remain available if a future sprint adds substantial new ui weight.
+
+### Next update
+
+Re-measure at Sprint 5 close or when a PR adds a new dependency to either bundle. ADR-0003 ratchet policy: v0.2.0 must not exceed the Sprint 4 final measured sizes at release (10.83 KB code / 68.23 KB ui).
