@@ -165,7 +165,8 @@ bridge.onMessage((msg) => {
   if (msg.type === 'pdf-ready') {
     // Wrap the bytes in a Blob and trigger a download via a temporary
     // anchor. URL.revokeObjectURL after the click so the iframe doesn't
-    // accumulate references to multi-MB PDFs.
+    // accumulate references to multi-MB PDFs. The browser's own
+    // download UI is the success signal — no toast for the happy path.
     try {
       const blob = new Blob([msg.bytes as BlobPart], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
@@ -176,10 +177,6 @@ bridge.onMessage((msg) => {
       a.click();
       document.body.removeChild(a);
       setTimeout(() => URL.revokeObjectURL(url), 0);
-      notifications.pushSuccess(
-        msg.target === 'presentation' ? 'Presentatie geëxporteerd' : 'Slide geëxporteerd',
-        msg.filename,
-      );
     } catch (err: unknown) {
       const text = err instanceof Error ? err.message : String(err);
       notifications.pushError('Download mislukt', text);
