@@ -22,6 +22,7 @@
 import { ref, computed } from 'vue';
 import { useCropper } from 'vue-picture-cropper';
 import 'cropperjs/dist/cropper.css';
+import { compressImageForUpload } from '../utils/image-compress';
 
 export interface ImageValue {
   hasImage: boolean;
@@ -139,7 +140,8 @@ async function onFileSelected(event: Event): Promise<void> {
   isUploading.value = true;
   try {
     const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
+    const raw = new Uint8Array(buffer);
+    const bytes = await compressImageForUpload(raw);
     emit('upload', bytes);
   } finally {
     isUploading.value = false;
@@ -168,7 +170,8 @@ async function applyCrop(): Promise<void> {
     const blob = await cropperApi.getBlob({ imageSmoothingQuality: 'high' });
     if (blob === null) return;
     const buffer = await blob.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
+    const raw = new Uint8Array(buffer);
+    const bytes = await compressImageForUpload(raw);
     emit('upload', bytes);
   } finally {
     isCropOpen.value = false;

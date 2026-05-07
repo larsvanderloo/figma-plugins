@@ -27,6 +27,7 @@
 import { ref, watch, computed } from 'vue';
 import type { CardItem } from '../../types';
 import IconPicker from './IconPicker.vue';
+import { compressImageForUpload } from '../utils/image-compress';
 
 interface Props {
   modelValue: CardItem;
@@ -119,7 +120,8 @@ async function onFileSelected(event: Event): Promise<void> {
   isUploading.value = true;
   try {
     const buffer = await file.arrayBuffer();
-    const bytes = new Uint8Array(buffer);
+    const raw = new Uint8Array(buffer);
+    const bytes = await compressImageForUpload(raw);
     emit('upload-visual', bytes);
   } finally {
     isUploading.value = false;
