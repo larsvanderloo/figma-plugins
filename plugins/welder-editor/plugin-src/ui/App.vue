@@ -97,9 +97,16 @@ bridge.onMessage((msg) => {
   if (msg.type === 'init') {
     view.setSlides(msg.slides);
     if (msg.initialSlideId !== null) {
-      currentSlide.value = msg.initialSlideId;
+      // Set the active slide directly via the store. The sandbox sends
+      // the matching `slide-loaded` (and previews) immediately after
+      // `init` during the ui-ready handshake, so we don't need to post
+      // `pick-slide` and pay an extra round-trip / second scan.
+      // `initializing` stays true until that slide-loaded lands so we
+      // don't flash the empty-state between init and slide-loaded.
+      view.pickSlide(msg.initialSlideId);
+    } else {
+      initializing.value = false;
     }
-    initializing.value = false;
     return;
   }
   if (msg.type === 'slide-loaded') {
@@ -108,6 +115,7 @@ bridge.onMessage((msg) => {
     if (msg.slideId === view.state.currentSlideId) {
       view.setSlidePayload(msg.general, msg.content, msg.graphs);
       loadingSlide.value = false;
+      initializing.value = false;
     }
     return;
   }
@@ -231,32 +239,21 @@ onBeforeUnmount(() => {
 
 <template>
   <UApp>
-    <!-- Skeleton: plugin initializing — shown until 'init' arrives -->
-    <div v-if="initializing" class="flex h-full flex-col bg-elevated text-default">
-      <main class="flex-1 overflow-y-auto">
-        <div class="mx-auto max-w-2xl space-y-3 p-3">
-          <section
-            class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] space-y-5"
-          >
-            <div class="flex flex-col items-center space-y-3">
-              <USkeleton class="h-12 w-32" />
-              <USkeleton class="h-4 w-3/4" />
-              <USkeleton class="h-4 w-1/2" />
-            </div>
-            <div class="space-y-2">
-              <USkeleton class="h-4 w-10" />
-              <USkeleton class="h-9 w-full" />
-            </div>
-          </section>
-          <section
-            class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] space-y-3"
-          >
-            <USkeleton class="h-4 w-32" />
-            <USkeleton class="h-9 w-full" />
-            <USkeleton class="h-20 w-full" />
-          </section>
+    <!-- Splash: plugin initializing — shown until 'init' arrives.
+         Sandbox does the heavy work (font load, initial-slide scan,
+         image-preview prefetch) before posting init, so when this
+         hides the UI is already populated. -->
+    <div
+      v-if="initializing"
+      class="flex h-full flex-col items-center justify-center bg-elevated text-default"
+    >
+      <div class="flex flex-col items-center gap-4">
+        <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
+        <div class="flex items-center gap-2 text-sm text-muted">
+          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+          <span>Voorbereiden…</span>
         </div>
-      </main>
+      </div>
     </div>
 
     <!-- Real UI — shown once 'init' received -->
