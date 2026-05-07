@@ -1000,6 +1000,100 @@ function isInsideNestedInstance(node: SceneNode, scopeRoot: InstanceNode): boole
   return false;
 }
 
+/**
+ * Posts the initial slide's image-preview + card-visual-preview bytes
+ * during the ui-ready handshake. Mirrors the fire-and-forget IIFEs in
+ * the pick-slide handler so the splash screen window can pre-fetch
+ * thumbnails too. Errors are silent — a missing thumbnail just falls
+ * back to the iframe's "no preview" state.
+ */
+async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideScan): Promise<void> {
+  if (scan.general !== null && scan.general.image !== null && scan.general.image.imageHash !== null) {
+    const imageWrapId = scan.general.image.imageWrapId;
+    const imageHash = scan.general.image.imageHash;
+    try {
+      const img = figma.getImageByHash(imageHash);
+      if (img !== null) {
+        let fillW = 0;
+        let fillH = 0;
+        try {
+          const wrapNode = await figma.getNodeByIdAsync(imageWrapId);
+          if (wrapNode !== null && wrapNode.type === 'INSTANCE') {
+            const slot = findImageSlot(wrapNode as InstanceNode);
+            if (slot !== null && 'width' in slot && 'height' in slot) {
+              const w = (slot as LayoutMixin).width;
+              const h = (slot as LayoutMixin).height;
+              if (w > 0 && h > 0) {
+                fillW = w;
+                fillH = h;
+              }
+            }
+          }
+        } catch (_e) {
+          // fallback: 0/0 → iframe falls back to fixed-height preview
+        }
+        const bytes = await img.getBytesAsync();
+        postToUI({
+          type: 'image-preview',
+          imageWrapId: imageWrapId,
+          bytes: bytes,
+          fillW: fillW,
+          fillH: fillH,
+        });
+        lastSentPreviewHash.set(imageWrapId, imageHash);
+      }
+    } catch (_e) {
+      // silent — slide-level image preview is non-essential
+    }
+  }
+
+  if (scan.content !== null) {
+    const cards = scan.content.cards;
+    for (let i = 0; i < cards.length; i++) {
+      const ci = cards[i];
+      if (typeof ci.visualHash !== 'string') continue;
+      try {
+        const cardNode = await figma.getNodeByIdAsync(ci.cardNodeId);
+        if (cardNode === null || cardNode.type !== 'INSTANCE') continue;
+        const slot = findCardVisualSlot(cardNode as InstanceNode);
+        if (slot === null) continue;
+        const fills = (slot as GeometryMixin).fills;
+        if (fills === figma.mixed || !Array.isArray(fills)) continue;
+        let imageHash: string | null = null;
+        for (let f = 0; f < fills.length; f++) {
+          if (fills[f].type === 'IMAGE') {
+            imageHash = (fills[f] as ImagePaint).imageHash;
+            break;
+          }
+        }
+        if (imageHash === null) continue;
+        const img = figma.getImageByHash(imageHash);
+        if (img === null) continue;
+        const bytes = await img.getBytesAsync();
+        let fillW = 0;
+        let fillH = 0;
+        if ('width' in slot && 'height' in slot) {
+          const w = (slot as LayoutMixin).width;
+          const h = (slot as LayoutMixin).height;
+          if (w > 0 && h > 0) {
+            fillW = w;
+            fillH = h;
+          }
+        }
+        postToUI({
+          type: 'card-visual-preview',
+          cardNodeId: ci.cardNodeId,
+          bytes: bytes,
+          fillW: fillW,
+          fillH: fillH,
+        });
+      } catch (_e) {
+        // per-card silent
+      }
+    }
+  }
+}
+
 async function scanSlide(slide: InstanceNode): Promise<SlideScan> {
   const visibilityChanged = await normalizeCopyWrapVisibility(slide);
   if (visibilityChanged) {
@@ -1264,11 +1358,53 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     // duplicaat `page-changed` post met dezelfde content als `init`.
     lastSlideListSignature = slideListSignature(list.summaries);
     const initialSlideId = list.summaries.length > 0 ? list.summaries[0].id : null;
+
+    // Pre-scan the initial slide so init + slide-loaded can be posted
+    // back-to-back. The iframe stays on its splash screen until init
+    // arrives, so awaiting the scan here moves the "first slide switch"
+    // latency into the splash window. Scan failures fall through; the
+    // iframe will hide the splash on init and the first user pick re-
+    // does the work.
+    let initialScan: SlideScan | null = null;
+    let initialSlide: InstanceNode | null = null;
+    if (initialSlideId !== null) {
+      initialSlide = findSlideById(initialSlideId);
+      if (initialSlide !== null) {
+        try {
+          initialScan = await scanSlide(initialSlide);
+          lastDisplayedSlideId = initialSlideId;
+          lastSentSlideContentSignature = JSON.stringify({
+            g: initialScan.general,
+            c: initialScan.content,
+            h: initialScan.graphs,
+          });
+        } catch (err: unknown) {
+          console.log('[welder-slide-editor] initial scanSlide failed:', err);
+          initialScan = null;
+        }
+      }
+    }
+
     postToUI({
       type: 'init',
       slides: list.summaries,
       initialSlideId: initialSlideId,
     });
+    if (initialSlide !== null && initialScan !== null) {
+      postToUI({
+        type: 'slide-loaded',
+        slideId: initialSlide.id,
+        general: initialScan.general,
+        content: initialScan.content,
+        graphs: initialScan.graphs,
+      });
+      // Fire-and-forget image-preview + card-visual-preview for the
+      // initial slide — same pattern as the pick-slide handler. Don't
+      // block init on these; the iframe renders a fallback until they
+      // arrive.
+      void postInitialSlidePreviews(initialSlide, initialScan);
+    }
+
     // Hydrate icon-recents from clientStorage. Fire-and-forget; init
     // doesn't block on it. UI shows an empty Recents row until this
     // resolves (typically <50ms).
