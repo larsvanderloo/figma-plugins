@@ -267,6 +267,26 @@ export interface GeneralSections {
   titleDescription: TitleDescriptionSection | null;
   badge: BadgeSection | null;
   image: ImageSection | null;
+  /**
+   * Slide-level Theme-collection mode binding. Null when no `Theme`
+   * variable collection exists in the file (older Welder libraries
+   * may pre-date the collection and the picker stays hidden).
+   *
+   * `explicitModeId` is set when the slide pins a specific mode via
+   * `explicitVariableModes`; `null` means the slide inherits the
+   * page-level mode. `resolvedModeId` is what Figma actually renders
+   * (explicit if set, else inherited). `modes` lists the available
+   * options for the picker UI.
+   */
+  theme: ThemeSection | null;
+}
+
+export interface ThemeSection {
+  collectionId: string;
+  collectionName: string;
+  explicitModeId: string | null;
+  resolvedModeId: string;
+  modes: ReadonlyArray<{ id: string; name: string }>;
 }
 
 // ============================================================
@@ -569,6 +589,14 @@ export type UIToPluginMessage =
    * client-side; sandbox writes verbatim.
    */
   | { type: 'set-icon-recents'; items: string[] }
+  /**
+   * Pin (or clear) a slide's explicit Theme-collection mode. `modeId =
+   * null` clears the explicit binding so the slide inherits the page-
+   * level mode. Sandbox calls `setExplicitVariableModeForCollection`
+   * on the slide instance and re-posts the resulting `slide-loaded`
+   * payload so the picker UI reflects the resolved state.
+   */
+  | { type: 'set-slide-theme'; slideId: string; modeId: string | null }
   | { type: 'close' };
 
 /**

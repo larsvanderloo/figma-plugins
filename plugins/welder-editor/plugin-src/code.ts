@@ -417,13 +417,80 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
           imageHash: readImageWrapHash(imageWrap),
         };
 
-  if (titleDescription === null && badgeSection === null && imageSection === null) {
+  const themeSection = await scanTheme(slide);
+
+  if (
+    titleDescription === null &&
+    badgeSection === null &&
+    imageSection === null &&
+    themeSection === null
+  ) {
     return null;
   }
   return {
     titleDescription: titleDescription,
     badge: badgeSection,
     image: imageSection,
+    theme: themeSection,
+  };
+}
+
+// ============================================================
+// Theme — slide-level Theme-collection mode binding
+// ============================================================
+
+/**
+ * Cache the Theme variable collection so we don't refetch on every
+ * scan. Reset by closing/reopening the plugin if the user renames or
+ * recreates the collection.
+ */
+let themeCollectionCache: VariableCollection | null = null;
+let themeCollectionFetched = false;
+
+async function getThemeCollection(): Promise<VariableCollection | null> {
+  if (themeCollectionFetched) return themeCollectionCache;
+  themeCollectionFetched = true;
+  try {
+    const collections = await figma.variables.getLocalVariableCollectionsAsync();
+    for (let i = 0; i < collections.length; i++) {
+      if (collections[i].name === 'Theme') {
+        themeCollectionCache = collections[i];
+        return themeCollectionCache;
+      }
+    }
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] getThemeCollection failed:', err);
+  }
+  return null;
+}
+
+async function scanTheme(slide: InstanceNode): Promise<GeneralSections['theme']> {
+  const collection = await getThemeCollection();
+  if (collection === null) return null;
+
+  const explicit =
+    slide.explicitVariableModes !== undefined && slide.explicitVariableModes !== null
+      ? slide.explicitVariableModes[collection.id]
+      : undefined;
+  const resolved =
+    slide.resolvedVariableModes !== undefined && slide.resolvedVariableModes !== null
+      ? slide.resolvedVariableModes[collection.id]
+      : undefined;
+
+  // resolvedMode is required for the picker to highlight the active
+  // mode. Fall back to the collection's default when the slide doesn't
+  // resolve any mode (shouldn't happen in practice but defensive).
+  const resolvedModeId =
+    typeof resolved === 'string' && resolved.length > 0 ? resolved : collection.defaultModeId;
+
+  const modes = collection.modes.map((m) => ({ id: m.modeId, name: m.name }));
+
+  return {
+    collectionId: collection.id,
+    collectionName: collection.name,
+    explicitModeId: typeof explicit === 'string' && explicit.length > 0 ? explicit : null,
+    resolvedModeId: resolvedModeId,
+    modes: modes,
   };
 }
 
@@ -1572,9 +1639,55 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     return;
   }
 
-  // T34.0: set-variable-mode handler verwijderd. Theme-switching is permanent
-  // uit de plugin-UI (T34 research §8 — library-variable-modes regelen het
-  // buiten de plugin om). T34.1: message-type ook uit types.ts verwijderd.
+  if (msg.type === 'set-slide-theme') {
+    const themeSlide = findSlideById(msg.slideId);
+    if (themeSlide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    const collection = await getThemeCollection();
+    if (collection === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Theme variable collection not found in this file',
+      });
+      return;
+    }
+    try {
+      // `null` clears the explicit binding so the slide inherits the
+      // page-level mode. Any string mode-id pins the slide to that mode.
+      themeSlide.setExplicitVariableModeForCollection(collection, msg.modeId);
+    } catch (err: unknown) {
+      const text = err instanceof Error ? err.message : String(err);
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'setExplicitVariableModeForCollection failed: ' + text,
+      });
+      return;
+    }
+    // Re-emit the full slide payload so the iframe picker reflects the
+    // new resolved mode (and the Theme section's explicit/resolved fields).
+    const scan = await scanSlide(themeSlide);
+    postToUI({
+      type: 'slide-loaded',
+      slideId: themeSlide.id,
+      general: scan.general,
+      content: scan.content,
+      graphs: scan.graphs,
+    });
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: themeSlide.id,
+    });
+    return;
+  }
 
   if (msg.type === 'set-slide-skipped') {
     var skipSlide = findSlideById(msg.slideId);

@@ -19,6 +19,7 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 
 import SlideSelector from './components/SlideSelector.vue';
+import SlideThemeSwitcher from './components/SlideThemeSwitcher.vue';
 import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
@@ -66,6 +67,12 @@ function toggleSkip(): void {
     slideId: summary.id,
     skipped: !summary.isSkipped,
   });
+}
+
+function onThemeChange(modeId: string | null): void {
+  const id = view.state.currentSlideId;
+  if (id === null) return;
+  bridge.post({ type: 'set-slide-theme', slideId: id, modeId });
 }
 
 // Register bridge-handlers vóór de ui-ready handshake zodat we het init-
@@ -220,7 +227,7 @@ onBeforeUnmount(() => {
               </p>
             </div>
 
-            <div class="border-t border-[var(--ui-border)] pt-5">
+            <div class="border-t border-[var(--ui-border)] pt-5 space-y-3">
               <div class="flex items-center gap-2">
                 <SlideSelector v-model="currentSlide" :slides="view.state.slides" class="flex-1" />
                 <UButton
@@ -238,6 +245,17 @@ onBeforeUnmount(() => {
                   @click="toggleSkip"
                 />
               </div>
+              <UFormField
+                v-if="view.state.general?.theme"
+                name="slide-theme"
+                label="Thema"
+                size="md"
+              >
+                <SlideThemeSwitcher
+                  :theme="view.state.general.theme"
+                  @update:model-value="onThemeChange"
+                />
+              </UFormField>
             </div>
           </section>
 
