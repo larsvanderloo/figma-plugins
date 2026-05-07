@@ -1,23 +1,22 @@
 <!--
   BottomActionsBar — sticky toolbar at the bottom of the plugin panel.
 
-  Four icon-only actions:
+  Three icon-only actions:
     1. Export presentation as PDF (current page → multi-page PDF)
     2. Export current slide as PDF
     3. Undo                 → figma.triggerUndo() (== Cmd+Z)
-    4. Redo                 → tooltip / info-toast: Cmd+Shift+Z
-                              (Figma's plugin API has no triggerRedo;
-                              we don't fake it.)
+
+  Redo is intentionally absent — Figma's plugin API exposes
+  triggerUndo but no triggerRedo, and we don't fake it. Users redo
+  via the native Cmd+Shift+Z (Mac) / Ctrl+Y (Windows) shortcut.
 -->
 <script setup lang="ts">
 import { computed } from 'vue';
 import { usePluginBridge } from '../composables/usePluginBridge';
 import { usePluginView } from '../stores/usePluginView';
-import { useNotifications } from '../stores/useNotifications';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
-const notifications = useNotifications();
 
 const hasSlide = computed<boolean>(() => view.state.currentSlideId !== null);
 
@@ -41,15 +40,6 @@ function onUndo(): void {
     type: 'trigger-undo',
     slideId: view.state.currentSlideId ?? undefined,
   });
-}
-
-function onRedo(): void {
-  // Figma's plugin API exposes no triggerRedo. Best honest UX: hint the
-  // user toward the native shortcut and let them use it.
-  notifications.pushInfo(
-    'Redo niet beschikbaar in plugin',
-    'Gebruik Cmd+Shift+Z (Mac) of Ctrl+Y (Windows) in Figma.',
-  );
 }
 </script>
 
@@ -82,14 +72,6 @@ function onRedo(): void {
       size="md"
       title="Ongedaan maken (Cmd+Z)"
       @click="onUndo"
-    />
-    <UButton
-      icon="i-lucide-redo-2"
-      color="neutral"
-      variant="ghost"
-      size="md"
-      title="Opnieuw — gebruik Cmd+Shift+Z (Mac) / Ctrl+Y (Windows)"
-      @click="onRedo"
     />
   </div>
 </template>
