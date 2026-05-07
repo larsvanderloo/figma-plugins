@@ -24,6 +24,9 @@ import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../types';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS, TABLE_WIDTHS } from '../../constants';
 import { tokenize } from '../../chart-core/csv';
+import { useNotifications } from '../stores/useNotifications';
+
+const notifications = useNotifications();
 
 interface Props {
   modelValue: TableWrapModel;
@@ -308,6 +311,10 @@ function applyCSV(): void {
   const err = validateCSV(text);
   if (err !== '') {
     csvError.value = err;
+    // Toast surfaces the failure immediately; inline `csvError`
+    // persists below the textarea so the user can keep reading it
+    // while editing the CSV (toast auto-dismisses).
+    notifications.pushError('CSV-import mislukt', err);
     return;
   }
   csvError.value = '';
