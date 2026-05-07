@@ -619,8 +619,17 @@ export type UIToPluginMessage =
    * + a suggested filename; the iframe triggers a blob-download.
    */
   | { type: 'export-pdf'; target: 'slide' | 'presentation'; slideId?: string }
-  /** Plugin-API trigger for native undo. No redo equivalent in the API. */
-  | { type: 'trigger-undo' }
+  /**
+   * Plugin-API trigger for native undo. No redo equivalent in the API.
+   *
+   * `slideId` is the iframe's currently-displayed slide. The sandbox
+   * uses it to re-scan and re-emit `slide-loaded` after triggerUndo,
+   * so iframe-side optimistic state (e.g. the picker's localIcon
+   * watch on view.state.general.badge.icon) gets re-synced from the
+   * post-undo canvas. Without this the picker would still show the
+   * pre-undo value and the user reads the toolbar Undo as a no-op.
+   */
+  | { type: 'trigger-undo'; slideId?: string }
   | { type: 'close' };
 
 /**

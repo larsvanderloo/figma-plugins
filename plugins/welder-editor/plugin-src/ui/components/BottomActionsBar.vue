@@ -33,7 +33,14 @@ function exportSlide(): void {
 
 function onUndo(): void {
   // Sandbox calls figma.triggerUndo() — same effect as Cmd+Z.
-  bridge.post({ type: 'trigger-undo' });
+  // Pass the currently-displayed slideId so the sandbox can re-scan
+  // and re-emit slide-loaded; otherwise iframe-side optimistic
+  // updates (e.g. the picker's view.state mutation on click) keep
+  // showing the pre-undo value and the toolbar Undo reads as a no-op.
+  bridge.post({
+    type: 'trigger-undo',
+    slideId: view.state.currentSlideId ?? undefined,
+  });
 }
 
 function onRedo(): void {

@@ -1990,6 +1990,28 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     // at the native shortcut. Undo here reverts to the last
     // commitUndo() checkpoint.
     figma.triggerUndo();
+    // Re-sync the iframe's view of the currently-displayed slide.
+    // Without this, optimistic store updates (e.g. picker's
+    // view.state.general.badge.icon = newIcon written before the
+    // bridge.post) survive the undo and the picker keeps showing
+    // the pre-undo value while the canvas correctly reverts.
+    if (typeof msg.slideId === 'string' && msg.slideId.length > 0) {
+      const undoSlide = findSlideById(msg.slideId);
+      if (undoSlide !== null) {
+        try {
+          const scan = await scanSlide(undoSlide);
+          postToUI({
+            type: 'slide-loaded',
+            slideId: undoSlide.id,
+            general: scan.general,
+            content: scan.content,
+            graphs: scan.graphs,
+          });
+        } catch (err: unknown) {
+          console.log('[welder-slide-editor] post-undo scanSlide failed:', err);
+        }
+      }
+    }
     return;
   }
 
