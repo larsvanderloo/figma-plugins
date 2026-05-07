@@ -35,11 +35,9 @@ import JourneyEditor from './JourneyEditor.vue';
 import type { CardItem, TimelineItem, JourneyWrapModel } from '../../types';
 import { usePluginBridge } from '../composables/usePluginBridge';
 import { usePluginView } from '../stores/usePluginView';
-import { useEditHistory } from '../stores/useEditHistory';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
-const editHistory = useEditHistory();
 
 // Card visual previews — bytes come from the sandbox via
 // `card-visual-preview`, one message per Type=Image / Type=User card
@@ -111,8 +109,8 @@ function onCardUpdate(value: CardItem): void {
   // T32: icon kan null zijn (icon-instance niet zichtbaar) — stuur het dan
   // niet mee in de payload (main-thread silent-skip bij ontbrekend icon-veld).
   const iconPayload: { icon?: string } = value.icon !== null ? { icon: value.icon } : {};
-  const msg = {
-    type: 'update-card' as const,
+  bridge.post({
+    type: 'update-card',
     slideId: id,
     cardNodeId: value.cardNodeId,
     payload: {
@@ -120,9 +118,7 @@ function onCardUpdate(value: CardItem): void {
       paragraph: value.paragraph,
       ...iconPayload,
     },
-  };
-  editHistory.recordIssued(msg);
-  bridge.post(msg);
+  });
 }
 
 function onCardVisualUpload(cardNodeId: string, bytes: Uint8Array): void {

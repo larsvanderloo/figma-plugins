@@ -29,14 +29,12 @@ import { usePluginBridge } from './composables/usePluginBridge';
 import { usePluginView } from './stores/usePluginView';
 import { useIconRecents } from './stores/useIconRecents';
 import { useNotifications } from './stores/useNotifications';
-import { useEditHistory } from './stores/useEditHistory';
 import welderLogo from './assets/welder-logo.svg';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
 const iconRecents = useIconRecents();
 const notifications = useNotifications();
-const editHistory = useEditHistory();
 // Hand the Nuxt UI toast handle to the notifications store. Resolves
 // via inject() chain through `<UApp>`, so this MUST happen inside a
 // component setup. Doing it once at app root.
@@ -90,9 +88,7 @@ function onThemeChange(modeId: string | null): void {
     theme.explicitModeId = modeId;
     if (modeId !== null) theme.resolvedModeId = modeId;
   }
-  const msg = { type: 'set-slide-theme' as const, slideId: id, modeId };
-  editHistory.recordIssued(msg);
-  bridge.post(msg);
+  bridge.post({ type: 'set-slide-theme', slideId: id, modeId });
 }
 
 // Register bridge-handlers vóór de ui-ready handshake zodat we het init-
@@ -216,17 +212,6 @@ watch(
     bridge.post({ type: 'set-icon-recents', items: [...next] });
   },
   { deep: true },
-);
-
-// Plugin Undo/Redo is scoped to the active slide. When the slide
-// changes — by user pick, auto-follow, or page navigation — drop both
-// stacks. The user said cross-slide undos are confusing; this makes
-// the contract explicit: stack reflects the current slide only.
-watch(
-  () => view.state.currentSlideId,
-  () => {
-    editHistory.clearAll();
-  },
 );
 
 onMounted(() => {

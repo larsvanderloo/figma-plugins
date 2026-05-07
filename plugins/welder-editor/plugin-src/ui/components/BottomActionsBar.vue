@@ -4,24 +4,20 @@
   Four icon-only actions:
     1. Export presentation as PDF (current page → multi-page PDF)
     2. Export current slide as PDF
-    3. Undo plugin edit  → popForUndo() + sandbox `trigger-undo`
-    4. Redo plugin edit  → popForRedo() + replay the original
-                            bridge message
-
-  Plugin Undo/Redo only covers tracked plugin actions (currently
-  update-general, update-card, set-slide-theme — see
-  `useEditHistory`). Native Cmd+Z / Cmd+Shift+Z still works for
-  everything else; that's the keyboard escape hatch.
+    3. Undo                 → figma.triggerUndo() (== Cmd+Z)
+    4. Redo                 → tooltip / info-toast: Cmd+Shift+Z
+                              (Figma's plugin API has no triggerRedo;
+                              we don't fake it.)
 -->
 <script setup lang="ts">
 import { computed } from 'vue';
 import { usePluginBridge } from '../composables/usePluginBridge';
 import { usePluginView } from '../stores/usePluginView';
-import { useEditHistory } from '../stores/useEditHistory';
+import { useNotifications } from '../stores/useNotifications';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
-const editHistory = useEditHistory();
+const notifications = useNotifications();
 
 const hasSlide = computed<boolean>(() => view.state.currentSlideId !== null);
 
@@ -36,24 +32,17 @@ function exportSlide(): void {
 }
 
 function onUndo(): void {
-  // Move the most-recent tracked action onto the undone stack and ask
-  // the sandbox to revert. The sandbox commits an undo checkpoint
-  // before each tracked mutation, so triggerUndo reverts exactly
-  // that one action. Stack is auto-cleared when the slide changes
-  // (App.vue watches currentSlideId), so anything that's still on
-  // the stack belongs to the current slide.
-  const msg = editHistory.popForUndo();
-  if (msg === null) return;
+  // Sandbox calls figma.triggerUndo() — same effect as Cmd+Z.
   bridge.post({ type: 'trigger-undo' });
 }
 
 function onRedo(): void {
-  // Replay the most-recently-undone bridge message verbatim. The
-  // sandbox handler runs commitUndo + the apply, so the redone state
-  // becomes a fresh undo checkpoint on top.
-  const msg = editHistory.popForRedo();
-  if (msg === null) return;
-  bridge.post(msg);
+  // Figma's plugin API exposes no triggerRedo. Best honest UX: hint the
+  // user toward the native shortcut and let them use it.
+  notifications.pushInfo(
+    'Redo niet beschikbaar in plugin',
+    'Gebruik Cmd+Shift+Z (Mac) of Ctrl+Y (Windows) in Figma.',
+  );
 }
 </script>
 
@@ -84,8 +73,7 @@ function onRedo(): void {
       color="neutral"
       variant="ghost"
       size="md"
-      :disabled="!editHistory.canUndo"
-      title="Plugin-wijziging ongedaan maken"
+      title="Ongedaan maken (Cmd+Z)"
       @click="onUndo"
     />
     <UButton
@@ -93,8 +81,7 @@ function onRedo(): void {
       color="neutral"
       variant="ghost"
       size="md"
-      :disabled="!editHistory.canRedo"
-      title="Plugin-wijziging opnieuw toepassen"
+      title="Opnieuw — gebruik Cmd+Shift+Z (Mac) / Ctrl+Y (Windows)"
       @click="onRedo"
     />
   </div>
