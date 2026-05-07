@@ -28,7 +28,7 @@
       met `slotId` + `desired` (debounced 200ms binnen JourneyEditor).
 -->
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, onUnmounted, ref, watch } from 'vue';
 import CardItemEditor from './CardItemEditor.vue';
 import TimelineItemEditor from './TimelineItemEditor.vue';
 import JourneyEditor from './JourneyEditor.vue';
@@ -38,6 +38,45 @@ import { usePluginView } from '../stores/usePluginView';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
+
+// Card visual previews — bytes come from the sandbox via
+// `card-visual-preview`, one message per Type=Image / Type=User card
+// with a non-null visualHash. Each value is a `data:image/...;base64,…`
+// URL ready for `<img :src>`. Cleared whenever the slide changes so
+// stale thumbnails from a previous slide don't bleed through.
+const cardPreviewUrls = ref<Record<string, string>>({});
+
+function bytesToDataUrl(bytes: Uint8Array): string {
+  let mime = 'image/png';
+  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    mime = 'image/jpeg';
+  }
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode.apply(
+      null,
+      Array.from(bytes.subarray(i, i + chunkSize)) as unknown as number[],
+    );
+  }
+  return 'data:' + mime + ';base64,' + btoa(binary);
+}
+
+const unsubCardPreview = bridge.onMessage((msg) => {
+  if (msg.type !== 'card-visual-preview') return;
+  cardPreviewUrls.value = {
+    ...cardPreviewUrls.value,
+    [msg.cardNodeId]: bytesToDataUrl(msg.bytes),
+  };
+});
+onUnmounted(unsubCardPreview);
+
+watch(
+  () => view.state.currentSlideId,
+  () => {
+    cardPreviewUrls.value = {};
+  },
+);
 
 const content = computed(() => view.state.content);
 const slideId = computed(() => view.state.currentSlideId);
@@ -144,6 +183,7 @@ function onJourneyUpdate(value: JourneyWrapModel): void {
         :key="card.cardNodeId"
         :model-value="card"
         :index="idx + 1"
+        :preview-url="cardPreviewUrls[card.cardNodeId] || null"
         @update:model-value="onCardUpdate"
         @upload-visual="(bytes) => onCardVisualUpload(card.cardNodeId, bytes)"
       />

@@ -663,4 +663,22 @@ export type PluginToUIMessage =
    * `useIconRecents` store calls `setItems(items)`. Empty array on
    * first run.
    */
-  | { type: 'icon-recents'; items: string[] };
+  | { type: 'icon-recents'; items: string[] }
+  /**
+   * Per-card visual thumbnail bytes — analogue of `image-preview`
+   * but keyed by `cardNodeId` instead of `imageWrapId`. Sandbox emits
+   * one message per Type=Image (or Type=User) card with a non-null
+   * visualHash, after `slide-loaded`. Iframe converts bytes to a data
+   * URL and renders it as a thumbnail in the card's editor row.
+   * Refreshed on `upload-image` (Vervangen-flow) so the thumbnail
+   * keeps up with replaces.
+   */
+  | {
+      type: 'card-visual-preview';
+      cardNodeId: string;
+      bytes: Uint8Array;
+      /** Width of the card's image-slot in Figma pixels. 0 = unknown (UI falls back to a fixed h-32). */
+      fillW: number;
+      /** Height of the card's image-slot in Figma pixels. 0 = unknown. */
+      fillH: number;
+    };

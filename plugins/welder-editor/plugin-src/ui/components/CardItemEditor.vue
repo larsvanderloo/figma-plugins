@@ -31,6 +31,13 @@ import IconPicker from './IconPicker.vue';
 interface Props {
   modelValue: CardItem;
   index: number;
+  /**
+   * Data-URL of the card's current visual (PNG/JPG, base64). Sandbox
+   * emits `card-visual-preview` with the bytes; ContentPanel converts
+   * them and threads the URL down. Null until preview arrives or
+   * when the card has no visual slot.
+   */
+  previewUrl?: string | null;
 }
 
 const props = defineProps<Props>();
@@ -151,27 +158,35 @@ async function onFileSelected(event: Event): Promise<void> {
       />
     </UFormField>
 
-    <div v-if="hasVisualSlot" class="flex items-center justify-between">
-      <div class="flex items-center gap-2">
-        <UIcon
-          :name="hasImage ? 'i-lucide-image' : 'i-lucide-image-off'"
-          class="size-4 shrink-0 text-muted"
-        />
-        <span class="text-xs text-muted">
-          {{ hasImage ? 'Visual ingesteld' : 'Nog geen visual' }}
-        </span>
-      </div>
-      <UButton
-        size="md"
-        color="neutral"
-        variant="outline"
-        icon="i-lucide-upload"
-        :loading="isUploading"
-        :disabled="isUploading"
-        @click="triggerFileInput"
+    <div v-if="hasVisualSlot" class="space-y-2">
+      <div
+        v-if="previewUrl"
+        class="relative w-full overflow-hidden rounded-xl bg-[--ui-bg-muted] select-none h-32"
       >
-        {{ hasImage ? 'Vervangen' : 'Uploaden' }}
-      </UButton>
+        <img :src="previewUrl" class="absolute inset-0 h-full w-full object-cover" alt="" />
+      </div>
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <UIcon
+            :name="hasImage ? 'i-lucide-image' : 'i-lucide-image-off'"
+            class="size-4 shrink-0 text-muted"
+          />
+          <span class="text-xs text-muted">
+            {{ hasImage ? 'Visual ingesteld' : 'Nog geen visual' }}
+          </span>
+        </div>
+        <UButton
+          size="md"
+          color="neutral"
+          variant="outline"
+          icon="i-lucide-upload"
+          :loading="isUploading"
+          :disabled="isUploading"
+          @click="triggerFileInput"
+        >
+          {{ hasImage ? 'Vervangen' : 'Uploaden' }}
+        </UButton>
+      </div>
     </div>
 
     <input

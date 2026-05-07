@@ -625,6 +625,35 @@ function readImageWrapHash(imageWrap: InstanceNode): string | null {
  * wanneer de card geen slot heeft (de UI verbergt dan de upload-knop).
  * Heuristiek matcht editors/content/card.ts:findImageSlot.
  */
+/**
+ * Find the SceneNode that owns the IMAGE fill on a Card — the analogue
+ * of `findImageSlot` for slide-level ImageWraps. Used both by the
+ * read path (`readCardVisualHash` → hash for the iframe scan) and the
+ * preview path (post-slide-loaded byte fetch + thumbnail emit).
+ *
+ * Strategy is the same as `readCardVisualHash`: prefer a descendant
+ * named 'Visual' / 'Image' that has a `fills` property, fall back to
+ * any descendant whose fills include an IMAGE paint.
+ */
+function findCardVisualSlot(card: SceneNode): SceneNode | null {
+  if (!('findOne' in card)) return null;
+  const byName = card.findOne((n: SceneNode) => {
+    if (n.name !== 'Visual' && n.name !== 'Image') return false;
+    return 'fills' in n;
+  });
+  if (byName !== null) return byName;
+  return card.findOne((n: SceneNode) => {
+    if (!('fills' in n)) return false;
+    const fills = (n as GeometryMixin).fills;
+    if (fills === figma.mixed) return false;
+    if (!Array.isArray(fills)) return false;
+    for (const f of fills) {
+      if (f.type === 'IMAGE') return true;
+    }
+    return false;
+  });
+}
+
 function readCardVisualHash(card: SceneNode): string | null | undefined {
   if (!('findOne' in card)) return undefined;
 
@@ -1291,6 +1320,58 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       lastSentPreviewHash.set(imageWrapId, imageHash);
     })().catch(function (_e) {});
 
+    // Card visual previews — same fire-and-forget pattern as the slide-
+    // level image-preview above, but per Type=Image / Type=User card.
+    // The iframe's CardItemEditor renders the bytes as a thumbnail so
+    // the user sees the current visual instead of just a "Visual
+    // ingesteld"-status string.
+    (async function () {
+      if (scan.content === null) return;
+      const cards = scan.content.cards;
+      for (let i = 0; i < cards.length; i++) {
+        const ci = cards[i];
+        if (typeof ci.visualHash !== 'string') continue; // null or undefined → no visual
+        try {
+          const cardNode = await figma.getNodeByIdAsync(ci.cardNodeId);
+          if (cardNode === null || cardNode.type !== 'INSTANCE') continue;
+          const slot = findCardVisualSlot(cardNode as InstanceNode);
+          if (slot === null) continue;
+          const fills = (slot as GeometryMixin).fills;
+          if (fills === figma.mixed || !Array.isArray(fills)) continue;
+          let imageHash: string | null = null;
+          for (let f = 0; f < fills.length; f++) {
+            if (fills[f].type === 'IMAGE') {
+              imageHash = (fills[f] as ImagePaint).imageHash;
+              break;
+            }
+          }
+          if (imageHash === null) continue;
+          const img = figma.getImageByHash(imageHash);
+          if (img === null) continue;
+          const bytes = await img.getBytesAsync();
+          let fillW = 0;
+          let fillH = 0;
+          if ('width' in slot && 'height' in slot) {
+            const w = (slot as LayoutMixin).width;
+            const h = (slot as LayoutMixin).height;
+            if (w > 0 && h > 0) {
+              fillW = w;
+              fillH = h;
+            }
+          }
+          postToUI({
+            type: 'card-visual-preview',
+            cardNodeId: ci.cardNodeId,
+            bytes: bytes,
+            fillW: fillW,
+            fillH: fillH,
+          });
+        } catch (_e) {
+          // Per-card failure is silent — other cards still post.
+        }
+      }
+    })().catch(function (_e) {});
+
     // Prime icon cache in background using first card/badge found.
     // Async IIFE — fire-and-forget; errors caught so UI never gets stuck.
     (async function () {
@@ -1696,6 +1777,30 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         });
         return;
       }
+      // Refresh thumbnail in iframe immediately — bytes are already in
+      // scope (the user just uploaded them), so no getBytesAsync round-
+      // trip. fillW/fillH come from the card's visual slot for aspect-
+      // ratio matching in the thumbnail box.
+      let cardFillW = 0;
+      let cardFillH = 0;
+      if (target.type === 'INSTANCE') {
+        const cardSlot = findCardVisualSlot(target as InstanceNode);
+        if (cardSlot !== null && 'width' in cardSlot && 'height' in cardSlot) {
+          const w = (cardSlot as LayoutMixin).width;
+          const h = (cardSlot as LayoutMixin).height;
+          if (w > 0 && h > 0) {
+            cardFillW = w;
+            cardFillH = h;
+          }
+        }
+      }
+      postToUI({
+        type: 'card-visual-preview',
+        cardNodeId: msg.targetNodeId,
+        bytes: msg.bytes,
+        fillW: cardFillW,
+        fillH: cardFillH,
+      });
       postToUI({
         type: 'target-updated',
         ok: true,
