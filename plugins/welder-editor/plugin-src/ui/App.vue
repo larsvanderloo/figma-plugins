@@ -24,6 +24,7 @@ import SlideThemeSwitcher from './components/SlideThemeSwitcher.vue';
 import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
+import BottomActionsBar from './components/BottomActionsBar.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
 import { usePluginView } from './stores/usePluginView';
 import { useIconRecents } from './stores/useIconRecents';
@@ -161,6 +162,30 @@ bridge.onMessage((msg) => {
     iconRecents.setItems(msg.items);
     return;
   }
+  if (msg.type === 'pdf-ready') {
+    // Wrap the bytes in a Blob and trigger a download via a temporary
+    // anchor. URL.revokeObjectURL after the click so the iframe doesn't
+    // accumulate references to multi-MB PDFs.
+    try {
+      const blob = new Blob([msg.bytes as BlobPart], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = msg.filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+      notifications.pushSuccess(
+        msg.target === 'presentation' ? 'Presentatie geëxporteerd' : 'Slide geëxporteerd',
+        msg.filename,
+      );
+    } catch (err: unknown) {
+      const text = err instanceof Error ? err.message : String(err);
+      notifications.pushError('Download mislukt', text);
+    }
+    return;
+  }
   if (msg.type === 'target-updated' && msg.ok === false) {
     // Surface sandbox-side failures via the Nuxt UI toaster so they
     // don't disappear silently. Successful target-updated messages
@@ -239,7 +264,7 @@ onBeforeUnmount(() => {
 
     <!-- Real UI — shown once 'init' received -->
     <div v-else class="flex h-full flex-col bg-elevated text-default">
-      <main class="flex-1 overflow-y-auto">
+      <main class="flex-1 overflow-y-auto pb-12">
         <div class="mx-auto max-w-2xl space-y-3 p-3">
           <!-- Header-card: logo + intro + slide selector -->
           <section
@@ -348,6 +373,7 @@ onBeforeUnmount(() => {
           </template>
         </div>
       </main>
+      <BottomActionsBar />
     </div>
   </UApp>
 </template>

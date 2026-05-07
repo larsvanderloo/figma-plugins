@@ -611,6 +611,16 @@ export type UIToPluginMessage =
    * payload so the picker UI reflects the resolved state.
    */
   | { type: 'set-slide-theme'; slideId: string; modeId: string | null }
+  /**
+   * Export the active slide OR the entire presentation as a PDF.
+   * Target=slide uses `slideId`; target=presentation exports the
+   * current page (which on a Figma Slides file produces a multi-page
+   * PDF). Sandbox replies with a `pdf-ready` message carrying bytes
+   * + a suggested filename; the iframe triggers a blob-download.
+   */
+  | { type: 'export-pdf'; target: 'slide' | 'presentation'; slideId?: string }
+  /** Plugin-API trigger for native undo. No redo equivalent in the API. */
+  | { type: 'trigger-undo' }
   | { type: 'close' };
 
 /**
@@ -664,6 +674,18 @@ export type PluginToUIMessage =
    * first run.
    */
   | { type: 'icon-recents'; items: string[] }
+  /**
+   * Result of an `export-pdf` request. Bytes are PDF; iframe wraps
+   * them in a Blob and triggers a download with `filename`.
+   * Failures still go through `target-updated` (ok=false) and surface
+   * via the notifications toast.
+   */
+  | {
+      type: 'pdf-ready';
+      target: 'slide' | 'presentation';
+      bytes: Uint8Array;
+      filename: string;
+    }
   /**
    * Per-card visual thumbnail bytes — analogue of `image-preview`
    * but keyed by `cardNodeId` instead of `imageWrapId`. Sandbox emits

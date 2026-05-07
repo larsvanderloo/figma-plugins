@@ -1968,10 +1968,93 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     return;
   }
 
+  if (msg.type === 'trigger-undo') {
+    // Figma's plugin API exposes triggerUndo but no triggerRedo, so
+    // the iframe's redo button is disabled with a tooltip pointing
+    // at the native shortcut. Undo here reverts to the last
+    // commitUndo() checkpoint.
+    figma.triggerUndo();
+    return;
+  }
+
+  if (msg.type === 'export-pdf') {
+    // Resolve the export target. Single slide → the SLIDE node by id.
+    // Presentation → currentPage, which on a Figma Slides file
+    // produces a multi-page PDF.
+    let target: BaseNode | null = null;
+    let filename = '';
+    if (msg.target === 'slide') {
+      if (typeof msg.slideId !== 'string' || msg.slideId.length === 0) {
+        postToUI({
+          type: 'target-updated',
+          ok: false,
+          error: 'No slide selected to export.',
+        });
+        return;
+      }
+      const slide = findSlideById(msg.slideId);
+      if (slide === null) {
+        postToUI({
+          type: 'target-updated',
+          ok: false,
+          error: 'Slide not found: ' + msg.slideId,
+        });
+        return;
+      }
+      target = slide;
+      // Prefer the slide's heading text for the filename; fall back to
+      // the SLIDE-parent node's name (Figma's user-visible slide name)
+      // or "slide".
+      const heading = readTextByName(slide, 'Heading');
+      let baseName = heading !== null && heading.length > 0 ? heading : slide.name;
+      if (slide.parent !== null && slide.parent.type === 'SLIDE') {
+        baseName = (slide.parent as SlideNode).name || baseName;
+      }
+      filename = sanitizePdfFilename(baseName) + '.pdf';
+    } else {
+      target = figma.currentPage;
+      filename = sanitizePdfFilename(figma.currentPage.name || 'presentation') + '.pdf';
+    }
+
+    let bytes: Uint8Array;
+    try {
+      bytes = await (target as ExportMixin).exportAsync({ format: 'PDF' });
+    } catch (err: unknown) {
+      const text = err instanceof Error ? err.message : String(err);
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'PDF-export mislukt: ' + text,
+      });
+      return;
+    }
+
+    postToUI({
+      type: 'pdf-ready',
+      target: msg.target,
+      bytes: bytes,
+      filename: filename,
+    });
+    return;
+  }
+
   if (msg.type === 'close') {
     figma.closePlugin();
     return;
   }
+}
+
+/**
+ * Strip filesystem-unfriendly characters from a string so it's safe
+ * as a PDF filename across macOS / Windows / Linux. Collapses runs of
+ * spaces / underscores into a single hyphen, drops leading/trailing
+ * hyphens, caps length at 80 chars.
+ */
+function sanitizePdfFilename(raw: string): string {
+  const trimmed = raw.replace(/[\\/:*?"<>|]/g, '').trim();
+  const collapsed = trimmed.replace(/[\s_]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+  const safe = collapsed.length > 0 ? collapsed : 'export';
+  return safe.length > 80 ? safe.slice(0, 80) : safe;
 }
 
 // ============================================================
