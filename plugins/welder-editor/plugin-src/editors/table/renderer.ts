@@ -647,6 +647,9 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     // T41.2 — filter body-rijen die volledig leeg zijn (alle cells === '').
     // Header rij (rij 0 wanneer hasHeader) blijft altijd staan ongeacht inhoud.
     // Lege rijen blijven in de UI/data, alleen de canvas-rendering skipt ze.
+    // De round-trip (scan → iframe-watch) wordt afgevangen door TableEditor's
+    // echo-guard zodat de user's in-progress structure niet geclobberd wordt
+    // door de canvas-truth scan na een filter-shrink (zie 2026-05-07 fix).
     const hasHeader = desired.hasColumnHeader && desired.rows.length > 0;
 
     // T41.10: container.paddingTop conditioneel — 17px bij header (header-cell

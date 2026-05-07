@@ -19,7 +19,7 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { findCopyWrap } from '../../slide-machine';
+import { findCopyWrap, findEnclosingInstanceByName } from '../../slide-machine';
 import { setTextCharactersSafe } from '../_shared/fonts';
 
 /** Payload-shape voor `update-general` met section `titleDescription`. */
@@ -59,11 +59,21 @@ export async function applyTitleDescription(
     const headingNode = findTextByName(copyWrap, 'Heading');
     if (headingNode !== null) {
       await setTextCharactersSafe(headingNode, payload.heading);
-      // T39.4: lege Heading verbergen zodat de CopyWrap-auto-layout om
-      // de overgebleven nodes sluit. Zet visible weer true zodra er weer
-      // tekst getypt wordt. T39.3 picks de slide-reflow op en re-rendert
-      // de tabel(len) automatisch met de nieuwe slot-hoogte.
-      headingNode.visible = payload.heading !== '';
+      // T39.4 (revised 2026-05-07): bij lege heading hide we de wrappende
+      // `TypHeading` INSTANCE, niet de inner TEXT. Hiding alleen de inner
+      // TEXT laat de TypHeading-wrapper in de CopyWrap-auto-layout staan
+      // wat de slide-reflow scheef trekt (raakt o.a. de TableWrap-slot-
+      // hoogte). Wrapper-hide collapseert het hele blok schoon. Inner
+      // TEXT blijft visible — Figma's auto-layout cascade negeert hem
+      // dan via de wrapper-state. Fallback op TEXT.visible voor legacy
+      // CopyWraps zonder TypHeading-wrapper.
+      headingNode.visible = true;
+      const wrapper = findEnclosingInstanceByName(headingNode, 'TypHeading', slide);
+      if (wrapper !== null) {
+        wrapper.visible = payload.heading !== '';
+      } else {
+        headingNode.visible = payload.heading !== '';
+      }
     }
   }
 
@@ -71,9 +81,16 @@ export async function applyTitleDescription(
     const paragraphNode = findTextByName(copyWrap, 'Paragraph');
     if (paragraphNode !== null) {
       await setTextCharactersSafe(paragraphNode, payload.paragraph);
-      // T39.4: idem voor Paragraph — lege paragraaf verbergen i.p.v.
-      // visueel een lege regel laten staan.
-      paragraphNode.visible = payload.paragraph !== '';
+      // T39.4 (revised 2026-05-07): zelfde fix als heading — wrapper-
+      // hide op TypParagraph zodat de CopyWrap auto-layout het hele
+      // paragraph-blok wegklokt en de Slide reflow schoon doorloopt.
+      paragraphNode.visible = true;
+      const wrapper = findEnclosingInstanceByName(paragraphNode, 'TypParagraph', slide);
+      if (wrapper !== null) {
+        wrapper.visible = payload.paragraph !== '';
+      } else {
+        paragraphNode.visible = payload.paragraph !== '';
+      }
     }
   }
 }
