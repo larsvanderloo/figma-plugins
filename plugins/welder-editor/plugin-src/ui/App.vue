@@ -72,6 +72,14 @@ function toggleSkip(): void {
 function onThemeChange(modeId: string | null): void {
   const id = view.state.currentSlideId;
   if (id === null) return;
+  // Optimistic: flip the picker's active swatch immediately. The
+  // sandbox confirms with `target-updated` and does NOT re-emit the
+  // slide payload, since a theme change doesn't affect content state.
+  const theme = view.state.general?.theme;
+  if (theme) {
+    theme.explicitModeId = modeId;
+    if (modeId !== null) theme.resolvedModeId = modeId;
+  }
   bridge.post({ type: 'set-slide-theme', slideId: id, modeId });
 }
 

@@ -1783,16 +1783,11 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
-    // Re-emit the full slide payload so the iframe picker reflects the
-    // new resolved mode (and the Theme section's explicit/resolved fields).
-    const scan = await scanSlide(themeSlide);
-    postToUI({
-      type: 'slide-loaded',
-      slideId: themeSlide.id,
-      general: scan.general,
-      content: scan.content,
-      graphs: scan.graphs,
-    });
+    // No slide re-scan: a theme change doesn't affect any other content
+    // (text, icons, structure all stay the same). The iframe applies the
+    // new mode optimistically before posting; this confirmation just
+    // closes the round-trip. Saves a 100-500ms scanSlide + slide-loaded
+    // round-trip on every theme click.
     postToUI({
       type: 'target-updated',
       ok: true,
