@@ -42,6 +42,11 @@ function onUndo(): void {
   // that one action.
   const msg = editHistory.popForUndo();
   if (msg === null) return;
+  // Suppress slide-focused auto-follow for a brief window so any
+  // selectionchange echo from the mutation (or page-nav being part of
+  // Figma's undo history) doesn't bounce the iframe to a different
+  // slide.
+  editHistory.markHistoryReplay();
   bridge.post({ type: 'trigger-undo' });
 }
 
@@ -51,6 +56,7 @@ function onRedo(): void {
   // becomes a fresh undo checkpoint on top.
   const msg = editHistory.popForRedo();
   if (msg === null) return;
+  editHistory.markHistoryReplay();
   bridge.post(msg);
 }
 </script>

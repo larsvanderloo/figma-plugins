@@ -126,6 +126,14 @@ bridge.onMessage((msg) => {
     // Auto-follow: switch dropdown only wanneer de user daadwerkelijk een
     // andere slide heeft gekozen — voorkomt lelijke re-loads wanneer de
     // user binnen dezelfde slide klikt.
+    //
+    // Skip auto-follow if we're inside a history-replay window: the
+    // slide-focused arrival is almost certainly a selectionchange echo
+    // of our own Undo/Redo (Figma's undo can revert page navigation
+    // alongside the mutation, which then surfaces as slide-focused).
+    // Without this guard the iframe bounces to a different slide on
+    // the user's second redo click.
+    if (editHistory.isInHistoryReplay()) return;
     if (view.state.currentSlideId !== msg.slideId) {
       view.pickSlide(msg.slideId);
       bridge.post({ type: 'pick-slide', slideId: msg.slideId });

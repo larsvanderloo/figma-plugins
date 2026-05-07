@@ -45,13 +45,34 @@ export type TrackedEditMessage = Extract<
   { type: 'update-general' } | { type: 'update-card' } | { type: 'set-slide-theme' }
 >;
 
+/** ms — slide-focused messages that arrive within this window of an
+ *  Undo/Redo button click are treated as echoes of our own action and
+ *  ignored, so the auto-follow handler doesn't switch the iframe to a
+ *  different slide because Figma's selection shifted as a side effect. */
+const HISTORY_REPLAY_WINDOW_MS = 600;
+
 export const useEditHistory = defineStore('editHistory', () => {
   const lastIssued = ref<TrackedEditMessage[]>([]);
   const undone = ref<TrackedEditMessage[]>([]);
+  /** Timestamp until which slide-focused auto-follow should be suppressed. */
+  const suppressFollowUntil = ref<number>(0);
 
   function recordIssued(msg: TrackedEditMessage): void {
     lastIssued.value = [...lastIssued.value, msg];
     if (undone.value.length > 0) undone.value = [];
+  }
+
+  /** Called by Undo/Redo button click sites just before they post the
+   *  bridge message. The window is generous enough to cover the
+   *  sandbox's documentchange → postSlideList debounce and any
+   *  selectionchange-triggered slide-focused emission that might
+   *  follow as a side effect of the mutation. */
+  function markHistoryReplay(): void {
+    suppressFollowUntil.value = Date.now() + HISTORY_REPLAY_WINDOW_MS;
+  }
+
+  function isInHistoryReplay(): boolean {
+    return Date.now() < suppressFollowUntil.value;
   }
 
   /** Move the top of `lastIssued` onto `undone` and return it. */
@@ -83,11 +104,14 @@ export const useEditHistory = defineStore('editHistory', () => {
   return {
     lastIssued,
     undone,
+    suppressFollowUntil,
     recordIssued,
     popForUndo,
     popForRedo,
     clearAll,
     canUndo,
     canRedo,
+    markHistoryReplay,
+    isInHistoryReplay,
   };
 });
