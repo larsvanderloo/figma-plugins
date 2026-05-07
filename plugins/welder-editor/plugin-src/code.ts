@@ -678,18 +678,50 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
     return n.type === 'INSTANCE' && n.name === 'Card';
   });
   for (let i = 0; i < cardInstances.length; i++) {
-    const card = cardInstances[i];
+    const card = cardInstances[i] as InstanceNode;
     const heading = readTextByName(card, 'Heading');
     if (heading === null) continue; // corrupt card: skip
+
+    // Welder Card has a `Type` VARIANT property with values
+    // 'Stack Icon' | 'Icon Side' | 'Image' | 'User'. The first two
+    // render an icon child; the latter two render an ImageWrap. The
+    // icon and image scans below can both produce false positives on
+    // the wrong variant (readCardIcon's Strategy A matches `ImageWrap`
+    // as a Lucide slug; readCardVisualHash's any-IMAGE-fill fallback
+    // could pick up an unrelated descendant). Variant is the source
+    // of truth — confirmed via Figma MCP for the Welder Card master.
+    const cardType = readCardTypeVariant(card);
+    const isIconType = cardType === 'Stack Icon' || cardType === 'Icon Side';
+    const isImageType = cardType === 'Image' || cardType === 'User';
+
     items.push({
       cardNodeId: card.id,
       heading: heading,
       paragraph: readTextByName(card, 'Paragraph') || '',
-      icon: readCardIcon(card, slide),
-      visualHash: readCardVisualHash(card),
+      // Icon picker shows iff the variant carries an icon. On unknown
+      // variants we fall back to the scan (cardType === null).
+      icon: isImageType ? null : readCardIcon(card, slide),
+      // Image picker shows iff the variant carries an image. On
+      // unknown variants we fall back to the scan.
+      visualHash: isIconType ? undefined : readCardVisualHash(card),
     });
   }
   return items;
+}
+
+/**
+ * Reads the `Type` VARIANT property off a Card instance. The Welder
+ * library's Card master defines this as a flat 'Type' key (no #N:N
+ * suffix) so we look it up by name directly. Returns null when the
+ * card has no Type property or it isn't a VARIANT.
+ */
+function readCardTypeVariant(card: InstanceNode): string | null {
+  const props = card.componentProperties;
+  if (props === null || props === undefined) return null;
+  const t = props['Type'];
+  if (t === undefined || t === null) return null;
+  if (t.type !== 'VARIANT') return null;
+  return typeof t.value === 'string' ? t.value : null;
 }
 
 /**
