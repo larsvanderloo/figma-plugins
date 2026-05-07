@@ -24,7 +24,6 @@ import SlideThemeSwitcher from './components/SlideThemeSwitcher.vue';
 import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
-import BottomActionsBar from './components/BottomActionsBar.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
 import { usePluginView } from './stores/usePluginView';
 import { useIconRecents } from './stores/useIconRecents';
@@ -75,6 +74,16 @@ function toggleSkip(): void {
     slideId: summary.id,
     skipped: !summary.isSkipped,
   });
+}
+
+function exportSlide(): void {
+  const id = view.state.currentSlideId;
+  if (id === null) return;
+  bridge.post({ type: 'export-pdf', target: 'slide', slideId: id });
+}
+
+function exportPresentation(): void {
+  bridge.post({ type: 'export-pdf', target: 'presentation' });
 }
 
 function onThemeChange(modeId: string | null): void {
@@ -258,7 +267,7 @@ onBeforeUnmount(() => {
 
     <!-- Real UI — shown once 'init' received -->
     <div v-else class="flex h-full flex-col bg-elevated text-default">
-      <main class="flex-1 overflow-y-auto pb-12">
+      <main class="flex-1 overflow-y-auto">
         <div class="mx-auto max-w-2xl space-y-3 p-3">
           <!-- Header-card: logo + intro + slide selector -->
           <section
@@ -365,9 +374,33 @@ onBeforeUnmount(() => {
               <GraphsPanel v-if="view.hasGraphs" />
             </fieldset>
           </template>
+
+          <!-- Export buttons — sit at the bottom of the content (scroll
+               with it, not sticky). Slide PDF requires a current slide;
+               Presentatie PDF works regardless. -->
+          <div class="flex flex-wrap items-center justify-center gap-2 pt-2">
+            <UButton
+              icon="i-lucide-file-text"
+              color="neutral"
+              variant="outline"
+              size="md"
+              :disabled="view.state.currentSlideId === null"
+              @click="exportSlide"
+            >
+              Slide PDF
+            </UButton>
+            <UButton
+              icon="i-lucide-presentation"
+              color="neutral"
+              variant="outline"
+              size="md"
+              @click="exportPresentation"
+            >
+              Presentatie PDF
+            </UButton>
+          </div>
         </div>
       </main>
-      <BottomActionsBar />
     </div>
   </UApp>
 </template>

@@ -2212,11 +2212,6 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     return;
   }
 
-  if (msg.type === 'start-presentation') {
-    figma.notify('Druk op Shift + Spatie of klik op "Presenteren" rechtsboven om de presentatie te starten.');
-    return;
-  }
-
   if (msg.type === 'export-pdf') {
     // Resolve the export target. Single slide → the SLIDE node by id.
     // Presentation → currentPage, which on a Figma Slides file

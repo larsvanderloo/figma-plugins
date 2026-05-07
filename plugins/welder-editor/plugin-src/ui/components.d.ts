@@ -19,7 +19,6 @@ declare module 'vue' {
     UButton: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Button.vue')['default']
     UCheckbox: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Checkbox.vue')['default']
     UCollapsible: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Collapsible.vue')['default']
-    UDropdownMenu: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/DropdownMenu.vue')['default']
     UFileUpload: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/FileUpload.vue')['default']
     UFormField: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/FormField.vue')['default']
     UIcon: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/vue/components/Icon.vue')['default']
