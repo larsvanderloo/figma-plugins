@@ -11,8 +11,16 @@ name: Release
 #   3. Validate manifest + build artifacts via tools/validate_manifest.py.
 #   4. Stage the loadable bundle (manifest.json + dist/code.js +
 #      dist/ui.html) into welder-editor-<version>/, zip it.
-#   5. gh release create with auto-generated notes (commits since the
-#      previous welder-editor tag).
+#   5. gh release create on the private `welder-editor-releases` repo
+#      (NOT this monorepo) with hand-crafted notes from the git log of
+#      this repo since the previous welder-editor tag. Source code never
+#      lands on the release surface; only the loadable bundle.
+#
+# Auth: this workflow needs a PAT with write access to the private
+# releases repo, stored as the RELEASES_REPO_TOKEN secret on this repo.
+# A fine-grained PAT scoped to `larsvanderloo/welder-editor-releases`
+# with "Contents: write" is the minimum; a classic `repo`-scope PAT
+# also works. The default GITHUB_TOKEN can't reach a different repo.
 #
 # Self-hosted macOS arm64 runner — same setup as validate.yml. The
 # launchd-spawned runner needs PATH munging so /opt/homebrew/bin
@@ -30,10 +38,11 @@ on:
         type: string
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   PATH_HOMEBREW: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
+  RELEASES_REPO: larsvanderloo/welder-editor-releases
 
 jobs:
   welder-editor:
@@ -115,51 +124,78 @@ jobs:
           zip -r "$STAGE.zip" "$STAGE"
           ls -la "$STAGE.zip"
 
-      - name: Resolve previous tag for changelog
-        id: prevtag
-        # Auto-generated notes need a `--notes-start-tag`. Find the prior
-        # welder-editor@v* tag (lex-sorted; SemVer-clean enough for now).
+      - name: Build release notes from source git log
+        id: notes
+        # Hand-craft notes from the source-repo git log between the prior
+        # welder-editor@v* tag and the current one, filtered to the
+        # plugin path. The releases repo has no source history of its
+        # own, so `gh release create --generate-notes` would produce
+        # nothing useful there; we feed it pre-rendered markdown
+        # instead.
         run: |
           set -euo pipefail
           CURRENT="${{ steps.tagref.outputs.tag }}"
           PREV="$(git tag -l 'welder-editor@v*' --sort=-v:refname | grep -v "^${CURRENT}\$" | head -n 1 || true)"
-          if [ -z "$PREV" ]; then
-            echo "No previous welder-editor tag — release notes will list all commits."
-          else
-            echo "Previous tag: $PREV"
-          fi
-          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+          NOTES_FILE="$(mktemp)"
 
-      - name: Create or update GitHub Release
+          {
+            echo "## Welder Editor v${{ steps.version.outputs.version }}"
+            echo
+            echo "Loadable bundle attached: \`welder-editor-v${{ steps.version.outputs.version }}.zip\`."
+            echo "Unzip and load via Figma → Plugins → Development → Import plugin from manifest, pointing at \`manifest.json\`."
+            echo
+            if [ -n "$PREV" ]; then
+              echo "### Changes since $PREV"
+              echo
+              git log --no-merges --format='- %s' "$PREV..$CURRENT" -- plugins/welder-editor/ || true
+            else
+              echo "### Initial release"
+              echo
+              echo "First tagged release of welder-editor."
+            fi
+            echo
+            echo "---"
+            echo "Source: https://github.com/${{ github.repository }}/commits/$CURRENT"
+          } > "$NOTES_FILE"
+
+          echo "notes-file=$NOTES_FILE" >> "$GITHUB_OUTPUT"
+          echo "--- generated notes ---"
+          cat "$NOTES_FILE"
+          echo "--- end notes ---"
+
+      - name: Create or update GitHub Release on the private channel
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # PAT with write access to $RELEASES_REPO. Default GITHUB_TOKEN
+          # can't reach a different repo, so this is mandatory.
+          GH_TOKEN: ${{ secrets.RELEASES_REPO_TOKEN }}
         run: |
           set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::RELEASES_REPO_TOKEN secret is missing — set it in this repo's Actions secrets (PAT with Contents:write on $RELEASES_REPO)."
+            exit 1
+          fi
+
           TAG="${{ steps.tagref.outputs.tag }}"
           VERSION="${{ steps.version.outputs.version }}"
           STAGE="welder-editor-v${VERSION}"
           ZIP="build-release/${STAGE}.zip"
-          PREV="${{ steps.prevtag.outputs.prev }}"
+          NOTES_FILE="${{ steps.notes.outputs.notes-file }}"
 
-          # If the release already exists (tag was retagged or workflow re-run),
-          # upload the artifact onto it with --clobber instead of failing.
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release $TAG exists — uploading artifact with --clobber"
-            gh release upload "$TAG" "$ZIP" --clobber
+          # If the release already exists on the private channel (re-run
+          # or retag), refresh notes + upload the artifact with --clobber
+          # instead of failing.
+          if gh release view "$TAG" --repo "$RELEASES_REPO" >/dev/null 2>&1; then
+            echo "Release $TAG exists on $RELEASES_REPO — refreshing notes and uploading artifact"
+            gh release edit "$TAG" --repo "$RELEASES_REPO" \
+              --title "Welder Editor v${VERSION}" \
+              --notes-file "$NOTES_FILE"
+            gh release upload "$TAG" "$ZIP" --repo "$RELEASES_REPO" --clobber
           else
-            echo "Creating release $TAG"
-            if [ -n "$PREV" ]; then
-              gh release create "$TAG" \
-                --title "Welder Editor v${VERSION}" \
-                --generate-notes \
-                --notes-start-tag "$PREV" \
-                "$ZIP"
-            else
-              gh release create "$TAG" \
-                --title "Welder Editor v${VERSION}" \
-                --generate-notes \
-                "$ZIP"
-            fi
+            echo "Creating release $TAG on $RELEASES_REPO"
+            gh release create "$TAG" --repo "$RELEASES_REPO" \
+              --title "Welder Editor v${VERSION}" \
+              --notes-file "$NOTES_FILE" \
+              "$ZIP"
           fi
 
       - name: Cleanup staging
