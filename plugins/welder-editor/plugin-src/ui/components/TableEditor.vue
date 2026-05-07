@@ -207,6 +207,7 @@ function scheduleEmit(): void {
 
 onBeforeUnmount(() => {
   if (debounceTimer !== null) clearTimeout(debounceTimer);
+  if (lastImportTimer !== null) clearTimeout(lastImportTimer);
 });
 
 // Handlers
@@ -305,7 +306,34 @@ function validateCSV(text: string): string {
   return '';
 }
 
-function applyCSV(): void {
+/**
+ * Inline confirmation shown below the drop zone after a successful
+ * import. The drop zone itself is stateless (always says "Sleep je
+ * CSV hier of klik om te bladeren"), so without this line the user
+ * gets no visible acknowledgement that the upload worked beyond the
+ * auto-dismissing toast. Cleared when a new upload starts, the slot
+ * id changes (slide swap), or 10s elapses.
+ */
+const lastImport = ref<{ fileName: string | null; rows: number; cols: number } | null>(null);
+let lastImportTimer: ReturnType<typeof setTimeout> | null = null;
+
+function clearLastImport(): void {
+  lastImport.value = null;
+  if (lastImportTimer !== null) {
+    clearTimeout(lastImportTimer);
+    lastImportTimer = null;
+  }
+}
+
+function recordImport(text: string, fileName: string | null): void {
+  const rows = tokenize(text).rows.filter((r) => r.some((c) => c.length > 0));
+  const cols = rows.reduce((m, r) => (r.length > m ? r.length : m), 0);
+  lastImport.value = { fileName, rows: rows.length, cols };
+  if (lastImportTimer !== null) clearTimeout(lastImportTimer);
+  lastImportTimer = setTimeout(clearLastImport, 10_000);
+}
+
+function applyCSV(fileName: string | null = null): void {
   const text = csvText.value.trim();
   if (text === '') return;
   const err = validateCSV(text);
@@ -319,6 +347,7 @@ function applyCSV(): void {
   }
   csvError.value = '';
   emit('import-csv', text);
+  recordImport(text, fileName);
   csvText.value = '';
 }
 
@@ -326,25 +355,38 @@ function onFile(e: Event): void {
   const target = e.target as HTMLInputElement;
   const file = target.files !== null && target.files.length > 0 ? target.files[0] : undefined;
   if (file === undefined) return;
+  clearLastImport();
   const reader = new FileReader();
   reader.onload = () => {
     csvText.value = String(reader.result !== null ? reader.result : '');
-    applyCSV();
+    applyCSV(file.name);
   };
   reader.readAsText(file);
+  // Reset the input so picking the SAME file again still re-triggers
+  // change. Without this the second pick is a silent no-op.
+  target.value = '';
 }
 
 function onDrop(e: DragEvent): void {
   const files = e.dataTransfer !== null ? e.dataTransfer.files : null;
   const file = files !== null && files.length > 0 ? files[0] : undefined;
   if (file === undefined) return;
+  clearLastImport();
   const reader = new FileReader();
   reader.onload = () => {
     csvText.value = String(reader.result !== null ? reader.result : '');
-    applyCSV();
+    applyCSV(file.name);
   };
   reader.readAsText(file);
 }
+
+// Slot id changes ⇒ slide swap ⇒ clear the previous slide's summary.
+watch(
+  () => props.modelValue.slotId,
+  () => {
+    clearLastImport();
+  },
+);
 
 watch(csvText, () => {
   if (csvError.value !== '') csvError.value = '';
@@ -578,6 +620,14 @@ watch(csvText, () => {
       </label>
 
       <div v-if="csvError !== ''" class="text-xs text-error">{{ csvError }}</div>
+      <div v-else-if="lastImport !== null" class="flex items-center gap-1.5 text-xs text-success">
+        <UIcon name="i-lucide-check" class="size-3.5 shrink-0" />
+        <span>
+          Geïmporteerd<template v-if="lastImport.fileName">: {{ lastImport.fileName }}</template>
+          · {{ lastImport.rows }} {{ lastImport.rows === 1 ? 'rij' : 'rijen' }}
+          · {{ lastImport.cols }} {{ lastImport.cols === 1 ? 'kolom' : 'kolommen' }}
+        </span>
+      </div>
       <div v-else class="text-xs text-muted">
         Max {{ TABLE_MAX_ROWS }} rijen · {{ maxCols }} kolommen bij breedte {{ localWidth }}.
       </div>
