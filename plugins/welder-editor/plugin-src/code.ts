@@ -1159,6 +1159,62 @@ var lastSentPreviewHash: Map<string, string> = new Map();
 const ICON_RECENTS_KEY = 'icon-recents';
 
 /**
+ * Iframe's currently-displayed slide id. Set on every `pick-slide`
+ * message; consumed by `postSlideContent()` so the sandbox can re-emit
+ * `slide-loaded` when the canvas mutates externally (native Cmd+Z,
+ * documentchange, etc.). Without this the iframe's optimistic store
+ * state survives undo and the pickers desync from the canvas.
+ */
+let lastDisplayedSlideId: string | null = null;
+
+/**
+ * Debounced re-scan + slide-loaded re-emit for whatever slide the
+ * iframe is currently showing. Mirrors the postSlideList shape — same
+ * 200ms coalesce, same dedup-by-signature so a no-op documentchange
+ * doesn't spam the bridge.
+ */
+let pendingSlideContentUpdate: number | null = null;
+let lastSentSlideContentSignature: string = '';
+
+function postSlideContent(): void {
+  if (lastDisplayedSlideId === null) return;
+  if (pendingSlideContentUpdate !== null) {
+    clearTimeout(pendingSlideContentUpdate);
+  }
+  pendingSlideContentUpdate = setTimeout(() => {
+    pendingSlideContentUpdate = null;
+    if (lastDisplayedSlideId === null) return;
+    void (async function () {
+      try {
+        const slide = findSlideById(lastDisplayedSlideId!);
+        if (slide === null) return;
+        const scan = await scanSlide(slide);
+        // Cheap signature: stringify the general/content/graphs payload.
+        // If it matches the last sent, skip the post (avoids spamming
+        // the bridge on documentchanges that didn't actually change
+        // editable state — e.g. selection-only events).
+        const sig = JSON.stringify({
+          g: scan.general,
+          c: scan.content,
+          h: scan.graphs,
+        });
+        if (sig === lastSentSlideContentSignature) return;
+        lastSentSlideContentSignature = sig;
+        postToUI({
+          type: 'slide-loaded',
+          slideId: slide.id,
+          general: scan.general,
+          content: scan.content,
+          graphs: scan.graphs,
+        });
+      } catch (err: unknown) {
+        console.log('[welder-slide-editor] postSlideContent failed:', err);
+      }
+    })();
+  }, 200) as unknown as number;
+}
+
+/**
  * Bouwt een stabiele string die alleen wijzigt als de slide-list
  * inhoudelijk veranderde. Combineert id + number + name + isSkipped —
  * wijziging van één van deze triggert een refresh richting de UI.
@@ -1257,6 +1313,11 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
+    // Track which slide the iframe is showing so documentchange-driven
+    // mutations (native Cmd+Z, externally-triggered edits) can re-emit
+    // slide-loaded for the right target via postSlideContent.
+    lastDisplayedSlideId = msg.slideId;
+    lastSentSlideContentSignature = '';
     figma.viewport.scrollAndZoomIntoView([slide]);
     const scan = await scanSlide(slide);
     postToUI({
@@ -2196,8 +2257,15 @@ async function main(): Promise<void> {
               }
               return false;
             });
-            if (!relevant) return;
-            postSlideList();
+            if (relevant) postSlideList();
+            // postSlideContent runs on EVERY documentchange — including
+            // INSTANCE PROPERTY_CHANGE (icon swaps via setProperties)
+            // and other in-slide mutations that the slide-list filter
+            // intentionally ignores. It's debounced (200ms) and signature-
+            // deduped, so no-op events don't reach the bridge. This is
+            // what catches native Cmd+Z and any external state change
+            // that affects pickers in the currently-displayed slide.
+            postSlideContent();
           } catch (err: unknown) {
             console.log('[welder-slide-editor] documentchange handler failed:', err);
           }
