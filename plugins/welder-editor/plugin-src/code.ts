@@ -2240,15 +2240,15 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
           ? (welderSlide.parent as SlideNode)
           : welderSlide;
 
-      // Prefer SLIDE-parent name when available, then heading, then the
-      // INSTANCE's own name.
-      let baseName = welderSlide.name;
-      if (target.type === 'SLIDE' && target.name.length > 0) {
-        baseName = target.name;
-      } else {
-        const heading = readTextByName(welderSlide, 'Heading');
-        if (heading !== null && heading.length > 0) baseName = heading;
-      }
+      // Match the picker name exactly: heading text within CopyWrap,
+      // fallback to "Slide N" where N is the slide's 1-based index on
+      // the current page. Same logic as `slideSummary` (used by the
+      // SlideSelector dropdown), so the file the user downloads is
+      // labelled with the same name they see in the picker.
+      const allSlides = findSlidesOnPage();
+      const idx = allSlides.indexOf(welderSlide);
+      const summary = slideSummary(welderSlide, idx >= 0 ? idx + 1 : 1);
+      const baseName = summary.name;
 
       const ext = msg.format === 'PNG' ? '.png' : '.pdf';
       const filename = sanitizeBaseFilename(baseName) + ext;
