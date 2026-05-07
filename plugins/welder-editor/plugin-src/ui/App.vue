@@ -19,12 +19,53 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { useToast } from '@nuxt/ui/composables';
 
+import { PDFDocument } from 'pdf-lib';
+
 import SlideSelector from './components/SlideSelector.vue';
+
+// Constant PDF metadata applied to every Welder export. Title is set
+// per-document by the caller. Copyright lives in /Subject because
+// pdf-lib has no first-class XMP rights API and /Subject is the
+// closest standard /Info slot every PDF reader surfaces.
+const PDF_AUTHOR = 'Welder B.V.';
+const PDF_CREATOR = 'Welder Slide Editor';
+const PDF_PRODUCER = 'Welder Slide Editor';
+const PDF_KEYWORDS = ['Welder', 'Welder Slide Editor', 'presentation', 'slides'];
+const PDF_LANGUAGE = 'nl-NL';
+
+function applyPdfMetadata(doc: PDFDocument, title: string): void {
+  const now = new Date();
+  doc.setTitle(title);
+  doc.setAuthor(PDF_AUTHOR);
+  doc.setCreator(PDF_CREATOR);
+  doc.setProducer(PDF_PRODUCER);
+  doc.setSubject(
+    '© ' +
+      String(now.getFullYear()) +
+      ' Welder B.V. Alle rechten voorbehouden. ' +
+      'Gemaakt met Welder Slide Editor.',
+  );
+  doc.setKeywords(PDF_KEYWORDS);
+  doc.setLanguage(PDF_LANGUAGE);
+  doc.setCreationDate(now);
+  doc.setModificationDate(now);
+}
+
+function downloadBlob(bytes: Uint8Array, filename: string, mime: string): void {
+  const blob = new Blob([bytes as BlobPart], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 import SlideThemeSwitcher from './components/SlideThemeSwitcher.vue';
 import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
-import BottomActionsBar from './components/BottomActionsBar.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
 import { usePluginView } from './stores/usePluginView';
 import { useIconRecents } from './stores/useIconRecents';
@@ -75,6 +116,61 @@ function toggleSkip(): void {
     slideId: summary.id,
     skipped: !summary.isSkipped,
   });
+}
+
+// Export-modal state: target = wat exporteren we, format = welk
+// bestandsformaat. Beide blijven hangen tussen exports zodat een
+// herhaalde export dezelfde keuze toont.
+const exportModalOpen = ref<boolean>(false);
+const exportTarget = ref<'slide' | 'presentation'>('slide');
+const exportFormat = ref<'PDF' | 'PNG'>('PDF');
+
+// PNG van de hele presentatie wordt nog niet ondersteund — we snappen
+// het formaat terug naar PDF zodra de user de presentatie als target
+// kiest.
+watch(exportTarget, (next) => {
+  if (next === 'presentation' && exportFormat.value === 'PNG') {
+    exportFormat.value = 'PDF';
+  }
+});
+
+const formatItems = computed(() => [
+  { label: 'PDF', value: 'PDF', icon: 'i-lucide-file-text' },
+  {
+    label: 'PNG',
+    value: 'PNG',
+    icon: 'i-lucide-image',
+    disabled: exportTarget.value === 'presentation',
+  },
+]);
+
+function openExportModal(): void {
+  // Default naar 'presentation' als er geen actieve slide is — anders
+  // staat de modal op een disabled-optie en kan de user niet door.
+  if (view.state.currentSlideId === null) {
+    exportTarget.value = 'presentation';
+  }
+  exportModalOpen.value = true;
+}
+
+function submitExport(): void {
+  if (exportTarget.value === 'slide') {
+    const id = view.state.currentSlideId;
+    if (id === null) return;
+    bridge.post({
+      type: 'export-document',
+      target: 'slide',
+      format: exportFormat.value,
+      slideId: id,
+    });
+  } else {
+    bridge.post({
+      type: 'export-document',
+      target: 'presentation',
+      format: exportFormat.value,
+    });
+  }
+  exportModalOpen.value = false;
 }
 
 function onThemeChange(modeId: string | null): void {
@@ -170,25 +266,54 @@ bridge.onMessage((msg) => {
     iconRecents.setItems(msg.items);
     return;
   }
-  if (msg.type === 'pdf-ready') {
-    // Wrap the bytes in a Blob and trigger a download via a temporary
-    // anchor. URL.revokeObjectURL after the click so the iframe doesn't
-    // accumulate references to multi-MB PDFs. The browser's own
-    // download UI is the success signal — no toast for the happy path.
-    try {
-      const blob = new Blob([msg.bytes as BlobPart], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = msg.filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    } catch (err: unknown) {
-      const text = err instanceof Error ? err.message : String(err);
-      notifications.pushError('Download mislukt', text);
+  if (msg.type === 'presentation-pdf-parts') {
+    // Merge the per-slide single-page PDFs into one multi-page PDF,
+    // stamp Welder metadata, trigger the download. Done off the
+    // message-handler tick so we don't block the bridge while pdf-lib
+    // does its work.
+    void (async () => {
+      try {
+        const merged = await PDFDocument.create();
+        for (let i = 0; i < msg.parts.length; i++) {
+          const slideDoc = await PDFDocument.load(msg.parts[i]);
+          const pages = await merged.copyPages(slideDoc, slideDoc.getPageIndices());
+          for (let p = 0; p < pages.length; p++) merged.addPage(pages[p]);
+        }
+        applyPdfMetadata(merged, msg.title);
+        const bytes = await merged.save();
+        downloadBlob(bytes, msg.filename, 'application/pdf');
+      } catch (err: unknown) {
+        const text = err instanceof Error ? err.message : String(err);
+        notifications.pushError('PDF samenvoegen mislukt', text);
+      }
+    })();
+    return;
+  }
+  if (msg.type === 'document-ready') {
+    // PDF: round-trip through pdf-lib so we can stamp Welder metadata
+    // (title/author/creator) on the document. PNG: no metadata path,
+    // download the raw bytes. The browser's own download UI is the
+    // success signal — no toast for the happy path.
+    if (msg.format === 'PNG') {
+      try {
+        downloadBlob(msg.bytes, msg.filename, 'image/png');
+      } catch (err: unknown) {
+        const text = err instanceof Error ? err.message : String(err);
+        notifications.pushError('Download mislukt', text);
+      }
+      return;
     }
+    void (async () => {
+      try {
+        const doc = await PDFDocument.load(msg.bytes);
+        applyPdfMetadata(doc, msg.title);
+        const bytes = await doc.save();
+        downloadBlob(bytes, msg.filename, 'application/pdf');
+      } catch (err: unknown) {
+        const text = err instanceof Error ? err.message : String(err);
+        notifications.pushError('Download mislukt', text);
+      }
+    })();
     return;
   }
   if (msg.type === 'target-updated' && msg.ok === false) {
@@ -258,7 +383,7 @@ onBeforeUnmount(() => {
 
     <!-- Real UI — shown once 'init' received -->
     <div v-else class="flex h-full flex-col bg-elevated text-default">
-      <main class="flex-1 overflow-y-auto pb-12">
+      <main class="flex-1 overflow-y-auto">
         <div class="mx-auto max-w-2xl space-y-3 p-3">
           <!-- Header-card: logo + intro + slide selector -->
           <section
@@ -365,9 +490,120 @@ onBeforeUnmount(() => {
               <GraphsPanel v-if="view.hasGraphs" />
             </fieldset>
           </template>
+
+          <!-- Export — single entry point that opens the picker modal.
+               Sits at the bottom of the content (scrolls with it). -->
+          <div class="flex flex-col items-center gap-2 pt-2 text-center">
+            <p class="text-xs text-muted max-w-sm">
+              Klik rechtsboven in Figma op het
+              <span
+                class="inline-flex items-center justify-center rounded border border-[var(--ui-border)] px-1.5 py-0.5 align-text-bottom text-default"
+              >
+                <UIcon name="i-lucide-play" class="h-3 w-3" />
+              </span>
+              play-icoon voor animaties en altijd actuele content. Een export is handig om te delen of printen.
+            </p>
+            <UButton
+              icon="i-lucide-download"
+              color="neutral"
+              variant="outline"
+              size="md"
+              @click="openExportModal"
+            >
+              Exporteer
+            </UButton>
+          </div>
+
+          <!-- Export modal: kies wat (huidige slide / hele presentatie)
+               en welk formaat (PDF / PNG). PNG van een hele presentatie
+               geeft één brede page-PNG; PDF geeft een multi-page PDF. -->
+          <UModal
+            v-model:open="exportModalOpen"
+            title="Exporteren"
+            :ui="{
+              overlay: 'bg-black/40',
+              content: 'max-w-md divide-y-0',
+            }"
+          >
+            <template #body>
+              <div class="space-y-4">
+                <UFormField label="Wat wil je exporteren?" name="export-target">
+                  <div class="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      :disabled="view.state.currentSlideId === null"
+                      :class="[
+                        'flex flex-col items-start gap-2 rounded-[var(--ui-radius)] border p-3 text-left transition-colors',
+                        exportTarget === 'slide'
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                          : 'border-[var(--ui-border)] hover:bg-elevated',
+                        view.state.currentSlideId === null
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'cursor-pointer',
+                      ]"
+                      @click="
+                        view.state.currentSlideId !== null && (exportTarget = 'slide')
+                      "
+                    >
+                      <UIcon name="i-lucide-file-text" class="h-5 w-5 text-default" />
+                      <div>
+                        <div class="text-sm font-medium text-default">Huidige slide</div>
+                        <div class="text-xs text-muted">
+                          {{
+                            view.state.currentSlideId === null
+                              ? 'Selecteer eerst een slide'
+                              : 'Alleen deze slide'
+                          }}
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      :class="[
+                        'flex cursor-pointer flex-col items-start gap-2 rounded-[var(--ui-radius)] border p-3 text-left transition-colors',
+                        exportTarget === 'presentation'
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                          : 'border-[var(--ui-border)] hover:bg-elevated',
+                      ]"
+                      @click="exportTarget = 'presentation'"
+                    >
+                      <UIcon name="i-lucide-presentation" class="h-5 w-5 text-default" />
+                      <div>
+                        <div class="text-sm font-medium text-default">Hele presentatie</div>
+                        <div class="text-xs text-muted">Alle slides op deze pagina</div>
+                      </div>
+                    </button>
+                  </div>
+                </UFormField>
+                <UFormField label="Formaat" name="export-format">
+                  <USelect
+                    v-model="exportFormat"
+                    :items="formatItems"
+                    icon="i-lucide-file"
+                    class="w-full"
+                  />
+                </UFormField>
+              </div>
+            </template>
+            <template #footer>
+              <div class="flex w-full items-center justify-end gap-2">
+                <UButton color="neutral" variant="ghost" @click="exportModalOpen = false">
+                  Annuleren
+                </UButton>
+                <UButton
+                  color="primary"
+                  variant="solid"
+                  icon="i-lucide-download"
+                  :disabled="exportTarget === 'slide' && view.state.currentSlideId === null"
+                  @click="submitExport"
+                >
+                  Exporteer
+                </UButton>
+              </div>
+            </template>
+          </UModal>
         </div>
       </main>
-      <BottomActionsBar />
     </div>
   </UApp>
 </template>

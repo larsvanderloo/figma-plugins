@@ -28,6 +28,7 @@
   },
   "dependencies": {
     "cropperjs": "^1",
+    "pdf-lib": "^1.17.1",
     "pinia": "^3.0.4",
     "vue-picture-cropper": "^1.0.0"
   }
