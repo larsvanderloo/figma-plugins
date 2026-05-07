@@ -127,17 +127,27 @@ bridge.onMessage((msg) => {
     // andere slide heeft gekozen — voorkomt lelijke re-loads wanneer de
     // user binnen dezelfde slide klikt.
     //
-    // Skip auto-follow if we're inside a history-replay window: the
-    // slide-focused arrival is almost certainly a selectionchange echo
-    // of our own Undo/Redo (Figma's undo can revert page navigation
-    // alongside the mutation, which then surfaces as slide-focused).
-    // Without this guard the iframe bounces to a different slide on
-    // the user's second redo click.
-    if (editHistory.isInHistoryReplay()) return;
+    // We deliberately FOLLOW Figma even inside a history-replay window:
+    // Figma's native undo history can include slide-navigation steps,
+    // and `triggerUndo` may revert us to a different slide. Suppressing
+    // the follow there leaves the iframe and the canvas on different
+    // slides — more confusing than a clean follow. We just toast so
+    // the user sees that the slide change came from undo/redo, not a
+    // mystery shift.
     if (view.state.currentSlideId !== msg.slideId) {
+      const wasReplay = editHistory.isInHistoryReplay();
       view.pickSlide(msg.slideId);
       bridge.post({ type: 'pick-slide', slideId: msg.slideId });
       loadingSlide.value = true;
+      if (wasReplay) {
+        const summary = view.state.slides.find((s) => s.id === msg.slideId);
+        notifications.pushInfo(
+          'Sprong naar andere slide',
+          summary
+            ? `Onderdeel van ongedaan-maken: ${summary.name}`
+            : 'Onderdeel van ongedaan-maken.',
+        );
+      }
     }
     return;
   }
