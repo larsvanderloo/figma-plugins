@@ -180,9 +180,29 @@ export function findBadge(slide: InstanceNode): InstanceNode | null {
   });
 }
 
-/** ImageWrap: INSTANCE met name 'ImageWrap' (exact match). */
+/**
+ * ImageWrap: INSTANCE met name 'ImageWrap' (exact match), MAAR alleen
+ * de slide-level wrap — niet ImageWraps die binnen een Card of CardWrap
+ * leven (die zijn eigendom van die card en verschijnen in de Content-
+ * panel via de card-eigen visual). Een card-interne ImageWrap retourneren
+ * zou hetzelfde plaatje in twee plekken in de plugin-UI tonen.
+ *
+ * Verified via Figma MCP voor slide 19907:56235: 3 cards waarvan 2 Type=Image
+ * met elk een eigen ImageWrap; geen slide-OWN ImageWrap. Voorheen pickte
+ * findOne de eerste card-interne ImageWrap als "slide-level" Image.
+ */
 export function findImageWrap(slide: InstanceNode): InstanceNode | null {
-  return findFirstInstance(slide, (n) => n.name === 'ImageWrap');
+  return findFirstInstance(slide, (n) => {
+    if (n.name !== 'ImageWrap') return false;
+    let cur: BaseNode | null = n.parent;
+    while (cur !== null && cur !== slide) {
+      if (cur.type === 'INSTANCE' && (cur.name === 'Card' || cur.name === 'CardWrap')) {
+        return false;
+      }
+      cur = cur.parent;
+    }
+    return true;
+  });
 }
 
 /** CardWrap: INSTANCE met name 'CardWrap' (exact match). */
