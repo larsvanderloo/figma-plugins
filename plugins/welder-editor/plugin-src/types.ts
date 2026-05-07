@@ -703,6 +703,20 @@ export type PluginToUIMessage =
       filename: string;
     }
   /**
+   * Multi-slide presentation export. Sandbox iterates each non-skipped
+   * SLIDE node, runs exportAsync({ format: 'PDF' }) on each, and posts
+   * the parts as a single message. Iframe uses `pdf-lib` to merge the
+   * single-page PDFs into a multi-page PDF before triggering download.
+   * Necessary because Figma's plugin API exportAsync on a PageNode
+   * produces one giant single-page PDF spanning the canvas grid, not
+   * a multi-page deck.
+   */
+  | {
+      type: 'presentation-pdf-parts';
+      parts: Uint8Array[];
+      filename: string;
+    }
+  /**
    * Per-card visual thumbnail bytes — analogue of `image-preview`
    * but keyed by `cardNodeId` instead of `imageWrapId`. Sandbox emits
    * one message per Type=Image (or Type=User) card with a non-null

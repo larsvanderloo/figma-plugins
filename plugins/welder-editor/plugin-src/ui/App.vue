@@ -19,6 +19,8 @@
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
 import { useToast } from '@nuxt/ui/composables';
 
+import { PDFDocument } from 'pdf-lib';
+
 import SlideSelector from './components/SlideSelector.vue';
 import SlideThemeSwitcher from './components/SlideThemeSwitcher.vue';
 import GeneralPanel from './components/GeneralPanel.vue';
@@ -82,6 +84,25 @@ function toggleSkip(): void {
 const exportModalOpen = ref<boolean>(false);
 const exportTarget = ref<'slide' | 'presentation'>('slide');
 const exportFormat = ref<'PDF' | 'PNG'>('PDF');
+
+// PNG van de hele presentatie wordt nog niet ondersteund — we snappen
+// het formaat terug naar PDF zodra de user de presentatie als target
+// kiest.
+watch(exportTarget, (next) => {
+  if (next === 'presentation' && exportFormat.value === 'PNG') {
+    exportFormat.value = 'PDF';
+  }
+});
+
+const formatItems = computed(() => [
+  { label: 'PDF', value: 'PDF', icon: 'i-lucide-file-text' },
+  {
+    label: 'PNG',
+    value: 'PNG',
+    icon: 'i-lucide-image',
+    disabled: exportTarget.value === 'presentation',
+  },
+]);
 
 function openExportModal(): void {
   // Default naar 'presentation' als er geen actieve slide is — anders
@@ -203,6 +224,35 @@ bridge.onMessage((msg) => {
     // not a user action.
     skipIconRecentsSave = true;
     iconRecents.setItems(msg.items);
+    return;
+  }
+  if (msg.type === 'presentation-pdf-parts') {
+    // Merge the per-slide single-page PDFs into one multi-page PDF
+    // and trigger the download. Done off the message-handler tick so
+    // we don't block the bridge while pdf-lib does its work.
+    void (async () => {
+      try {
+        const merged = await PDFDocument.create();
+        for (let i = 0; i < msg.parts.length; i++) {
+          const slideDoc = await PDFDocument.load(msg.parts[i]);
+          const pages = await merged.copyPages(slideDoc, slideDoc.getPageIndices());
+          for (let p = 0; p < pages.length; p++) merged.addPage(pages[p]);
+        }
+        const bytes = await merged.save();
+        const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = msg.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 0);
+      } catch (err: unknown) {
+        const text = err instanceof Error ? err.message : String(err);
+        notifications.pushError('PDF samenvoegen mislukt', text);
+      }
+    })();
     return;
   }
   if (msg.type === 'document-ready') {
@@ -428,37 +478,69 @@ onBeforeUnmount(() => {
           <!-- Export modal: kies wat (huidige slide / hele presentatie)
                en welk formaat (PDF / PNG). PNG van een hele presentatie
                geeft één brede page-PNG; PDF geeft een multi-page PDF. -->
-          <UModal v-model:open="exportModalOpen" title="Exporteren" :ui="{ content: 'max-w-md' }">
+          <UModal
+            v-model:open="exportModalOpen"
+            title="Exporteren"
+            :ui="{
+              overlay: 'bg-black/40',
+              content: 'max-w-md divide-y-0',
+            }"
+          >
             <template #body>
               <div class="space-y-4">
                 <UFormField label="Wat wil je exporteren?" name="export-target">
-                  <URadioGroup
-                    v-model="exportTarget"
-                    :items="[
-                      {
-                        label: 'Huidige slide',
-                        description:
-                          view.state.currentSlideId === null
-                            ? 'Selecteer eerst een slide'
-                            : undefined,
-                        value: 'slide',
-                        disabled: view.state.currentSlideId === null,
-                      },
-                      {
-                        label: 'Hele presentatie',
-                        description: 'Alle slides op deze pagina',
-                        value: 'presentation',
-                      },
-                    ]"
-                  />
+                  <div class="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      :disabled="view.state.currentSlideId === null"
+                      :class="[
+                        'flex flex-col items-start gap-2 rounded-[var(--ui-radius)] border p-3 text-left transition-colors',
+                        exportTarget === 'slide'
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                          : 'border-[var(--ui-border)] hover:bg-elevated',
+                        view.state.currentSlideId === null
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'cursor-pointer',
+                      ]"
+                      @click="
+                        view.state.currentSlideId !== null && (exportTarget = 'slide')
+                      "
+                    >
+                      <UIcon name="i-lucide-file-text" class="h-5 w-5 text-default" />
+                      <div>
+                        <div class="text-sm font-medium text-default">Huidige slide</div>
+                        <div class="text-xs text-muted">
+                          {{
+                            view.state.currentSlideId === null
+                              ? 'Selecteer eerst een slide'
+                              : 'Alleen deze slide'
+                          }}
+                        </div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      :class="[
+                        'flex cursor-pointer flex-col items-start gap-2 rounded-[var(--ui-radius)] border p-3 text-left transition-colors',
+                        exportTarget === 'presentation'
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                          : 'border-[var(--ui-border)] hover:bg-elevated',
+                      ]"
+                      @click="exportTarget = 'presentation'"
+                    >
+                      <UIcon name="i-lucide-presentation" class="h-5 w-5 text-default" />
+                      <div>
+                        <div class="text-sm font-medium text-default">Hele presentatie</div>
+                        <div class="text-xs text-muted">Alle slides op deze pagina</div>
+                      </div>
+                    </button>
+                  </div>
                 </UFormField>
                 <UFormField label="Formaat" name="export-format">
                   <USelect
                     v-model="exportFormat"
-                    :items="[
-                      { label: 'PDF', value: 'PDF' },
-                      { label: 'PNG', value: 'PNG' },
-                    ]"
+                    :items="formatItems"
+                    icon="i-lucide-file"
                     class="w-full"
                   />
                 </UFormField>

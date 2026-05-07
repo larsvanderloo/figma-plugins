@@ -2213,11 +2213,10 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   }
 
   if (msg.type === 'export-document') {
-    // Resolve the export target. Single slide → the SLIDE node by id.
-    // Presentation → currentPage, which on a Figma Slides file
-    // produces a multi-page PDF (or one wide PNG).
-    let target: BaseNode | null = null;
-    let baseName = '';
+    // Single slide → walk up to the SLIDE parent (1920×1080) when one
+    // exists; that's what Figma's native present/export targets, not
+    // the Welder INSTANCE inside it. In Figma Design (no SLIDE parent)
+    // we fall back to the INSTANCE itself.
     if (msg.target === 'slide') {
       if (typeof msg.slideId !== 'string' || msg.slideId.length === 0) {
         postToUI({
@@ -2227,8 +2226,8 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         });
         return;
       }
-      const slide = findSlideById(msg.slideId);
-      if (slide === null) {
+      const welderSlide = findSlideById(msg.slideId);
+      if (welderSlide === null) {
         postToUI({
           type: 'target-updated',
           ok: false,
@@ -2236,42 +2235,106 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         });
         return;
       }
-      target = slide;
-      // Prefer the slide's heading text for the filename; fall back to
-      // the SLIDE-parent node's name (Figma's user-visible slide name)
-      // or "slide".
-      const heading = readTextByName(slide, 'Heading');
-      baseName = heading !== null && heading.length > 0 ? heading : slide.name;
-      if (slide.parent !== null && slide.parent.type === 'SLIDE') {
-        baseName = (slide.parent as SlideNode).name || baseName;
+      const target: SceneNode =
+        welderSlide.parent !== null && welderSlide.parent.type === 'SLIDE'
+          ? (welderSlide.parent as SlideNode)
+          : welderSlide;
+
+      // Prefer SLIDE-parent name when available, then heading, then the
+      // INSTANCE's own name.
+      let baseName = welderSlide.name;
+      if (target.type === 'SLIDE' && target.name.length > 0) {
+        baseName = target.name;
+      } else {
+        const heading = readTextByName(welderSlide, 'Heading');
+        if (heading !== null && heading.length > 0) baseName = heading;
       }
-    } else {
-      target = figma.currentPage;
-      baseName = figma.currentPage.name || 'presentation';
-    }
 
-    const ext = msg.format === 'PNG' ? '.png' : '.pdf';
-    const filename = sanitizeBaseFilename(baseName) + ext;
-
-    let bytes: Uint8Array;
-    try {
-      bytes = await (target as ExportMixin).exportAsync({ format: msg.format });
-    } catch (err: unknown) {
-      const text = err instanceof Error ? err.message : String(err);
+      const ext = msg.format === 'PNG' ? '.png' : '.pdf';
+      const filename = sanitizeBaseFilename(baseName) + ext;
+      let bytes: Uint8Array;
+      try {
+        bytes = await (target as unknown as ExportMixin).exportAsync({ format: msg.format });
+      } catch (err: unknown) {
+        const text = err instanceof Error ? err.message : String(err);
+        postToUI({
+          type: 'target-updated',
+          ok: false,
+          error: msg.format + '-export mislukt: ' + text,
+        });
+        return;
+      }
       postToUI({
-        type: 'target-updated',
-        ok: false,
-        error: msg.format + '-export mislukt: ' + text,
+        type: 'document-ready',
+        target: 'slide',
+        format: msg.format,
+        bytes: bytes,
+        filename: filename,
       });
       return;
     }
 
+    // Presentation export.
+    const baseName = figma.currentPage.name || 'presentation';
+    if (msg.format === 'PNG') {
+      // PNG of an entire presentation is ambiguous (giant single image
+      // vs. a zip of per-slide PNGs). Not supported in v1; UI gates
+      // this combo, so this branch is a defensive guard.
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'PNG-export voor de hele presentatie wordt nog niet ondersteund.',
+      });
+      return;
+    }
+
+    // Presentation PDF — iterate non-skipped SLIDE nodes (or the
+    // Welder INSTANCE when there's no SLIDE parent), exportAsync
+    // each as a single-page PDF, ship the parts to the iframe; the
+    // iframe merges with pdf-lib. Page-level exportAsync would just
+    // produce one giant single-page PDF spanning the canvas grid.
+    const welderSlides = findSlidesOnPage();
+    const targets: SceneNode[] = [];
+    for (let i = 0; i < welderSlides.length; i++) {
+      const ws = welderSlides[i];
+      if (ws.parent !== null && ws.parent.type === 'SLIDE') {
+        const slide = ws.parent as SlideNode;
+        if (slide.isSkippedSlide) continue;
+        targets.push(slide);
+      } else {
+        targets.push(ws);
+      }
+    }
+    if (targets.length === 0) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Geen slides om te exporteren.',
+      });
+      return;
+    }
+
+    const parts: Uint8Array[] = [];
+    for (let i = 0; i < targets.length; i++) {
+      try {
+        const bytes = await (targets[i] as unknown as ExportMixin).exportAsync({
+          format: 'PDF',
+        });
+        parts.push(bytes);
+      } catch (err: unknown) {
+        const text = err instanceof Error ? err.message : String(err);
+        postToUI({
+          type: 'target-updated',
+          ok: false,
+          error: 'PDF-export slide ' + String(i + 1) + ' mislukt: ' + text,
+        });
+        return;
+      }
+    }
     postToUI({
-      type: 'document-ready',
-      target: msg.target,
-      format: msg.format,
-      bytes: bytes,
-      filename: filename,
+      type: 'presentation-pdf-parts',
+      parts: parts,
+      filename: sanitizeBaseFilename(baseName) + '.pdf',
     });
     return;
   }
