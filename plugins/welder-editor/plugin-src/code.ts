@@ -1150,13 +1150,75 @@ async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
 // Slide-lookup helpers
 // ============================================================
 
+// Per-slide summary cache. `slideSummary` walks each slide's subtree
+// looking for a Heading TEXT, which on a complex 50-slide deck adds up
+// to thousands of node-visits per `buildSlideList` call. Caching by
+// slide-id collapses per-documentchange cost from O(total slides) to
+// O(changed slides). Invalidation runs from the documentchange handler
+// via `invalidateSlideSummaryForChange`, plus a full clear on
+// page-change. Cached entries also store the last-seen 1-based number
+// so we recompute when the slide's index in the list changes (caller's
+// position determines `name` fallback for un-titled slides).
+const slideSummaryCache = new Map<string, SlideSummary>();
+
+function clearSlideSummaryCache(): void {
+  slideSummaryCache.clear();
+}
+
 function buildSlideList(): { summaries: SlideSummary[]; nodes: InstanceNode[] } {
   const nodes = findSlidesOnPage();
   const summaries: SlideSummary[] = [];
   for (let i = 0; i < nodes.length; i++) {
-    summaries.push(slideSummary(nodes[i], i + 1));
+    const slide = nodes[i];
+    const number = i + 1;
+    const cached = slideSummaryCache.get(slide.id);
+    if (cached !== undefined && cached.number === number) {
+      summaries.push(cached);
+      continue;
+    }
+    const fresh = slideSummary(slide, number);
+    slideSummaryCache.set(slide.id, fresh);
+    summaries.push(fresh);
   }
   return { summaries: summaries, nodes: nodes };
+}
+
+/**
+ * Drop cached summary entries that may no longer match the canvas truth
+ * after an incoming DocumentChange. Coarse on purpose — the cache is
+ * cheap to rebuild lazily on the next `buildSlideList` call, and an
+ * over-invalidation wastes one slide-summary scan, while an under-
+ * invalidation surfaces stale picker labels.
+ *
+ * Rules (mirrors the relevance filter in the documentchange handler):
+ *   - CREATE / DELETE → full clear (slide list shape may have changed,
+ *     and number ↦ slide mapping shifts for every entry).
+ *   - PROPERTY_CHANGE on SLIDE → clear that slide's child Welder
+ *     INSTANCE entry (id is on the SLIDE child, not the SLIDE itself,
+ *     so we full-clear conservatively).
+ *   - PROPERTY_CHANGE on TEXT named 'Heading' → walk up to the
+ *     enclosing Welder slide and drop only its entry.
+ */
+function invalidateSlideSummaryForChange(change: DocumentChange): void {
+  if (change.type === 'CREATE' || change.type === 'DELETE') {
+    clearSlideSummaryCache();
+    return;
+  }
+  if (change.type === 'PROPERTY_CHANGE') {
+    if (change.node.type === 'SLIDE') {
+      // The cached key is the Welder INSTANCE id, not the SlideNode id;
+      // be conservative and clear the lot. SlideNode property changes
+      // (rename, isSkippedSlide, reorder) are infrequent compared to
+      // text-edit bursts, so the over-invalidation cost is bounded.
+      clearSlideSummaryCache();
+      return;
+    }
+    if (change.node.type === 'TEXT' && change.node.name === 'Heading') {
+      const slide = findSlideAncestor(change.node);
+      if (slide !== null) slideSummaryCache.delete(slide.id);
+      return;
+    }
+  }
 }
 
 function findSlideById(id: string): InstanceNode | null {
@@ -2431,6 +2493,11 @@ async function main(): Promise<void> {
 
   figma.on('currentpagechange', () => {
     try {
+      // Slides on the new page are different nodes; the cache keys on
+      // slide-INSTANCE id but the prior page's entries become irrelevant
+      // and the new page's slides will all be cache-misses anyway —
+      // clearing keeps memory bounded.
+      clearSlideSummaryCache();
       postSlideList();
     } catch (err: unknown) {
       console.log('[welder-slide-editor] currentpagechange handler failed:', err);
@@ -2449,29 +2516,33 @@ async function main(): Promise<void> {
       try {
         figma.on('documentchange', (event: DocumentChangeEvent) => {
           try {
-            const relevant = event.documentChanges.some((change) => {
-              if (change.type === 'CREATE') return true;
-              if (change.type === 'DELETE') return true;
-              // Native skip-toggle in Figma's left-panel thumbnail muteert
-              // SlideNode.isSkippedSlide → PROPERTY_CHANGE op het SLIDE-node.
-              // Slide-rename komt ook binnen als PROPERTY_CHANGE op SLIDE.
-              if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') return true;
-              // Picker-titel komt uit findSlideHeadingText (Heading-TEXT
-              // binnen CopyWrap) — niet uit slide.name. Edits aan een
-              // Heading-text-node moeten dus ook een refresh triggeren.
-              // Een Welder-slide bevat meerdere TEXT-nodes met name
-              // 'Heading' (CopyWrap + Card-instances + verborgen badge-
-              // varianten); we filteren ze hier niet op ancestry omdat
-              // postSlideList signature-dedup'd is — over-trigger is gratis.
+            // Single pass over the changes: drop affected entries from
+            // the slide-summary cache AND decide if we need a list-post.
+            // Doing both in one loop avoids walking the changes array
+            // twice on every keystroke (cheap, but with N slides every
+            // shaved cycle helps).
+            let relevant = false;
+            const changes = event.documentChanges;
+            for (let i = 0; i < changes.length; i++) {
+              const change = changes[i];
+              invalidateSlideSummaryForChange(change);
+              if (relevant) continue;
+              if (change.type === 'CREATE' || change.type === 'DELETE') {
+                relevant = true;
+                continue;
+              }
+              if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') {
+                relevant = true;
+                continue;
+              }
               if (
                 change.type === 'PROPERTY_CHANGE' &&
                 change.node.type === 'TEXT' &&
                 change.node.name === 'Heading'
               ) {
-                return true;
+                relevant = true;
               }
-              return false;
-            });
+            }
             if (relevant) postSlideList();
             // postSlideContent runs on EVERY documentchange — including
             // INSTANCE PROPERTY_CHANGE (icon swaps via setProperties)
