@@ -1894,6 +1894,20 @@ async function main(): Promise<void> {
               // SlideNode.isSkippedSlide → PROPERTY_CHANGE op het SLIDE-node.
               // Slide-rename komt ook binnen als PROPERTY_CHANGE op SLIDE.
               if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') return true;
+              // Picker-titel komt uit findSlideHeadingText (Heading-TEXT
+              // binnen CopyWrap) — niet uit slide.name. Edits aan een
+              // Heading-text-node moeten dus ook een refresh triggeren.
+              // Een Welder-slide bevat meerdere TEXT-nodes met name
+              // 'Heading' (CopyWrap + Card-instances + verborgen badge-
+              // varianten); we filteren ze hier niet op ancestry omdat
+              // postSlideList signature-dedup'd is — over-trigger is gratis.
+              if (
+                change.type === 'PROPERTY_CHANGE' &&
+                change.node.type === 'TEXT' &&
+                change.node.name === 'Heading'
+              ) {
+                return true;
+              }
               return false;
             });
             if (!relevant) return;
