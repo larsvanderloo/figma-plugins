@@ -182,9 +182,21 @@ function rowsDiffer(a: TableRowModel[], b: TableRowModel[]): boolean {
   return false;
 }
 
+// Echo-guard: na een eigen emit landt er via documentchange + scanSlide
+// een slide-loaded met een MOGELIJK GESHRINKTE rows-array (T41.2 filter
+// dropt all-empty body rows in canvas-render, en scan leest uit canvas).
+// Zonder guard zou de watch hierboven localRows replacen met de canvas-
+// view en zo een net-toegevoegde lege kolom of rij wegklokken voordat
+// de user kon typen. We negeren incoming watches binnen 2s na emit;
+// foreign edits in dat venster zijn een geaccepteerd UX-cost (zeldzaam,
+// next slide-loaded ná het venster pickt ze alsnog op).
+let echoExpected = false;
+let echoResetTimer: ReturnType<typeof setTimeout> | null = null;
+
 watch(
   () => props.modelValue.rows,
   (next) => {
+    if (echoExpected) return;
     if (rowsDiffer(next, localRows.value)) localRows.value = cloneRows(next);
   },
 );
@@ -195,6 +207,13 @@ let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 function scheduleEmit(): void {
   if (debounceTimer !== null) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    echoExpected = true;
+    if (echoResetTimer !== null) clearTimeout(echoResetTimer);
+    echoResetTimer = setTimeout(() => {
+      echoExpected = false;
+      echoResetTimer = null;
+    }, 2000);
     emit('update:modelValue', {
       slotId: props.modelValue.slotId,
       width: localWidth.value,
@@ -208,6 +227,7 @@ function scheduleEmit(): void {
 onBeforeUnmount(() => {
   if (debounceTimer !== null) clearTimeout(debounceTimer);
   if (lastImportTimer !== null) clearTimeout(lastImportTimer);
+  if (echoResetTimer !== null) clearTimeout(echoResetTimer);
 });
 
 // Handlers
