@@ -76,14 +76,40 @@ function toggleSkip(): void {
   });
 }
 
-function exportSlide(): void {
-  const id = view.state.currentSlideId;
-  if (id === null) return;
-  bridge.post({ type: 'export-pdf', target: 'slide', slideId: id });
+// Export-modal state: target = wat exporteren we, format = welk
+// bestandsformaat. Beide blijven hangen tussen exports zodat een
+// herhaalde export dezelfde keuze toont.
+const exportModalOpen = ref<boolean>(false);
+const exportTarget = ref<'slide' | 'presentation'>('slide');
+const exportFormat = ref<'PDF' | 'PNG'>('PDF');
+
+function openExportModal(): void {
+  // Default naar 'presentation' als er geen actieve slide is — anders
+  // staat de modal op een disabled-optie en kan de user niet door.
+  if (view.state.currentSlideId === null) {
+    exportTarget.value = 'presentation';
+  }
+  exportModalOpen.value = true;
 }
 
-function exportPresentation(): void {
-  bridge.post({ type: 'export-pdf', target: 'presentation' });
+function submitExport(): void {
+  if (exportTarget.value === 'slide') {
+    const id = view.state.currentSlideId;
+    if (id === null) return;
+    bridge.post({
+      type: 'export-document',
+      target: 'slide',
+      format: exportFormat.value,
+      slideId: id,
+    });
+  } else {
+    bridge.post({
+      type: 'export-document',
+      target: 'presentation',
+      format: exportFormat.value,
+    });
+  }
+  exportModalOpen.value = false;
 }
 
 function onThemeChange(modeId: string | null): void {
@@ -179,13 +205,14 @@ bridge.onMessage((msg) => {
     iconRecents.setItems(msg.items);
     return;
   }
-  if (msg.type === 'pdf-ready') {
+  if (msg.type === 'document-ready') {
     // Wrap the bytes in a Blob and trigger a download via a temporary
     // anchor. URL.revokeObjectURL after the click so the iframe doesn't
-    // accumulate references to multi-MB PDFs. The browser's own
+    // accumulate references to multi-MB exports. The browser's own
     // download UI is the success signal — no toast for the happy path.
     try {
-      const blob = new Blob([msg.bytes as BlobPart], { type: 'application/pdf' });
+      const mime = msg.format === 'PNG' ? 'image/png' : 'application/pdf';
+      const blob = new Blob([msg.bytes as BlobPart], { type: mime });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
@@ -375,30 +402,85 @@ onBeforeUnmount(() => {
             </fieldset>
           </template>
 
-          <!-- Export buttons — sit at the bottom of the content (scroll
-               with it, not sticky). Slide PDF requires a current slide;
-               Presentatie PDF works regardless. -->
-          <div class="flex flex-wrap items-center justify-center gap-2 pt-2">
+          <!-- Export — single entry point that opens the picker modal.
+               Sits at the bottom of the content (scrolls with it). -->
+          <div class="flex flex-col items-center gap-2 pt-2 text-center">
+            <p class="text-xs text-muted max-w-sm">
+              Klik rechtsboven in Figma op het
+              <span
+                class="inline-flex items-center justify-center rounded border border-[var(--ui-border)] px-1.5 py-0.5 align-text-bottom text-default"
+              >
+                <UIcon name="i-lucide-play" class="h-3 w-3" />
+              </span>
+              play-icoon voor animaties en altijd actuele content. Een export is handig om te delen of printen.
+            </p>
             <UButton
-              icon="i-lucide-file-text"
+              icon="i-lucide-download"
               color="neutral"
               variant="outline"
               size="md"
-              :disabled="view.state.currentSlideId === null"
-              @click="exportSlide"
+              @click="openExportModal"
             >
-              Slide PDF
-            </UButton>
-            <UButton
-              icon="i-lucide-presentation"
-              color="neutral"
-              variant="outline"
-              size="md"
-              @click="exportPresentation"
-            >
-              Presentatie PDF
+              Exporteer
             </UButton>
           </div>
+
+          <!-- Export modal: kies wat (huidige slide / hele presentatie)
+               en welk formaat (PDF / PNG). PNG van een hele presentatie
+               geeft één brede page-PNG; PDF geeft een multi-page PDF. -->
+          <UModal v-model:open="exportModalOpen" title="Exporteren" :ui="{ content: 'max-w-md' }">
+            <template #body>
+              <div class="space-y-4">
+                <UFormField label="Wat wil je exporteren?" name="export-target">
+                  <URadioGroup
+                    v-model="exportTarget"
+                    :items="[
+                      {
+                        label: 'Huidige slide',
+                        description:
+                          view.state.currentSlideId === null
+                            ? 'Selecteer eerst een slide'
+                            : undefined,
+                        value: 'slide',
+                        disabled: view.state.currentSlideId === null,
+                      },
+                      {
+                        label: 'Hele presentatie',
+                        description: 'Alle slides op deze pagina',
+                        value: 'presentation',
+                      },
+                    ]"
+                  />
+                </UFormField>
+                <UFormField label="Formaat" name="export-format">
+                  <USelect
+                    v-model="exportFormat"
+                    :items="[
+                      { label: 'PDF', value: 'PDF' },
+                      { label: 'PNG', value: 'PNG' },
+                    ]"
+                    class="w-full"
+                  />
+                </UFormField>
+              </div>
+            </template>
+            <template #footer>
+              <div class="flex w-full items-center justify-end gap-2">
+                <UButton color="neutral" variant="ghost" @click="exportModalOpen = false">
+                  Annuleren
+                </UButton>
+                <UButton
+                  color="primary"
+                  variant="solid"
+                  icon="i-lucide-download"
+                  :disabled="exportTarget === 'slide' && view.state.currentSlideId === null"
+                  @click="submitExport"
+                >
+                  Exporteer
+                </UButton>
+              </div>
+            </template>
+          </UModal>
         </div>
       </main>
     </div>

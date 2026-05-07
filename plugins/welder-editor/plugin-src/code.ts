@@ -2212,12 +2212,12 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     return;
   }
 
-  if (msg.type === 'export-pdf') {
+  if (msg.type === 'export-document') {
     // Resolve the export target. Single slide → the SLIDE node by id.
     // Presentation → currentPage, which on a Figma Slides file
-    // produces a multi-page PDF.
+    // produces a multi-page PDF (or one wide PNG).
     let target: BaseNode | null = null;
-    let filename = '';
+    let baseName = '';
     if (msg.target === 'slide') {
       if (typeof msg.slideId !== 'string' || msg.slideId.length === 0) {
         postToUI({
@@ -2241,32 +2241,35 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       // the SLIDE-parent node's name (Figma's user-visible slide name)
       // or "slide".
       const heading = readTextByName(slide, 'Heading');
-      let baseName = heading !== null && heading.length > 0 ? heading : slide.name;
+      baseName = heading !== null && heading.length > 0 ? heading : slide.name;
       if (slide.parent !== null && slide.parent.type === 'SLIDE') {
         baseName = (slide.parent as SlideNode).name || baseName;
       }
-      filename = sanitizePdfFilename(baseName) + '.pdf';
     } else {
       target = figma.currentPage;
-      filename = sanitizePdfFilename(figma.currentPage.name || 'presentation') + '.pdf';
+      baseName = figma.currentPage.name || 'presentation';
     }
+
+    const ext = msg.format === 'PNG' ? '.png' : '.pdf';
+    const filename = sanitizeBaseFilename(baseName) + ext;
 
     let bytes: Uint8Array;
     try {
-      bytes = await (target as ExportMixin).exportAsync({ format: 'PDF' });
+      bytes = await (target as ExportMixin).exportAsync({ format: msg.format });
     } catch (err: unknown) {
       const text = err instanceof Error ? err.message : String(err);
       postToUI({
         type: 'target-updated',
         ok: false,
-        error: 'PDF-export mislukt: ' + text,
+        error: msg.format + '-export mislukt: ' + text,
       });
       return;
     }
 
     postToUI({
-      type: 'pdf-ready',
+      type: 'document-ready',
       target: msg.target,
+      format: msg.format,
       bytes: bytes,
       filename: filename,
     });
@@ -2281,11 +2284,12 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
 
 /**
  * Strip filesystem-unfriendly characters from a string so it's safe
- * as a PDF filename across macOS / Windows / Linux. Collapses runs of
- * spaces / underscores into a single hyphen, drops leading/trailing
- * hyphens, caps length at 80 chars.
+ * as a download filename across macOS / Windows / Linux. Collapses
+ * runs of spaces / underscores into a single hyphen, drops leading
+ * and trailing hyphens, caps length at 80 chars. Caller appends the
+ * format extension.
  */
-function sanitizePdfFilename(raw: string): string {
+function sanitizeBaseFilename(raw: string): string {
   const trimmed = raw.replace(/[\\/:*?"<>|]/g, '').trim();
   const collapsed = trimmed.replace(/[\s_]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
   const safe = collapsed.length > 0 ? collapsed : 'export';
