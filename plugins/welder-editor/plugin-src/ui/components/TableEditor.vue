@@ -23,6 +23,7 @@
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../types';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS, TABLE_WIDTHS } from '../../constants';
+import { tokenize } from '../../chart-core/csv';
 
 interface Props {
   modelValue: TableWrapModel;
@@ -281,13 +282,19 @@ function openFilePicker(): void {
 const csvError = ref<string>('');
 
 function validateCSV(text: string): string {
-  const lines = text.split(/\r?\n/).filter((l) => l.length > 0);
-  if (lines.length === 0) return 'CSV is leeg.';
-  if (lines.length > TABLE_MAX_ROWS) {
-    return `Maximum ${TABLE_MAX_ROWS} rijen — CSV heeft er ${lines.length}.`;
+  // Tokenize via the shared RFC 4180-aware module so quoted cells
+  // (e.g. `"Acme, Inc.",100`) are counted as one column, not three.
+  // Sandbox `importCSV` uses the exact same tokenizer, so what passes
+  // validation here is what gets applied there — no drift.
+  const rows = tokenize(text).rows;
+  // Drop fully-empty rows for counting (same shape as importCSV).
+  const nonEmpty = rows.filter((r) => r.some((c) => c.length > 0));
+  if (nonEmpty.length === 0) return 'CSV is leeg.';
+  if (nonEmpty.length > TABLE_MAX_ROWS) {
+    return `Maximum ${TABLE_MAX_ROWS} rijen — CSV heeft er ${nonEmpty.length}.`;
   }
-  for (let i = 0; i < lines.length; i++) {
-    const cellCount = lines[i].split(',').length;
+  for (let i = 0; i < nonEmpty.length; i++) {
+    const cellCount = nonEmpty[i].length;
     if (cellCount > maxCols.value) {
       return `Rij ${i + 1}: ${cellCount} kolommen — max ${maxCols.value} bij breedte ${localWidth.value}.`;
     }
