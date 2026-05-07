@@ -126,28 +126,10 @@ bridge.onMessage((msg) => {
     // Auto-follow: switch dropdown only wanneer de user daadwerkelijk een
     // andere slide heeft gekozen — voorkomt lelijke re-loads wanneer de
     // user binnen dezelfde slide klikt.
-    //
-    // We deliberately FOLLOW Figma even inside a history-replay window:
-    // Figma's native undo history can include slide-navigation steps,
-    // and `triggerUndo` may revert us to a different slide. Suppressing
-    // the follow there leaves the iframe and the canvas on different
-    // slides — more confusing than a clean follow. We just toast so
-    // the user sees that the slide change came from undo/redo, not a
-    // mystery shift.
     if (view.state.currentSlideId !== msg.slideId) {
-      const wasReplay = editHistory.isInHistoryReplay();
       view.pickSlide(msg.slideId);
       bridge.post({ type: 'pick-slide', slideId: msg.slideId });
       loadingSlide.value = true;
-      if (wasReplay) {
-        const summary = view.state.slides.find((s) => s.id === msg.slideId);
-        notifications.pushInfo(
-          'Sprong naar andere slide',
-          summary
-            ? `Onderdeel van ongedaan-maken: ${summary.name}`
-            : 'Onderdeel van ongedaan-maken.',
-        );
-      }
     }
     return;
   }
@@ -234,6 +216,17 @@ watch(
     bridge.post({ type: 'set-icon-recents', items: [...next] });
   },
   { deep: true },
+);
+
+// Plugin Undo/Redo is scoped to the active slide. When the slide
+// changes — by user pick, auto-follow, or page navigation — drop both
+// stacks. The user said cross-slide undos are confusing; this makes
+// the contract explicit: stack reflects the current slide only.
+watch(
+  () => view.state.currentSlideId,
+  () => {
+    editHistory.clearAll();
+  },
 );
 
 onMounted(() => {

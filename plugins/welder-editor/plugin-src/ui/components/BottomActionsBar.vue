@@ -39,14 +39,11 @@ function onUndo(): void {
   // Move the most-recent tracked action onto the undone stack and ask
   // the sandbox to revert. The sandbox commits an undo checkpoint
   // before each tracked mutation, so triggerUndo reverts exactly
-  // that one action.
+  // that one action. Stack is auto-cleared when the slide changes
+  // (App.vue watches currentSlideId), so anything that's still on
+  // the stack belongs to the current slide.
   const msg = editHistory.popForUndo();
   if (msg === null) return;
-  // Suppress slide-focused auto-follow for a brief window so any
-  // selectionchange echo from the mutation (or page-nav being part of
-  // Figma's undo history) doesn't bounce the iframe to a different
-  // slide.
-  editHistory.markHistoryReplay();
   bridge.post({ type: 'trigger-undo' });
 }
 
@@ -56,7 +53,6 @@ function onRedo(): void {
   // becomes a fresh undo checkpoint on top.
   const msg = editHistory.popForRedo();
   if (msg === null) return;
-  editHistory.markHistoryReplay();
   bridge.post(msg);
 }
 </script>
