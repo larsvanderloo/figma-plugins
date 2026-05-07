@@ -23,6 +23,7 @@ import { ref, computed } from 'vue';
 import { useCropper } from 'vue-picture-cropper';
 import 'cropperjs/dist/cropper.css';
 import { compressImageForUpload } from '../utils/image-compress';
+import { formatBytes } from '../utils/format-bytes';
 
 export interface ImageValue {
   hasImage: boolean;
@@ -48,6 +49,12 @@ interface Props {
    * Hoogte van het Figma image-slot in pixels. null = onbekend (fallback h-36).
    */
   fillH: number | null;
+  /**
+   * Byte length of the current image (post-compression, as Figma stores it).
+   * null = no image / not yet known. Drives the status-row label so the
+   * user can see how heavy the slide is at a glance.
+   */
+  sizeBytes?: number | null;
 }
 
 const props = defineProps<Props>();
@@ -117,7 +124,11 @@ const SOFT_MAX_BYTES = 2 * 1024 * 1024;
 
 const statusLabel = computed<string>(() => {
   if (isUploading.value) return 'Bezig met uploaden…';
-  if (props.modelValue.hasImage) return 'Afbeelding ingesteld';
+  if (props.modelValue.hasImage) {
+    const size = props.sizeBytes;
+    if (typeof size === 'number' && size > 0) return formatBytes(size);
+    return 'Afbeelding ingesteld';
+  }
   return 'Nog geen afbeelding';
 });
 

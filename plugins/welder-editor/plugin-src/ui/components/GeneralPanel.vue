@@ -47,6 +47,7 @@ const slideId = computed(() => view.state.currentSlideId);
 const imagePreviewUrl = ref<string | null>(null);
 const imageFillW = ref<number | null>(null);
 const imageFillH = ref<number | null>(null);
+const imageSizeBytes = ref<number | null>(null);
 
 /** Uint8Array → data-URL. Detect MIME via magic-bytes; chunked btoa
  *  voorkomt stack-overflow op grote fill-bytes (≥2 MB). */
@@ -74,6 +75,7 @@ const unsubPreview = bridge.onMessage(function (msg: any) {
   if (img === null || img === undefined) return;
   if (msg.imageWrapId !== img.imageWrapId) return;
   imagePreviewUrl.value = bytesToDataUrl(msg.bytes);
+  imageSizeBytes.value = msg.bytes.length;
   // Slot-dimensies doorgeven voor aspect-ratio-match van de preview-box.
   // fillW/fillH zijn 0 als onbekend (code.ts fallback).
   imageFillW.value = typeof msg.fillW === 'number' && msg.fillW > 0 ? msg.fillW : null;
@@ -90,6 +92,7 @@ watch(
     imagePreviewUrl.value = null;
     imageFillW.value = null;
     imageFillH.value = null;
+    imageSizeBytes.value = null;
   },
 );
 
@@ -234,6 +237,7 @@ function onImageUpload(bytes: Uint8Array): void {
         :preview-url="imagePreviewUrl"
         :fill-w="imageFillW"
         :fill-h="imageFillH"
+        :size-bytes="imageSizeBytes"
         @upload="onImageUpload"
       />
     </section>

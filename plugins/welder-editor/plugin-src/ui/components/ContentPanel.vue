@@ -41,10 +41,11 @@ const view = usePluginView();
 
 // Card visual previews — bytes come from the sandbox via
 // `card-visual-preview`, one message per Type=Image / Type=User card
-// with a non-null visualHash. Each value is a `data:image/...;base64,…`
-// URL ready for `<img :src>`. Cleared whenever the slide changes so
-// stale thumbnails from a previous slide don't bleed through.
+// with a non-null visualHash. URLs feed `<img :src>`; the sizes feed
+// the per-card status row (e.g. "742 KB"). Cleared whenever the slide
+// changes so stale data from a previous slide doesn't bleed through.
 const cardPreviewUrls = ref<Record<string, string>>({});
+const cardPreviewSizes = ref<Record<string, number>>({});
 
 function bytesToDataUrl(bytes: Uint8Array): string {
   let mime = 'image/png';
@@ -68,6 +69,10 @@ const unsubCardPreview = bridge.onMessage((msg) => {
     ...cardPreviewUrls.value,
     [msg.cardNodeId]: bytesToDataUrl(msg.bytes),
   };
+  cardPreviewSizes.value = {
+    ...cardPreviewSizes.value,
+    [msg.cardNodeId]: msg.bytes.length,
+  };
 });
 onUnmounted(unsubCardPreview);
 
@@ -75,6 +80,7 @@ watch(
   () => view.state.currentSlideId,
   () => {
     cardPreviewUrls.value = {};
+    cardPreviewSizes.value = {};
   },
 );
 
@@ -184,6 +190,7 @@ function onJourneyUpdate(value: JourneyWrapModel): void {
         :model-value="card"
         :index="idx + 1"
         :preview-url="cardPreviewUrls[card.cardNodeId] || null"
+        :size-bytes="cardPreviewSizes[card.cardNodeId] || null"
         @update:model-value="onCardUpdate"
         @upload-visual="(bytes) => onCardVisualUpload(card.cardNodeId, bytes)"
       />

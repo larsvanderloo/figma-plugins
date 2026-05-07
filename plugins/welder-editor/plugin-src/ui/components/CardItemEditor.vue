@@ -28,6 +28,7 @@ import { ref, watch, computed } from 'vue';
 import type { CardItem } from '../../types';
 import IconPicker from './IconPicker.vue';
 import { compressImageForUpload } from '../utils/image-compress';
+import { formatBytes } from '../utils/format-bytes';
 
 interface Props {
   modelValue: CardItem;
@@ -39,6 +40,12 @@ interface Props {
    * when the card has no visual slot.
    */
   previewUrl?: string | null;
+  /**
+   * Byte length of the card's current visual (post-compression, as
+   * Figma stores it). null = no visual / not yet known. Drives the
+   * status-row label so the size shows up next to the thumbnail.
+   */
+  sizeBytes?: number | null;
 }
 
 const props = defineProps<Props>();
@@ -61,6 +68,14 @@ const localIcon = ref<string>(props.modelValue.icon !== null ? props.modelValue.
 // bestaat (undefined betekent niet tonen).
 const hasVisualSlot = computed<boolean>(() => props.modelValue.visualHash !== undefined);
 const hasImage = computed<boolean>(() => typeof props.modelValue.visualHash === 'string');
+
+const visualStatusLabel = computed<string>(() => {
+  if (isUploading.value) return 'Bezig met uploaden…';
+  if (!hasImage.value) return 'Nog geen visual';
+  const size = props.sizeBytes;
+  if (typeof size === 'number' && size > 0) return formatBytes(size);
+  return 'Visual ingesteld';
+});
 
 // Slide-wissel of main-echo: sync lokale refs met prop.
 // localIcon valt terug op '' wanneer icon null is (T32: picker verborgen in dat geval).
@@ -161,7 +176,7 @@ async function onFileSelected(event: Event): Promise<void> {
             class="size-4 shrink-0 text-muted"
           />
           <span class="text-xs text-muted">
-            {{ hasImage ? 'Visual ingesteld' : 'Nog geen visual' }}
+            {{ visualStatusLabel }}
           </span>
         </div>
         <UButton
