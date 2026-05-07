@@ -1,12 +1,8 @@
 <!--
   BottomActionsBar — sticky toolbar at the bottom of the plugin panel.
 
-  One action:
-    1. Exporteer (dropdown) → Slide PDF / Presentatie PDF
-
-  Undo/redo intentionally absent. Native Cmd+Z / Cmd+Shift+Z still
-  works for plugin-driven edits (commitUndo() checkpoints stay in
-  place sandbox-side); we just don't surface a toolbar button for it.
+  Layout: Exporteer dropdown on the left, Delen + Start presentatie
+  on the right.
 -->
 <script setup lang="ts">
 import { computed } from 'vue';
@@ -29,6 +25,12 @@ function exportSlide(): void {
   bridge.post({ type: 'export-pdf', target: 'slide', slideId: id });
 }
 
+function onStartPresentation(): void {
+  bridge.post({ type: 'start-presentation' });
+}
+
+function onShare(): void {}
+
 const exportItems = computed<DropdownMenuItem[]>(() => [
   {
     label: 'Slide PDF',
@@ -46,11 +48,10 @@ const exportItems = computed<DropdownMenuItem[]>(() => [
 
 <template>
   <div
-    class="sticky bottom-0 z-30 flex items-center justify-center gap-2 border-t border-[var(--ui-border)] bg-default/95 px-3 py-2 backdrop-blur"
+    class="sticky bottom-0 z-30 flex items-center justify-between gap-2 border-t border-[var(--ui-border)] bg-default/95 px-3 py-2 backdrop-blur"
   >
     <UDropdownMenu :items="exportItems" :content="{ align: 'start', side: 'top' }">
       <UButton
-        icon="i-lucide-download"
         trailing-icon="i-lucide-chevron-down"
         color="neutral"
         variant="ghost"
@@ -59,5 +60,13 @@ const exportItems = computed<DropdownMenuItem[]>(() => [
         Exporteer
       </UButton>
     </UDropdownMenu>
+    <div class="flex items-center gap-2">
+      <UButton color="neutral" variant="ghost" size="md" @click="onShare">
+        Delen
+      </UButton>
+      <UButton color="primary" variant="solid" size="md" @click="onStartPresentation">
+        Presenteren
+      </UButton>
+    </div>
   </div>
 </template>

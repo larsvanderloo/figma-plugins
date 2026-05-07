@@ -630,6 +630,12 @@ export type UIToPluginMessage =
    * pre-undo value and the user reads the toolbar Undo as a no-op.
    */
   | { type: 'trigger-undo'; slideId?: string }
+  /**
+   * "Presenteren" button. The Plugin API does not expose a way to
+   * start a slideshow programmatically, so the sandbox surfaces a
+   * `figma.notify` hint pointing the user at the native control.
+   */
+  | { type: 'start-presentation' }
   | { type: 'close' };
 
 /**
