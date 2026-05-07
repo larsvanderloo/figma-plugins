@@ -700,7 +700,10 @@ export type PluginToUIMessage =
       target: 'slide' | 'presentation';
       format: 'PDF' | 'PNG';
       bytes: Uint8Array;
+      /** Filename suggested for the download (already includes the extension). */
       filename: string;
+      /** Document title, used as the PDF's /Title metadata field. */
+      title: string;
     }
   /**
    * Multi-slide presentation export. Sandbox iterates each non-skipped
@@ -715,6 +718,8 @@ export type PluginToUIMessage =
       type: 'presentation-pdf-parts';
       parts: Uint8Array[];
       filename: string;
+      /** Deck title, used as the merged PDF's /Title metadata field. */
+      title: string;
     }
   /**
    * Per-card visual thumbnail bytes — analogue of `image-preview`

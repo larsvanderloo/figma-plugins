@@ -2270,6 +2270,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         format: msg.format,
         bytes: bytes,
         filename: filename,
+        title: baseName,
       });
       return;
     }
@@ -2335,6 +2336,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       type: 'presentation-pdf-parts',
       parts: parts,
       filename: sanitizeBaseFilename(baseName) + '.pdf',
+      title: baseName,
     });
     return;
   }

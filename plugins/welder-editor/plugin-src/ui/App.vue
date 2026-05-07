@@ -22,6 +22,34 @@ import { useToast } from '@nuxt/ui/composables';
 import { PDFDocument } from 'pdf-lib';
 
 import SlideSelector from './components/SlideSelector.vue';
+
+// Constant PDF metadata applied to every Welder export. Title is
+// set per-document by the caller.
+const PDF_AUTHOR = 'Welder B.V.';
+const PDF_CREATOR = 'Welder Slide Editor';
+const PDF_PRODUCER = 'Welder Slide Editor';
+
+function applyPdfMetadata(doc: PDFDocument, title: string): void {
+  doc.setTitle(title);
+  doc.setAuthor(PDF_AUTHOR);
+  doc.setCreator(PDF_CREATOR);
+  doc.setProducer(PDF_PRODUCER);
+  const now = new Date();
+  doc.setCreationDate(now);
+  doc.setModificationDate(now);
+}
+
+function downloadBlob(bytes: Uint8Array, filename: string, mime: string): void {
+  const blob = new Blob([bytes as BlobPart], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
 import SlideThemeSwitcher from './components/SlideThemeSwitcher.vue';
 import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
@@ -227,9 +255,10 @@ bridge.onMessage((msg) => {
     return;
   }
   if (msg.type === 'presentation-pdf-parts') {
-    // Merge the per-slide single-page PDFs into one multi-page PDF
-    // and trigger the download. Done off the message-handler tick so
-    // we don't block the bridge while pdf-lib does its work.
+    // Merge the per-slide single-page PDFs into one multi-page PDF,
+    // stamp Welder metadata, trigger the download. Done off the
+    // message-handler tick so we don't block the bridge while pdf-lib
+    // does its work.
     void (async () => {
       try {
         const merged = await PDFDocument.create();
@@ -238,16 +267,9 @@ bridge.onMessage((msg) => {
           const pages = await merged.copyPages(slideDoc, slideDoc.getPageIndices());
           for (let p = 0; p < pages.length; p++) merged.addPage(pages[p]);
         }
+        applyPdfMetadata(merged, msg.title);
         const bytes = await merged.save();
-        const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = msg.filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 0);
+        downloadBlob(bytes, msg.filename, 'application/pdf');
       } catch (err: unknown) {
         const text = err instanceof Error ? err.message : String(err);
         notifications.pushError('PDF samenvoegen mislukt', text);
@@ -256,25 +278,30 @@ bridge.onMessage((msg) => {
     return;
   }
   if (msg.type === 'document-ready') {
-    // Wrap the bytes in a Blob and trigger a download via a temporary
-    // anchor. URL.revokeObjectURL after the click so the iframe doesn't
-    // accumulate references to multi-MB exports. The browser's own
-    // download UI is the success signal — no toast for the happy path.
-    try {
-      const mime = msg.format === 'PNG' ? 'image/png' : 'application/pdf';
-      const blob = new Blob([msg.bytes as BlobPart], { type: mime });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = msg.filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 0);
-    } catch (err: unknown) {
-      const text = err instanceof Error ? err.message : String(err);
-      notifications.pushError('Download mislukt', text);
+    // PDF: round-trip through pdf-lib so we can stamp Welder metadata
+    // (title/author/creator) on the document. PNG: no metadata path,
+    // download the raw bytes. The browser's own download UI is the
+    // success signal — no toast for the happy path.
+    if (msg.format === 'PNG') {
+      try {
+        downloadBlob(msg.bytes, msg.filename, 'image/png');
+      } catch (err: unknown) {
+        const text = err instanceof Error ? err.message : String(err);
+        notifications.pushError('Download mislukt', text);
+      }
+      return;
     }
+    void (async () => {
+      try {
+        const doc = await PDFDocument.load(msg.bytes);
+        applyPdfMetadata(doc, msg.title);
+        const bytes = await doc.save();
+        downloadBlob(bytes, msg.filename, 'application/pdf');
+      } catch (err: unknown) {
+        const text = err instanceof Error ? err.message : String(err);
+        notifications.pushError('Download mislukt', text);
+      }
+    })();
     return;
   }
   if (msg.type === 'target-updated' && msg.ok === false) {
