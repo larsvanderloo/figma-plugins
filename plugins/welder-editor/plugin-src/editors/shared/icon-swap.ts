@@ -56,8 +56,24 @@ export function normalizeIconKey(raw: string): string {
   return k;
 }
 
-/** Lucide-component patroon: 1+ lowercase-woorden met hyphens, geen spaties. */
-export const LUCIDE_SLUG_RE = /^[a-z][a-z0-9]*(-[a-z][a-z0-9]*)*$/;
+/**
+ * Lucide-component pattern: starts with a lowercase letter, then any
+ * mix of letters, digits, and hyphens. Subsequent segments after a
+ * hyphen are allowed to be digit-only — required because:
+ *   - Canonical Lucide names include digit-only segments (e.g.
+ *     `arrow-down-0-1`, `bar-chart-3`) — the previous regex rejected
+ *     these and the icon picker missed them.
+ *   - Welder libraries sometimes name an icon component with a
+ *     numeric uniqueness suffix (e.g. `align-horizontal-space-around-68`).
+ *     The previous regex rejected those too, so Stack Icon cards
+ *     showed an empty picker.
+ *
+ * Single-token names (e.g. `imagewrap`) still match — but the card
+ * scan now uses the `Type` VARIANT to scope which picker is relevant,
+ * so an `ImageWrap` instance never reaches readCardIcon on an Image
+ * card.
+ */
+export const LUCIDE_SLUG_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
 
 // ============================================================
 // Module-level name→key cache
