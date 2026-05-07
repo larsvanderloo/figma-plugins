@@ -19,7 +19,7 @@
     overleeft structured-cloning tussen iframe en main-thread).
 -->
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue';
+import { ref, computed } from 'vue';
 import { useCropper } from 'vue-picture-cropper';
 import 'cropperjs/dist/cropper.css';
 import { compressImageForUpload } from '../utils/image-compress';
@@ -66,53 +66,6 @@ const emit = defineEmits<{
 const fileInput = ref<HTMLInputElement | null>(null);
 const isUploading = ref<boolean>(false);
 const sizeWarning = ref<string | null>(null);
-
-// Non-destructive crop source: bytes seen BEFORE any iframe-driven
-// compression this session. Set on (a) the first non-null previewUrl
-// after a slide pick, and (b) every file upload (snapshotted from the
-// raw file bytes pre-compression). Cropper sources from this rather
-// than the cycled previewUrl, so a second Bijsnijden doesn't re-crop
-// an already-JPEG-encoded version of itself — quality stays stable
-// across iterations.
-const originalUrl = ref<string | null>(null);
-
-/** Uint8Array → data-URL (chunked btoa for large arrays). Mirrors the
- *  helper in GeneralPanel; kept inline to avoid a third import-cycle
- *  for a 12-line utility. */
-function bytesToDataUrl(bytes: Uint8Array): string {
-  let mime = 'image/png';
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    mime = 'image/jpeg';
-  }
-  let binary = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode.apply(
-      null,
-      Array.from(bytes.subarray(i, i + chunkSize)) as unknown as number[],
-    );
-  }
-  return 'data:' + mime + ';base64,' + btoa(binary);
-}
-
-// Snapshot the first preview after a slide pick. Subsequent previews
-// (echoes after our own crop/upload) intentionally do NOT overwrite
-// `originalUrl` — that would defeat the whole purpose. Slide change
-// (previewUrl → null) clears the snapshot so the next slide gets a
-// fresh original.
-watch(
-  () => props.previewUrl,
-  (next) => {
-    if (next === null) {
-      originalUrl.value = null;
-      return;
-    }
-    if (originalUrl.value === null) {
-      originalUrl.value = next;
-    }
-  },
-  { immediate: true },
-);
 
 // Cropper state (T28c): panel zichtbaar + welke bron-URL in de cropper
 // geladen wordt. cropSourceUrl wordt op "Bijsnijden"-click gelijk aan
@@ -199,10 +152,6 @@ async function onFileSelected(event: Event): Promise<void> {
   try {
     const buffer = await file.arrayBuffer();
     const raw = new Uint8Array(buffer);
-    // Snapshot the un-compressed file as the new "original" — replaces
-    // any previous slide-loaded snapshot. Cropper will source from
-    // this for subsequent Bijsnijden passes so quality doesn't compound.
-    originalUrl.value = bytesToDataUrl(raw);
     const bytes = await compressImageForUpload(raw);
     emit('upload', bytes);
   } finally {
@@ -212,17 +161,16 @@ async function onFileSelected(event: Event): Promise<void> {
 }
 
 /**
- * Open the cropper. Source preference:
- *   1. `originalUrl` — the un-compressed snapshot from this session
- *      (raw upload bytes OR the first preview after slide pick).
- *      Crucial for non-destructive re-cropping: a second Bijsnijden
- *      should not re-crop the JPEG-encoded result of the first crop.
- *   2. `previewUrl` — fallback when no original is in scope (rare).
+ * Open the cropper on the current preview. Sourcing from `previewUrl`
+ * means every Bijsnijden re-crops what's currently on the slide —
+ * deliberately consistent across iterations. Quality compounds with
+ * each pass (each crop re-encodes JPEG q=0.85), so the user should
+ * treat Bijsnijden as a destructive operation: get the framing right
+ * the first time, or re-upload the source.
  */
 function openCrop(): void {
-  const src = originalUrl.value !== null ? originalUrl.value : props.previewUrl;
-  if (src === null) return;
-  cropSourceUrl.value = src;
+  if (props.previewUrl === null) return;
+  cropSourceUrl.value = props.previewUrl;
   isCropOpen.value = true;
 }
 
