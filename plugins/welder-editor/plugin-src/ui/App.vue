@@ -23,18 +23,30 @@ import { PDFDocument } from 'pdf-lib';
 
 import SlideSelector from './components/SlideSelector.vue';
 
-// Constant PDF metadata applied to every Welder export. Title is
-// set per-document by the caller.
+// Constant PDF metadata applied to every Welder export. Title is set
+// per-document by the caller. Copyright lives in /Subject because
+// pdf-lib has no first-class XMP rights API and /Subject is the
+// closest standard /Info slot every PDF reader surfaces.
 const PDF_AUTHOR = 'Welder B.V.';
 const PDF_CREATOR = 'Welder Slide Editor';
 const PDF_PRODUCER = 'Welder Slide Editor';
+const PDF_KEYWORDS = ['Welder', 'Welder Slide Editor', 'presentation', 'slides'];
+const PDF_LANGUAGE = 'nl-NL';
 
 function applyPdfMetadata(doc: PDFDocument, title: string): void {
+  const now = new Date();
   doc.setTitle(title);
   doc.setAuthor(PDF_AUTHOR);
   doc.setCreator(PDF_CREATOR);
   doc.setProducer(PDF_PRODUCER);
-  const now = new Date();
+  doc.setSubject(
+    '© ' +
+      String(now.getFullYear()) +
+      ' Welder B.V. Alle rechten voorbehouden. ' +
+      'Gemaakt met Welder Slide Editor.',
+  );
+  doc.setKeywords(PDF_KEYWORDS);
+  doc.setLanguage(PDF_LANGUAGE);
   doc.setCreationDate(now);
   doc.setModificationDate(now);
 }
