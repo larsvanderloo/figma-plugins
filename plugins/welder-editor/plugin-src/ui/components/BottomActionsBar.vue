@@ -1,13 +1,12 @@
 <!--
   BottomActionsBar — sticky toolbar at the bottom of the plugin panel.
 
-  Two actions:
+  One action:
     1. Exporteer (dropdown) → Slide PDF / Presentatie PDF
-    2. Undo                 → figma.triggerUndo() (== Cmd+Z)
 
-  Redo is intentionally absent — Figma's plugin API exposes
-  triggerUndo but no triggerRedo. Users redo via the native
-  Cmd+Shift+Z (Mac) / Ctrl+Y (Windows) shortcut.
+  Undo/redo intentionally absent. Native Cmd+Z / Cmd+Shift+Z still
+  works for plugin-driven edits (commitUndo() checkpoints stay in
+  place sandbox-side); we just don't surface a toolbar button for it.
 -->
 <script setup lang="ts">
 import { computed } from 'vue';
@@ -28,18 +27,6 @@ function exportSlide(): void {
   const id = view.state.currentSlideId;
   if (id === null) return;
   bridge.post({ type: 'export-pdf', target: 'slide', slideId: id });
-}
-
-function onUndo(): void {
-  // Sandbox calls figma.triggerUndo() — same effect as Cmd+Z.
-  // Pass the currently-displayed slideId so the sandbox can re-scan
-  // and re-emit slide-loaded; otherwise iframe-side optimistic
-  // updates (e.g. the picker's view.state mutation on click) keep
-  // showing the pre-undo value and the toolbar Undo reads as a no-op.
-  bridge.post({
-    type: 'trigger-undo',
-    slideId: view.state.currentSlideId ?? undefined,
-  });
 }
 
 const exportItems = computed<DropdownMenuItem[]>(() => [
@@ -72,14 +59,5 @@ const exportItems = computed<DropdownMenuItem[]>(() => [
         Exporteer
       </UButton>
     </UDropdownMenu>
-    <span class="mx-1 h-5 w-px bg-[var(--ui-border)]" aria-hidden />
-    <UButton
-      icon="i-lucide-undo-2"
-      color="neutral"
-      variant="ghost"
-      size="md"
-      title="Ongedaan maken (Cmd+Z)"
-      @click="onUndo"
-    />
   </div>
 </template>
