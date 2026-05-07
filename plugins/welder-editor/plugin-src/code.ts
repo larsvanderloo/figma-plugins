@@ -34,6 +34,7 @@ import {
   findJourneySlot,
   isSlide,
   isEffectivelyVisible,
+  readBooleanProperty,
 } from './slide-machine';
 import {
   applyTitleDescription,
@@ -375,7 +376,16 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
   let titleDescription: GeneralSections['titleDescription'] = null;
   if (copyWrap !== null) {
     const headingNode = findVisibleTextNodeByName(copyWrap, 'Heading', slide);
-    const paragraphNode = findVisibleTextNodeByName(copyWrap, 'Paragraph', slide);
+    // Slide Machine's CopyWrap exposes a boolean `showParagraph` component
+    // property; when the designer sets it to false the paragraph subtree is
+    // hidden by the variant render even though the underlying TEXT node may
+    // still have visible=true. Read the property and short-circuit before
+    // the text-node lookup so we don't surface an editor for hidden content.
+    // Read-only — see `docs/architecture/slide-machine.md` §11.0 + §11.2.
+    const paragraphHidden = readBooleanProperty(copyWrap, 'showParagraph') === false;
+    const paragraphNode = paragraphHidden
+      ? null
+      : findVisibleTextNodeByName(copyWrap, 'Paragraph', slide);
     const heading =
       headingNode !== null ? headingNode.characters : readTextByName(copyWrap, 'Heading') || '';
     const paragraph = paragraphNode !== null ? paragraphNode.characters : null;

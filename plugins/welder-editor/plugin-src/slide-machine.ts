@@ -165,17 +165,30 @@ export function isEffectivelyVisible(node: SceneNode, slide: InstanceNode): bool
  * Badge: INSTANCE waarvan name start met 'Badge'
  * (bevestigd per §12-Q2 — 2026-04-23).
  *
- * Alleen zichtbare badges — CopyWrap heeft een 'Show Badge'-toggle die
- * de instance (of een van zijn ancestors) op visible=false zet. Als de
- * user de badge niet toont, laat de plugin de Badge-editor-sectie ook
- * weg in de General tab. Schrijven naar een onzichtbare badge slaat
- * applyBadge dus ook over — dat is correct gedrag: er is geen
- * zichtbare target.
+ * Two visibility gates:
+ *
+ *  1. `isEffectivelyVisible` — parent-chain visible-flag walk. Catches
+ *     legacy CopyWraps that toggle the badge by directly setting
+ *     `visible=false` on the Badge node or an ancestor.
+ *  2. CopyWrap's `showBadge` boolean component property. Slide Machine's
+ *     CopyWrap (verified 2026-05-07 via Figma MCP, file
+ *     `RgTXIrUpihBauydjMZbUGX` node `28:3079`) toggles the Badge sub-tree
+ *     via this property; the underlying Badge node may keep `visible=true`
+ *     even when the variant render hides it. Without gate (2) the plugin
+ *     would surface a Badge editor for content the designer has hidden.
+ *
+ * Read-only — the plugin never writes `showBadge` (designers control
+ * which surfaces are visible per the two-audience product model).
+ * See `docs/architecture/slide-machine.md` §11.0 + §11.2.
  */
 export function findBadge(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, (n) => {
     if (n.name.indexOf('Badge') !== 0) return false;
     if (!isEffectivelyVisible(n, slide)) return false;
+    const copyWrap = findEnclosingInstanceByName(n, 'CopyWrap', slide);
+    if (copyWrap !== null && readBooleanProperty(copyWrap, 'showBadge') === false) {
+      return false;
+    }
     return true;
   });
 }
@@ -348,6 +361,52 @@ export function setInstanceProperty(
   patch[key] = value;
   instance.setProperties(patch);
   return true;
+}
+
+/**
+ * Read-only sibling of `setInstanceProperty` for BOOLEAN properties — looks
+ * up the hashed key for `logicalName`, returns the current boolean value or
+ * `null` when the property is absent / not a boolean.
+ *
+ * Used to detect designer-set component-property toggles like the Slide
+ * Machine's CopyWrap `showBadge` / `showParagraph`. Plugin reads these to
+ * decide whether to surface the matching editor; it never writes them.
+ * See `docs/architecture/slide-machine.md` §11.2.
+ */
+export function readBooleanProperty(
+  instance: InstanceNode,
+  logicalName: string,
+): boolean | null {
+  const key = getPropertyKey(instance, logicalName);
+  if (key === null) return null;
+  const props = instance.componentProperties;
+  if (props === null || props === undefined) return null;
+  const entry = props[key];
+  if (entry === undefined || entry === null) return null;
+  if (typeof entry.value !== 'boolean') return null;
+  return entry.value;
+}
+
+/**
+ * Walk up from `node` looking for an ancestor INSTANCE with the given name,
+ * stopping at `slide`. Bounded at 10 hops as a safety break — wrapper-instances
+ * within a Slide Machine slide are rarely more than 3 levels deep.
+ */
+export function findEnclosingInstanceByName(
+  node: BaseNode,
+  name: string,
+  slide: InstanceNode,
+): InstanceNode | null {
+  let cur: BaseNode | null = 'parent' in node ? (node as SceneNode).parent : null;
+  for (let i = 0; i < 10; i++) {
+    if (cur === null) return null;
+    if (cur.id === slide.id) return null;
+    if (cur.type === 'INSTANCE' && (cur as InstanceNode).name === name) {
+      return cur as InstanceNode;
+    }
+    cur = 'parent' in cur ? (cur as SceneNode).parent : null;
+  }
+  return null;
 }
 
 // ============================================================
