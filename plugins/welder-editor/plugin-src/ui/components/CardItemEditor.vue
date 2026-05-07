@@ -134,28 +134,15 @@ async function onFileSelected(event: Event): Promise<void> {
   >
     <h3 class="text-base font-semibold text-default">Kaart {{ index }}</h3>
 
+    <!--
+      Visual / Icon block — both occupy the same slot above the text
+      inputs (mutually exclusive: icon picker shows on Stack Icon /
+      Icon Side variants, the visual thumbnail + status row show on
+      Type=Image / Type=User variants). Mirrors the position of the
+      icon picker so the UI rhythm is consistent across variants.
+    -->
     <UFormField v-if="modelValue.icon !== null" name="icon" label="Icoon" size="md">
       <IconPicker :model-value="localIcon" @update:model-value="onIconChange" />
-    </UFormField>
-
-    <UFormField name="heading" label="Koptekst" size="md">
-      <UInput
-        :model-value="localHeading"
-        placeholder="Koptekst"
-        class="w-full"
-        @update:model-value="onHeadingInput"
-      />
-    </UFormField>
-
-    <UFormField name="paragraph" label="Alinea" size="md">
-      <UTextarea
-        :model-value="localParagraph"
-        :rows="3"
-        :autoresize="true"
-        placeholder="Alineatekst"
-        class="w-full"
-        @update:model-value="onParagraphInput"
-      />
     </UFormField>
 
     <div v-if="hasVisualSlot" class="space-y-2">
@@ -188,6 +175,26 @@ async function onFileSelected(event: Event): Promise<void> {
         </UButton>
       </div>
     </div>
+
+    <UFormField name="heading" label="Koptekst" size="md">
+      <UInput
+        :model-value="localHeading"
+        placeholder="Koptekst"
+        class="w-full"
+        @update:model-value="onHeadingInput"
+      />
+    </UFormField>
+
+    <UFormField name="paragraph" label="Alinea" size="md">
+      <UTextarea
+        :model-value="localParagraph"
+        :rows="3"
+        :autoresize="true"
+        placeholder="Alineatekst"
+        class="w-full"
+        @update:model-value="onParagraphInput"
+      />
+    </UFormField>
 
     <input
       v-if="hasVisualSlot"
