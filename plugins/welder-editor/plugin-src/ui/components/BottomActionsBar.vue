@@ -54,7 +54,9 @@ function onUndo(): void {
       size="md"
       title="Exporteer presentatie als PDF"
       @click="exportPresentation"
-    />
+    >
+      Presentatie
+    </UButton>
     <UButton
       icon="i-lucide-file"
       color="neutral"
@@ -63,7 +65,9 @@ function onUndo(): void {
       :disabled="!hasSlide"
       title="Exporteer huidige slide als PDF"
       @click="exportSlide"
-    />
+    >
+      Slide
+    </UButton>
     <span class="mx-1 h-5 w-px bg-[var(--ui-border)]" aria-hidden />
     <UButton
       icon="i-lucide-undo-2"
