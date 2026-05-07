@@ -726,11 +726,23 @@ async function normalizeCopyWrapVisibility(slide: InstanceNode): Promise<boolean
   if (copyWrap === null) return false;
   let changed = false;
 
+  // Scope guard: only mutate text nodes that belong to CopyWrap's OWN
+  // content, not nodes inside a nested instance (e.g. a Badge embedded
+  // in CopyWrap, which has its own Heading/Placeholder semantics owned
+  // by the Badge component). Without this, the plugin clobbers state
+  // it doesn't own — confirmed via Figma MCP for the Welder Templates
+  // file (Badge has a `Placeholder` TEXT child whose visibility carries
+  // the badge's displayed text appearance; flipping it to false hides
+  // the badge text on every slide-load).
+  const isOwnNode = (n: SceneNode): boolean => !isInsideNestedInstance(n, copyWrap);
+
   // Heading + Paragraph: visible alleen als characters niet leeg zijn.
   const charDriven = ['Heading', 'Paragraph'];
   for (let i = 0; i < charDriven.length; i++) {
     const name = charDriven[i];
-    const node = copyWrap.findOne((n: SceneNode) => n.type === 'TEXT' && n.name === name);
+    const node = copyWrap.findOne(
+      (n: SceneNode) => n.type === 'TEXT' && n.name === name && isOwnNode(n),
+    );
     if (node === null || node.type !== 'TEXT') continue;
     const text = (node as TextNode).characters;
     const desiredVisible = text !== '';
@@ -746,7 +758,7 @@ async function normalizeCopyWrapVisibility(slide: InstanceNode): Promise<boolean
   // layout om de werkelijke content sluit. Naam "Placeholder" matcht alle
   // bekende Welder-template-varianten.
   const placeholders = copyWrap.findAll(
-    (n: SceneNode) => n.type === 'TEXT' && n.name === 'Placeholder',
+    (n: SceneNode) => n.type === 'TEXT' && n.name === 'Placeholder' && isOwnNode(n),
   );
   for (let p = 0; p < placeholders.length; p++) {
     const ph = placeholders[p];
@@ -757,6 +769,25 @@ async function normalizeCopyWrapVisibility(slide: InstanceNode): Promise<boolean
   }
 
   return changed;
+}
+
+/**
+ * Walks the parent chain from `node` up to (but not past) `scopeRoot`.
+ * Returns true if any ancestor along the way is itself an INSTANCE — i.e.
+ * `node` lives inside a nested component instance whose internal structure
+ * is owned by that component, not by the scope.
+ *
+ * Confirmed via Figma MCP that Welder Badge instances live inside CopyWrap
+ * and carry their own `Placeholder` TEXT child (visibility = badge's
+ * displayed text), which the plugin must not touch.
+ */
+function isInsideNestedInstance(node: SceneNode, scopeRoot: InstanceNode): boolean {
+  let current: BaseNode | null = node.parent;
+  while (current !== null && current !== scopeRoot) {
+    if (current.type === 'INSTANCE') return true;
+    current = current.parent;
+  }
+  return false;
 }
 
 async function scanSlide(slide: InstanceNode): Promise<SlideScan> {

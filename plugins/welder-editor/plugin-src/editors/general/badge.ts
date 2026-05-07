@@ -82,52 +82,12 @@ function findTextByName(scope: SceneNode, name: string): TextNode | null {
   return found as TextNode;
 }
 
-/**
- * Find the badge's label TEXT node by trying a series of name variants
- * commonly used across Welder library iterations and i18n. The list of
- * exclusions ('Icon', 'icon') is critical: when the badge has BOTH a
- * Label text node AND an Icon text node (icon-font fallback slot),
- * a naive findFirstText could return the Icon node and the user's
- * label text would land in the icon position. See spec §9-T9.
- */
-function findBadgeLabelText(badge: InstanceNode): TextNode | null {
-  if (!('findOne' in badge)) return null;
-  const nameCandidates = [
-    'Label',
-    'label',
-    'Tekst',
-    'tekst',
-    'Text',
-    'text',
-    'Title',
-    'title',
-    'BadgeLabel',
-  ];
-  for (let i = 0; i < nameCandidates.length; i++) {
-    const found = badge.findOne(
-      (n: SceneNode) => n.type === 'TEXT' && n.name === nameCandidates[i],
-    );
-    if (found !== null && found.type === 'TEXT') return found as TextNode;
-  }
-  // Last-resort: any TEXT whose name isn't an icon-font slot.
-  const fallback = badge.findOne(
-    (n: SceneNode) => n.type === 'TEXT' && n.name !== 'Icon' && n.name !== 'icon',
-  );
-  if (fallback !== null && fallback.type === 'TEXT') return fallback as TextNode;
-  return null;
-}
-
-/**
- * Enumerate the names of all TEXT descendants of `badge` for diagnostic
- * logging when no label target was found. Bounded by findAll which
- * traverses the badge's tree only.
- */
-function listTextNodeNames(badge: InstanceNode): string[] {
-  if (!('findAll' in badge)) return [];
-  const all = badge.findAll((n: SceneNode) => n.type === 'TEXT');
-  const names: string[] = [];
-  for (let i = 0; i < all.length; i++) names.push(all[i].name);
-  return names;
+function findFirstText(scope: SceneNode): TextNode | null {
+  if (!('findOne' in scope)) return null;
+  const found = scope.findOne((n: SceneNode) => n.type === 'TEXT');
+  if (found === null) return null;
+  if (found.type !== 'TEXT') return null;
+  return found as TextNode;
 }
 
 // ============================================================
@@ -217,32 +177,16 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
         }
       }
     }
-    // Fallback: direct text node mutation. `findBadgeLabelText` tries
-    // a series of name candidates ('Label', 'label', 'Tekst', 'Text',
-    // 'Title', etc.) and explicitly excludes 'Icon'/'icon' from the
-    // last-resort match so the user's label text never lands in the
-    // icon-font slot.
+    // Fallback: direct text node mutation.
     if (!labelSet) {
-      var labelNode = findBadgeLabelText(badge);
+      var labelNode = findTextByName(badge, 'Label');
+      if (labelNode === null) {
+        labelNode = findFirstText(badge);
+      }
       if (labelNode !== null) {
         await setTextCharactersSafe(labelNode, payload.label);
-        console.log('[badge] label set via text node "' + labelNode.name + '"');
-        labelSet = true;
+        console.log('[badge] label set via text node');
       }
-    }
-
-    // Diagnostic: surface the badge's actual TEXT descendants so the
-    // library author can name them in line with the candidates above
-    // (or so we can extend the candidate list).
-    if (!labelSet) {
-      const textNames = listTextNodeNames(badge);
-      console.log(
-        '[badge] could not find label target on "' +
-          badge.name +
-          '". TEXT descendants: [' +
-          textNames.join(', ') +
-          '] — extend findBadgeLabelText candidates if a match is missing.',
-      );
     }
   }
 
