@@ -1995,6 +1995,34 @@ async function main(): Promise<void> {
   // dus er is geen volledige paginascan nodig.
   await loadFonts();
 
+  // Pre-warm icon-swap cache. The Welder Card master's INSTANCE_SWAP
+  // property carries ~1500 preferredValues (the full Lucide collection),
+  // and `buildPrefValueCache` resolves each via importComponentByKeyAsync
+  // — many seconds in aggregate. Without pre-warming, a user who picks
+  // a badge icon shortly after plugin open lands inside the cache-build
+  // wait inside `swapComponentByName` (Badge's icon path), and the swap
+  // visibly stalls; the bug surfaces as "works after switching slides
+  // back and forth" because by then the build has finished.
+  //
+  // Kick the build off here, fire-and-forget, so it's already running
+  // (or done) by the time the iframe sends ui-ready. The post-slide-
+  // loaded primeIconCache call is now a no-op safety net — it
+  // short-circuits on the existing prefValueBuildPromise.
+  (async function () {
+    try {
+      const slides = findSlidesOnPage();
+      for (let i = 0; i < slides.length; i++) {
+        const card = slides[i].findOne((n: SceneNode) => n.type === 'INSTANCE' && n.name === 'Card');
+        if (card !== null && card.type === 'INSTANCE') {
+          primeIconCache(card as InstanceNode).catch(() => {});
+          return;
+        }
+      }
+    } catch (_e) {
+      // Fall back to the post-slide-loaded prime path; nothing to do here.
+    }
+  })();
+
   figma.ui.onmessage = (raw: unknown) => {
     const msg = raw as UIToPluginMessage;
     handleMessage(msg).catch((err: unknown) => {
