@@ -4,23 +4,24 @@
   Four icon-only actions:
     1. Export presentation as PDF (current page → multi-page PDF)
     2. Export current slide as PDF
-    3. Undo (figma.triggerUndo)
-    4. Redo — DISABLED. Figma's plugin API exposes triggerUndo but no
-       redo equivalent. The button stays visible (so the surface is
-       symmetric) but tooltips the user toward the native shortcut.
+    3. Undo plugin edit  → popForUndo() + sandbox `trigger-undo`
+    4. Redo plugin edit  → popForRedo() + replay the original
+                            bridge message
 
-  All buttons surface as icon-only; tooltips give the user-facing
-  label so the bar stays compact for narrow plugin widths.
+  Plugin Undo/Redo only covers tracked plugin actions (currently
+  update-general, update-card, set-slide-theme — see
+  `useEditHistory`). Native Cmd+Z / Cmd+Shift+Z still works for
+  everything else; that's the keyboard escape hatch.
 -->
 <script setup lang="ts">
 import { computed } from 'vue';
 import { usePluginBridge } from '../composables/usePluginBridge';
 import { usePluginView } from '../stores/usePluginView';
-import { useNotifications } from '../stores/useNotifications';
+import { useEditHistory } from '../stores/useEditHistory';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
-const notifications = useNotifications();
+const editHistory = useEditHistory();
 
 const hasSlide = computed<boolean>(() => view.state.currentSlideId !== null);
 
@@ -34,17 +35,23 @@ function exportSlide(): void {
   bridge.post({ type: 'export-pdf', target: 'slide', slideId: id });
 }
 
-function triggerUndo(): void {
+function onUndo(): void {
+  // Move the most-recent tracked action onto the undone stack and ask
+  // the sandbox to revert. The sandbox commits an undo checkpoint
+  // before each tracked mutation, so triggerUndo reverts exactly
+  // that one action.
+  const msg = editHistory.popForUndo();
+  if (msg === null) return;
   bridge.post({ type: 'trigger-undo' });
 }
 
-function redoTooltip(): void {
-  // Plugin API has no triggerRedo. Hint the user toward Figma's native
-  // shortcut. macOS: Cmd+Shift+Z; Windows/Linux: Ctrl+Y.
-  notifications.pushInfo(
-    'Redo niet beschikbaar in plugin',
-    'Gebruik Cmd+Shift+Z (Mac) of Ctrl+Y (Windows) in Figma.',
-  );
+function onRedo(): void {
+  // Replay the most-recently-undone bridge message verbatim. The
+  // sandbox handler runs commitUndo + the apply, so the redone state
+  // becomes a fresh undo checkpoint on top.
+  const msg = editHistory.popForRedo();
+  if (msg === null) return;
+  bridge.post(msg);
 }
 </script>
 
@@ -75,16 +82,18 @@ function redoTooltip(): void {
       color="neutral"
       variant="ghost"
       size="md"
-      title="Ongedaan maken"
-      @click="triggerUndo"
+      :disabled="!editHistory.canUndo"
+      title="Plugin-wijziging ongedaan maken"
+      @click="onUndo"
     />
     <UButton
       icon="i-lucide-redo-2"
       color="neutral"
       variant="ghost"
       size="md"
-      title="Opnieuw — gebruik Cmd+Shift+Z (Mac) / Ctrl+Y (Windows)"
-      @click="redoTooltip"
+      :disabled="!editHistory.canRedo"
+      title="Plugin-wijziging opnieuw toepassen"
+      @click="onRedo"
     />
   </div>
 </template>

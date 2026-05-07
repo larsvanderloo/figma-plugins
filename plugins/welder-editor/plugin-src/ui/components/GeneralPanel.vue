@@ -24,9 +24,11 @@ import BadgeEditor, { type BadgeValue } from './BadgeEditor.vue';
 import ImageEditor, { type ImageValue } from './ImageEditor.vue';
 import { usePluginBridge } from '../composables/usePluginBridge';
 import { usePluginView } from '../stores/usePluginView';
+import { useEditHistory } from '../stores/useEditHistory';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
+const editHistory = useEditHistory();
 
 const general = computed(() => view.state.general);
 const slideId = computed(() => view.state.currentSlideId);
@@ -172,17 +174,19 @@ function onBadgeUpdate(value: BadgeValue): void {
     b.label = value.label;
     b.icon = value.icon;
   }
-  bridge.post({
-    type: 'update-general',
+  const msg = {
+    type: 'update-general' as const,
     slideId: id,
-    section: 'badge',
+    section: 'badge' as const,
     payload: {
       label: value.label,
       // Leegstring icon alleen skippen als we niks willen muteren;
       // hier sturen we altijd mee zodat de user een icoon kan kiezen.
       icon: value.icon,
     },
-  });
+  };
+  editHistory.recordIssued(msg);
+  bridge.post(msg);
 }
 
 /** v-model-payload voor ImageEditor — afgeleid uit de imageHash. */

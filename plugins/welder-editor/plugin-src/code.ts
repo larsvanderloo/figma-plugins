@@ -1419,6 +1419,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     }
     if (msg.section === 'titleDescription') {
       const payload = msg.payload as TitleDescriptionPayload;
+      figma.commitUndo();
       await applyTitleDescription(slide, payload);
       await refreshTablesOnSlide(slide); // T39.3: re-render tables na CopyWrap-edit
       postToUI({
@@ -1430,6 +1431,10 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     }
     if (msg.section === 'badge') {
       const payload = msg.payload as BadgePayload;
+      // commitUndo before each plugin mutation creates a discrete
+      // checkpoint so the iframe's plugin-Undo button reverts EXACTLY
+      // this action (and not a coalesced batch with whatever followed).
+      figma.commitUndo();
       await applyBadge(slide, payload);
       postToUI({
         type: 'target-updated',
@@ -1480,6 +1485,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
+    figma.commitUndo();
     await applyCard(slide, {
       cardNodeId: msg.cardNodeId,
       heading: msg.payload.heading,
@@ -1888,6 +1894,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         : collections[0].modes.find((m) => m.modeId === msg.modeId) ?? null;
     const targetName = sourceMode === null ? null : sourceMode.name;
 
+    figma.commitUndo();
     try {
       for (let i = 0; i < collections.length; i++) {
         const c = collections[i];
