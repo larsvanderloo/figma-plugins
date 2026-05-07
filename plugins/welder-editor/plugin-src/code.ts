@@ -1469,6 +1469,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       postToUI({ type: 'target-updated', ok: false, error: 'Heading node not found' });
       return;
     }
+    figma.commitUndo();
     await applyAccentRanges(headingNode, msg.dimRanges);
     await refreshTablesOnSlide(slide); // T39.3: heading-fill mutatie kan line-wrap reflowen
     postToUI({ type: 'target-updated', ok: true, targetId: headingNode.id });
@@ -1529,6 +1530,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
+    figma.commitUndo();
     if (typeof msg.payload.heading === 'string') {
       const headingNode = copyWrap.findOne((n: SceneNode) => {
         return n.type === 'TEXT' && n.name === 'Heading';
@@ -1578,6 +1580,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
+    figma.commitUndo();
     const scene = target as SceneNode;
     scene.setPluginData('kind', 'welder-chartwrap');
     scene.setPluginData('v', '1');
@@ -1675,6 +1678,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
+    figma.commitUndo();
     await applyTable(slotNode as SlotNode, msg.desired);
     postToUI({
       type: 'target-updated',
@@ -1705,6 +1709,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
+    figma.commitUndo();
     await importCSV(slotNode as SlotNode, msg.csv);
     postToUI({
       type: 'target-updated',
@@ -1734,6 +1739,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
+    figma.commitUndo();
     await applyJourney(journeySlotNode as SlotNode, msg.desired);
     postToUI({
       type: 'target-updated',
@@ -1772,6 +1778,8 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     const targetParent = 'parent' in target ? (target as SceneNode).parent : null;
     const isCardChild =
       cardWrap !== null && targetParent !== null && targetParent.id === cardWrap.id;
+
+    figma.commitUndo();
 
     if (isCardChild) {
       const newHash = await applyCardVisual(slide, msg.targetNodeId, msg.bytes);
@@ -1959,6 +1967,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
+    figma.commitUndo();
     (skipParent as SlideNode).isSkippedSlide = msg.skipped;
     // Re-build slide-list zodat elke SlideSummary een verse `isSkipped` meekrijgt.
     // `page-changed` draagt de volledige lijst en gaat ongededuped uit — we
