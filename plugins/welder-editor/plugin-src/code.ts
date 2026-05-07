@@ -441,33 +441,48 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
 // ============================================================
 
 /**
- * Cache the Theme variable collection so we don't refetch on every
- * scan. Reset by closing/reopening the plugin if the user renames or
- * recreates the collection.
+ * Discover every variable collection named "Theme" that the slide is
+ * actually bound to (explicit OR resolved). Welder Templates files
+ * carry TWO `Theme` collections in parallel — a local one and the
+ * library one from "Templates Welder" — and both must be set in lock-
+ * step so the body theme AND the accent (which references library
+ * variables) follow the picker.
+ *
+ * Returns the collections in stable order: local first, library second
+ * (or whatever order their IDs sort in). The picker uses the first
+ * collection's modes for its UI; the writer below maps the chosen mode
+ * onto every collection by NAME.
  */
-let themeCollectionCache: VariableCollection | null = null;
-let themeCollectionFetched = false;
-
-async function getThemeCollection(): Promise<VariableCollection | null> {
-  if (themeCollectionFetched) return themeCollectionCache;
-  themeCollectionFetched = true;
-  try {
-    const collections = await figma.variables.getLocalVariableCollectionsAsync();
-    for (let i = 0; i < collections.length; i++) {
-      if (collections[i].name === 'Theme') {
-        themeCollectionCache = collections[i];
-        return themeCollectionCache;
-      }
-    }
-  } catch (err: unknown) {
-    console.log('[welder-slide-editor] getThemeCollection failed:', err);
+async function findThemeCollectionsForSlide(slide: InstanceNode): Promise<VariableCollection[]> {
+  const ids = new Set<string>();
+  if (slide.explicitVariableModes) {
+    for (const k of Object.keys(slide.explicitVariableModes)) ids.add(k);
   }
-  return null;
+  if (slide.resolvedVariableModes) {
+    for (const k of Object.keys(slide.resolvedVariableModes)) ids.add(k);
+  }
+  const result: VariableCollection[] = [];
+  for (const id of ids) {
+    try {
+      const c = await figma.variables.getVariableCollectionByIdAsync(id);
+      if (c !== null && c.name === 'Theme') result.push(c);
+    } catch (err: unknown) {
+      // ignore — collection may have been removed
+    }
+  }
+  // Local before remote so the picker's swatches come from the local
+  // collection (faster to resolve, no library round-trip).
+  result.sort((a, b) => (a.remote === b.remote ? 0 : a.remote ? 1 : -1));
+  return result;
 }
 
 async function scanTheme(slide: InstanceNode): Promise<GeneralSections['theme']> {
-  const collection = await getThemeCollection();
-  if (collection === null) return null;
+  const collections = await findThemeCollectionsForSlide(slide);
+  if (collections.length === 0) return null;
+  // Picker reads its modes + swatches from the first (local-preferred)
+  // collection. The set-slide-theme handler then mirrors the choice onto
+  // every Theme collection by name.
+  const collection = collections[0];
 
   const explicit =
     slide.explicitVariableModes !== undefined && slide.explicitVariableModes !== null
@@ -1716,19 +1731,49 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
-    const collection = await getThemeCollection();
-    if (collection === null) {
+    const collections = await findThemeCollectionsForSlide(themeSlide);
+    if (collections.length === 0) {
       postToUI({
         type: 'target-updated',
         ok: false,
-        error: 'Theme variable collection not found in this file',
+        error: 'Theme variable collection not found on this slide',
       });
       return;
     }
+    // Resolve the chosen mode to its NAME on the source (first) collection,
+    // then apply the equivalent mode (matched by name) on every other
+    // Theme collection in scope. Welder Templates carries a local Theme
+    // mirror of the library Theme; both must move together so the body
+    // theme AND the accent text colour follow the picker.
+    const sourceMode =
+      msg.modeId === null
+        ? null
+        : collections[0].modes.find((m) => m.modeId === msg.modeId) ?? null;
+    const targetName = sourceMode === null ? null : sourceMode.name;
+
     try {
-      // `null` clears the explicit binding so the slide inherits the
-      // page-level mode. Any string mode-id pins the slide to that mode.
-      themeSlide.setExplicitVariableModeForCollection(collection, msg.modeId);
+      for (let i = 0; i < collections.length; i++) {
+        const c = collections[i];
+        if (msg.modeId === null) {
+          // Clear: slide inherits the page-level mode for this collection.
+          themeSlide.setExplicitVariableModeForCollection(c, null);
+          continue;
+        }
+        const matching = c.modes.find((m) => m.name === targetName);
+        if (matching === undefined) {
+          console.log(
+            '[welder-slide-editor] no Theme mode named "' +
+              String(targetName) +
+              '" in collection ' +
+              c.name +
+              ' (id ' +
+              c.id +
+              ') — skipping',
+          );
+          continue;
+        }
+        themeSlide.setExplicitVariableModeForCollection(c, matching.modeId);
+      }
     } catch (err: unknown) {
       const text = err instanceof Error ? err.message : String(err);
       postToUI({
