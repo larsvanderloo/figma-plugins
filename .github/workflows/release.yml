@@ -1,0 +1,167 @@
+name: Release
+
+# Release pipeline. Triggered when a tag matching `<plugin-slug>@v*` is
+# pushed to the repo. Today only `welder-editor` is wired; add a new job
+# (or extend matrix) when another plugin needs auto-release.
+#
+# What it does for `welder-editor@v*` tags:
+#   1. Checkout the tagged commit.
+#   2. npm ci + build + typecheck (same gates as the validate workflow's
+#      npm-plugin-welder-editor job — release artifacts must pass CI).
+#   3. Validate manifest + build artifacts via tools/validate_manifest.py.
+#   4. Stage the loadable bundle (manifest.json + dist/code.js +
+#      dist/ui.html) into welder-editor-<version>/, zip it.
+#   5. gh release create with auto-generated notes (commits since the
+#      previous welder-editor tag).
+#
+# Self-hosted macOS arm64 runner — same setup as validate.yml. The
+# launchd-spawned runner needs PATH munging so /opt/homebrew/bin
+# resolves npm/python3.
+
+on:
+  push:
+    tags:
+      - 'welder-editor@v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to (re-)release, e.g. welder-editor@v0.2.0'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+env:
+  PATH_HOMEBREW: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
+
+jobs:
+  welder-editor:
+    name: welder-editor release
+    if: startsWith(github.ref, 'refs/tags/welder-editor@v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.tag, 'welder-editor@v'))
+    runs-on: [self-hosted, macOS, ARM64]
+    env:
+      PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
+    steps:
+      - name: Resolve tag ref
+        id: tagref
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "ref=refs/tags/${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "ref=${{ github.ref }}" >> "$GITHUB_OUTPUT"
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Checkout (tagged commit)
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tagref.outputs.ref }}
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        # Tag is welder-editor@v0.2.0 → version is 0.2.0 (no leading v)
+        # Used for the artifact directory name and zip filename.
+        run: |
+          TAG="${{ steps.tagref.outputs.tag }}"
+          VERSION="${TAG#welder-editor@v}"
+          if [ -z "$VERSION" ] || [ "$VERSION" = "$TAG" ]; then
+            echo "::error::Could not extract version from tag '$TAG'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Tag: $TAG → version: $VERSION"
+
+      - name: Install (npm ci with lockfile fallback)
+        working-directory: plugins/welder-editor
+        run: |
+          if ! npm ci --no-audit --no-fund; then
+            echo "::warning::npm ci failed (lockfile drift) — falling back to npm install"
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Build + typecheck
+        working-directory: plugins/welder-editor
+        run: |
+          npm run build
+          npm run typecheck:ui
+
+      - name: Validate manifest + build artifacts
+        run: |
+          python3 tools/validate_manifest.py plugins/welder-editor/manifest.json
+          python3 tools/validate_manifest.py --build-artifacts plugins/welder-editor/manifest.json
+
+      - name: Stage artifact
+        # Layout inside the zip mirrors what a developer would point Figma
+        # at via "Import plugin from manifest": a folder containing the
+        # manifest and a dist/ subdirectory with the two bundles.
+        run: |
+          set -euo pipefail
+          STAGE="welder-editor-v${{ steps.version.outputs.version }}"
+          rm -rf "build-release/$STAGE"
+          mkdir -p "build-release/$STAGE/dist"
+          cp plugins/welder-editor/manifest.json "build-release/$STAGE/"
+          cp plugins/welder-editor/dist/code.js "build-release/$STAGE/dist/"
+          cp plugins/welder-editor/dist/ui.html "build-release/$STAGE/dist/"
+          ls -la "build-release/$STAGE" "build-release/$STAGE/dist"
+
+      - name: Zip artifact
+        working-directory: build-release
+        run: |
+          set -euo pipefail
+          STAGE="welder-editor-v${{ steps.version.outputs.version }}"
+          zip -r "$STAGE.zip" "$STAGE"
+          ls -la "$STAGE.zip"
+
+      - name: Resolve previous tag for changelog
+        id: prevtag
+        # Auto-generated notes need a `--notes-start-tag`. Find the prior
+        # welder-editor@v* tag (lex-sorted; SemVer-clean enough for now).
+        run: |
+          set -euo pipefail
+          CURRENT="${{ steps.tagref.outputs.tag }}"
+          PREV="$(git tag -l 'welder-editor@v*' --sort=-v:refname | grep -v "^${CURRENT}\$" | head -n 1 || true)"
+          if [ -z "$PREV" ]; then
+            echo "No previous welder-editor tag — release notes will list all commits."
+          else
+            echo "Previous tag: $PREV"
+          fi
+          echo "prev=$PREV" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tagref.outputs.tag }}"
+          VERSION="${{ steps.version.outputs.version }}"
+          STAGE="welder-editor-v${VERSION}"
+          ZIP="build-release/${STAGE}.zip"
+          PREV="${{ steps.prevtag.outputs.prev }}"
+
+          # If the release already exists (tag was retagged or workflow re-run),
+          # upload the artifact onto it with --clobber instead of failing.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG exists — uploading artifact with --clobber"
+            gh release upload "$TAG" "$ZIP" --clobber
+          else
+            echo "Creating release $TAG"
+            if [ -n "$PREV" ]; then
+              gh release create "$TAG" \
+                --title "Welder Editor v${VERSION}" \
+                --generate-notes \
+                --notes-start-tag "$PREV" \
+                "$ZIP"
+            else
+              gh release create "$TAG" \
+                --title "Welder Editor v${VERSION}" \
+                --generate-notes \
+                "$ZIP"
+            fi
+          fi
+
+      - name: Cleanup staging
+        if: always()
+        run: rm -rf build-release
