@@ -1,21 +1,18 @@
 <!--
-  SlideThemeSwitcher — slide-level Theme-collection mode picker.
+  SlideThemeSwitcher — slide-level Theme-collection mode picker rendered
+  as a row of color swatches. Each swatch is a two-tone circle showing
+  the mode's primary + secondary color (resolved sandbox-side from the
+  Theme collection's first two COLOR variables).
 
-  Shows the modes of the file's `Theme` variable collection (as scanned
-  by sandbox-side `scanTheme`) plus an "Auto" option that clears the
-  slide's explicit binding and inherits from the page.
+  No "Auto" option: every click pins an explicit mode via
+  `setExplicitVariableModeForCollection`. Page-level inheritance is
+  still respected if a slide has no explicit mode at the time of scan,
+  but the picker doesn't expose a "clear" affordance — the assumption is
+  that the user wants per-slide control once they touch the picker.
 
-  Hidden entirely when no Theme collection exists in the file (older
-  Welder libraries or files where the collection has been removed).
-
-  Mutation flow:
-    user picks → emit `update:modelValue` (string | null, where null
-    means inherit) → parent posts `set-slide-theme` over the bridge →
-    sandbox calls `setExplicitVariableModeForCollection` and replies
-    with a fresh `slide-loaded` so the picker re-syncs.
+  Hidden entirely (by parent v-if) when no Theme collection exists.
 -->
 <script setup lang="ts">
-import { computed } from 'vue';
 import type { ThemeSection } from '../../types';
 
 interface Props {
@@ -25,48 +22,51 @@ interface Props {
 const props = defineProps<Props>();
 
 const emit = defineEmits<{
-  'update:modelValue': [value: string | null];
+  'update:modelValue': [value: string];
 }>();
 
-const AUTO_VALUE = '__auto__';
-
-interface Item {
-  label: string;
-  value: string;
+function activeId(): string {
+  // Prefer the slide's explicit mode; fall back to the resolved mode
+  // (the inherited page-level mode) so the picker always highlights
+  // what the user currently sees on the canvas.
+  return props.theme.explicitModeId ?? props.theme.resolvedModeId;
 }
 
-const items = computed<Item[]>(() => {
-  const inheritedName =
-    props.theme.modes.find((m) => m.id === props.theme.resolvedModeId)?.name ?? 'page default';
-  const result: Item[] = [
-    { label: `Auto (${inheritedName})`, value: AUTO_VALUE },
-  ];
-  for (const mode of props.theme.modes) {
-    result.push({ label: mode.name, value: mode.id });
-  }
-  return result;
-});
-
-const selected = computed<string>(() =>
-  props.theme.explicitModeId === null ? AUTO_VALUE : props.theme.explicitModeId,
-);
-
-function onSelect(value: string): void {
-  if (value === AUTO_VALUE) {
-    emit('update:modelValue', null);
-  } else {
-    emit('update:modelValue', value);
-  }
+function select(modeId: string): void {
+  emit('update:modelValue', modeId);
 }
 </script>
 
 <template>
-  <USelect
-    :model-value="selected"
-    :items="items"
-    value-key="value"
-    size="md"
-    class="w-full"
-    @update:model-value="onSelect"
-  />
+  <div class="flex items-center gap-3">
+    <button
+      v-for="mode in props.theme.modes"
+      :key="mode.id"
+      type="button"
+      class="flex flex-col items-center gap-1.5 group focus:outline-none"
+      :title="mode.name"
+      @click="select(mode.id)"
+    >
+      <span
+        class="size-9 rounded-full transition ring-2 ring-offset-2 ring-offset-default overflow-hidden"
+        :class="
+          mode.id === activeId()
+            ? 'ring-[#FF7700]'
+            : 'ring-transparent group-hover:ring-[--ui-border]'
+        "
+        :style="{
+          background:
+            mode.swatchPrimary && mode.swatchSecondary
+              ? `linear-gradient(135deg, ${mode.swatchPrimary} 0%, ${mode.swatchPrimary} 50%, ${mode.swatchSecondary} 50%, ${mode.swatchSecondary} 100%)`
+              : mode.swatchPrimary ?? '#e5e7eb',
+        }"
+      />
+      <span
+        class="text-xs leading-tight"
+        :class="mode.id === activeId() ? 'text-default font-medium' : 'text-muted'"
+      >
+        {{ mode.name }}
+      </span>
+    </button>
+  </div>
 </template>

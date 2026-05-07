@@ -52,6 +52,7 @@ import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from './editors/_shared
 import type {
   SlideSummary,
   GeneralSections,
+  ThemeMode,
   ContentItems,
   GraphItems,
   CardItem,
@@ -483,7 +484,33 @@ async function scanTheme(slide: InstanceNode): Promise<GeneralSections['theme']>
   const resolvedModeId =
     typeof resolved === 'string' && resolved.length > 0 ? resolved : collection.defaultModeId;
 
-  const modes = collection.modes.map((m) => ({ id: m.modeId, name: m.name }));
+  // Pick the first two COLOR variables in the collection as the picker's
+  // swatch colors. Library-agnostic: works for any Theme collection
+  // whose first two color slots are the dominant + accent colors.
+  const colorVars: Variable[] = [];
+  for (let i = 0; i < collection.variableIds.length && colorVars.length < 2; i++) {
+    const v = await figma.variables.getVariableByIdAsync(collection.variableIds[i]);
+    if (v !== null && v.resolvedType === 'COLOR') colorVars.push(v);
+  }
+
+  const modes: ThemeMode[] = [];
+  for (let i = 0; i < collection.modes.length; i++) {
+    const m = collection.modes[i];
+    const primary =
+      colorVars.length >= 1
+        ? await resolveColorAsHex(colorVars[0].valuesByMode[m.modeId], m.modeId)
+        : null;
+    const secondary =
+      colorVars.length >= 2
+        ? await resolveColorAsHex(colorVars[1].valuesByMode[m.modeId], m.modeId)
+        : null;
+    modes.push({
+      id: m.modeId,
+      name: m.name,
+      swatchPrimary: primary,
+      swatchSecondary: secondary,
+    });
+  }
 
   return {
     collectionId: collection.id,
@@ -492,6 +519,46 @@ async function scanTheme(slide: InstanceNode): Promise<GeneralSections['theme']>
     resolvedModeId: resolvedModeId,
     modes: modes,
   };
+}
+
+/**
+ * Resolve a Figma variable value (which may be `RGB`/`RGBA` directly or
+ * a `VARIABLE_ALIAS` pointing at another variable) to a `#rrggbb` hex
+ * string. Walks one alias hop; on alias-to-another-collection, falls
+ * back to the aliased variable's first available mode value.
+ *
+ * Returns null when the value is undefined, isn't a color, or the alias
+ * chain can't be resolved.
+ */
+async function resolveColorAsHex(value: VariableValue | undefined, modeId: string): Promise<string | null> {
+  if (value === undefined || value === null) return null;
+  if (typeof value === 'object' && 'r' in value && typeof (value as RGB).r === 'number') {
+    return rgbToHex(value as RGB);
+  }
+  if (typeof value === 'object' && 'type' in value && (value as VariableAlias).type === 'VARIABLE_ALIAS') {
+    const aliased = await figma.variables.getVariableByIdAsync((value as VariableAlias).id);
+    if (aliased === null || aliased.resolvedType !== 'COLOR') return null;
+    const sameMode = aliased.valuesByMode[modeId];
+    if (sameMode !== undefined) return resolveColorAsHex(sameMode, modeId);
+    // Cross-collection alias: take the aliased variable's first mode.
+    const otherColl = await figma.variables.getVariableCollectionByIdAsync(aliased.variableCollectionId);
+    if (otherColl !== null) {
+      for (let i = 0; i < otherColl.modes.length; i++) {
+        const v = aliased.valuesByMode[otherColl.modes[i].modeId];
+        if (v !== undefined) return resolveColorAsHex(v, otherColl.modes[i].modeId);
+      }
+    }
+  }
+  return null;
+}
+
+function rgbToHex(c: RGB): string {
+  const to = (x: number): string => {
+    const v = Math.round(x * 255);
+    const s = v.toString(16);
+    return s.length === 1 ? '0' + s : s;
+  };
+  return '#' + to(c.r) + to(c.g) + to(c.b);
 }
 
 /**
