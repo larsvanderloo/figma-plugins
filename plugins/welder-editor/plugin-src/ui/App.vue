@@ -17,6 +17,7 @@
 -->
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { useToast } from '@nuxt/ui/composables';
 
 import SlideSelector from './components/SlideSelector.vue';
 import SlideThemeSwitcher from './components/SlideThemeSwitcher.vue';
@@ -26,11 +27,17 @@ import GraphsPanel from './components/GraphsPanel.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
 import { usePluginView } from './stores/usePluginView';
 import { useIconRecents } from './stores/useIconRecents';
+import { useNotifications } from './stores/useNotifications';
 import welderLogo from './assets/welder-logo.svg';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
 const iconRecents = useIconRecents();
+const notifications = useNotifications();
+// Hand the Nuxt UI toast handle to the notifications store. Resolves
+// via inject() chain through `<UApp>`, so this MUST happen inside a
+// component setup. Doing it once at app root.
+notifications.init(useToast());
 
 // true until the first 'init' message arrives from main thread
 const initializing = ref<boolean>(true);
@@ -154,7 +161,17 @@ bridge.onMessage((msg) => {
     iconRecents.setItems(msg.items);
     return;
   }
-  // target-updated: toekomstige save-indicator (T8+). Nu stil negeren.
+  if (msg.type === 'target-updated' && msg.ok === false) {
+    // Surface sandbox-side failures via the Nuxt UI toaster so they
+    // don't disappear silently. Successful target-updated messages
+    // stay quiet for now (no save-indicator yet — T8+ scope).
+    notifications.pushError(
+      'Bewerking mislukt',
+      typeof msg.error === 'string' && msg.error.length > 0 ? msg.error : undefined,
+    );
+    return;
+  }
+  // target-updated (ok=true): toekomstige save-indicator (T8+). Nu stil negeren.
 });
 
 // Persist recents to clientStorage whenever the store mutates (i.e.,
