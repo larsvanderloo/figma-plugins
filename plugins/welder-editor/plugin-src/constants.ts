@@ -315,8 +315,8 @@ export const TABLE_MAX_COLS: Record<'sm' | 'md' | 'lg', number> = {
  * De renderer roept `slot.resize(TABLE_WIDTHS[width], slot.height)` aan.
  */
 export const TABLE_WIDTHS: Record<'sm' | 'md' | 'lg', number> = {
-  sm: 800,
-  md: 1200,
+  sm: 840,
+  md: 1119,
   lg: 1728,
 };
 
