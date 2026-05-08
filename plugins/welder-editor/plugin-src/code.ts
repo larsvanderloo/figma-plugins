@@ -1401,6 +1401,41 @@ function postSlideContent(): void {
 }
 
 /**
+ * Self-write echo suppression — call AFTER each iframe-driven `applyXxx`
+ * mutation, BEFORE replying with `target-updated`. Synchronously rescans
+ * `slide` and seeds `lastSentSlideContentSignature` with the post-write
+ * signature, so the documentchange-driven `postSlideContent` 200ms later
+ * sees a sig-match and short-circuits. Without this seed the iframe gets
+ * a `slide-loaded` echo of its own write that clobbers `state.content`
+ * via `view.setSlidePayload` mid-edit (CardItemEditor / TitleDescription
+ * locals get reset in the middle of a typing burst — the "weird bugs"
+ * users reported).
+ *
+ * Guards:
+ *   - Only seeds when `slide.id === lastDisplayedSlideId`. Foreign-slide
+ *     mutations (e.g. background tasks the iframe isn't viewing) keep
+ *     their natural echo path so the iframe isn't left desynchronized.
+ *   - Errors swallowed: a failed seed degrades to "echo fires" — the
+ *     existing safe baseline. Never crash the apply path.
+ *   - Cmd+Z and external canvas edits don't go through `applyXxx`, so
+ *     the sig isn't seeded for them; their `slide-loaded` echo still
+ *     fires (correct: undo MUST update iframe pickers).
+ */
+async function preSeedSlideContentSignature(slide: InstanceNode): Promise<void> {
+  if (slide.id !== lastDisplayedSlideId) return;
+  try {
+    const scan = await scanSlide(slide);
+    lastSentSlideContentSignature = JSON.stringify({
+      g: scan.general,
+      c: scan.content,
+      h: scan.graphs,
+    });
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] preSeedSlideContentSignature failed:', err);
+  }
+}
+
+/**
  * Bouwt een stabiele string die alleen wijzigt als de slide-list
  * inhoudelijk veranderde. Combineert id + number + name + isSkipped —
  * wijziging van één van deze triggert een refresh richting de UI.
@@ -1711,6 +1746,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       figma.commitUndo();
       await applyTitleDescription(slide, payload);
       await refreshTablesOnSlide(slide); // T39.3: re-render tables na CopyWrap-edit
+      await preSeedSlideContentSignature(slide);
       postToUI({
         type: 'target-updated',
         ok: true,
@@ -1725,6 +1761,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       // this action (and not a coalesced batch with whatever followed).
       figma.commitUndo();
       await applyBadge(slide, payload);
+      await preSeedSlideContentSignature(slide);
       postToUI({
         type: 'target-updated',
         ok: true,
@@ -1761,6 +1798,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     figma.commitUndo();
     await applyAccentRanges(headingNode, msg.dimRanges);
     await refreshTablesOnSlide(slide); // T39.3: heading-fill mutatie kan line-wrap reflowen
+    await preSeedSlideContentSignature(slide);
     postToUI({ type: 'target-updated', ok: true, targetId: headingNode.id });
     return;
   }
@@ -1783,6 +1821,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       icon: msg.payload.icon,
       style: msg.payload.style,
     });
+    await preSeedSlideContentSignature(slide);
     postToUI({
       type: 'target-updated',
       ok: true,
