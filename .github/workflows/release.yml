@@ -47,18 +47,43 @@ env:
 jobs:
   welder-editor:
     name: welder-editor release
-    if: startsWith(github.ref, 'refs/tags/welder-editor@v') || (github.event_name == 'workflow_dispatch' && startsWith(github.event.inputs.tag, 'welder-editor@v'))
+    # No job-level `if:` guard — the `on:` trigger already filters tag
+    # pushes to `welder-editor@v*`, and workflow_dispatch input is
+    # validated in the "Resolve tag ref" step below so a missing or
+    # malformed input fails loudly with an explicit message instead of
+    # silently skipping the whole job.
     runs-on: [self-hosted, macOS, ARM64]
     env:
       PATH: /opt/homebrew/bin:/opt/homebrew/sbin:/usr/bin:/bin:/usr/sbin:/sbin
     steps:
       - name: Resolve tag ref
         id: tagref
+        env:
+          DISPATCH_TAG: ${{ github.event.inputs.tag }}
         run: |
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "ref=refs/tags/${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
-            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+            if [ -z "${DISPATCH_TAG:-}" ]; then
+              echo "::error::workflow_dispatch was triggered without a 'tag' input. Re-run from Actions → Release → Run workflow and fill in e.g. welder-editor@v0.2.0."
+              exit 1
+            fi
+            case "$DISPATCH_TAG" in
+              welder-editor@v*) ;;
+              *)
+                echo "::error::tag input must start with 'welder-editor@v', got '$DISPATCH_TAG'."
+                exit 1
+                ;;
+            esac
+            echo "ref=refs/tags/$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
+            echo "tag=$DISPATCH_TAG" >> "$GITHUB_OUTPUT"
           else
+            case "${{ github.ref_name }}" in
+              welder-editor@v*) ;;
+              *)
+                echo "::error::push trigger fired on unexpected ref '${{ github.ref_name }}' — expected welder-editor@v*."
+                exit 1
+                ;;
+            esac
             echo "ref=${{ github.ref }}" >> "$GITHUB_OUTPUT"
             echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
           fi

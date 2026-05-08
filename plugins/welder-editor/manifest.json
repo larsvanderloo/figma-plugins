@@ -1,6 +1,6 @@
 {
   "name": "Welder Editor",
-  "id": "1629244658249217029",
+  "id": "1634482764229929106",
   "api": "1.0.0",
   "main": "dist/code.js",
   "ui": "dist/ui.html",
