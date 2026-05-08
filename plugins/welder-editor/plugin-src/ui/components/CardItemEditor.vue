@@ -150,7 +150,10 @@ function buildPayload(): CardItem {
 
 /**
  * Debounced emit — used for text inputs (heading / paragraph). Coalesces
- * keystroke bursts into one round-trip per 200ms.
+ * keystroke bursts into one round-trip per 80ms. 200ms felt sluggish
+ * after the echo-guard landed (2026-05-08); local state is now safe
+ * across round-trips so we can afford a tighter window without re-
+ * introducing the clobber bug.
  */
 function scheduleEmit(): void {
   if (debounceTimer !== null) clearTimeout(debounceTimer);
@@ -158,7 +161,7 @@ function scheduleEmit(): void {
     debounceTimer = null;
     armEchoGuard();
     emit('update:modelValue', buildPayload());
-  }, 200);
+  }, 80);
 }
 
 /**
