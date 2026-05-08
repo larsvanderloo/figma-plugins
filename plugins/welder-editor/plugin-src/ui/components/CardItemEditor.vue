@@ -95,30 +95,52 @@ watch(
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
+function buildPayload(): CardItem {
+  return {
+    cardNodeId: props.modelValue.cardNodeId,
+    heading: localHeading.value,
+    paragraph: localParagraph.value,
+    icon: localIcon.value,
+    visualHash: props.modelValue.visualHash,
+    // Pass null through unchanged when the card variant doesn't
+    // expose Style; otherwise reflect the current toggle state.
+    style:
+      props.modelValue.style === null
+        ? null
+        : localOutline.value
+          ? 'Outline'
+          : 'Default',
+  };
+}
+
+/**
+ * Debounced emit — used for text inputs (heading / paragraph). Coalesces
+ * keystroke bursts into one round-trip per 200ms.
+ */
 function scheduleEmit(): void {
   if (debounceTimer !== null) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
-    emit('update:modelValue', {
-      cardNodeId: props.modelValue.cardNodeId,
-      heading: localHeading.value,
-      paragraph: localParagraph.value,
-      icon: localIcon.value,
-      visualHash: props.modelValue.visualHash,
-      // Pass null through unchanged when the card variant doesn't
-      // expose Style; otherwise reflect the current toggle state.
-      style:
-        props.modelValue.style === null
-          ? null
-          : localOutline.value
-            ? 'Outline'
-            : 'Default',
-    });
+    emit('update:modelValue', buildPayload());
   }, 200);
+}
+
+/**
+ * Immediate emit — used for discrete user actions (toggle, icon pick)
+ * where waiting for the debounce window adds perceptible lag without
+ * coalescing benefit. Cancels any pending debounced emit so a typing-
+ * burst-then-toggle still results in exactly one emit.
+ */
+function emitNow(): void {
+  if (debounceTimer !== null) {
+    clearTimeout(debounceTimer);
+    debounceTimer = null;
+  }
+  emit('update:modelValue', buildPayload());
 }
 
 function onOutlineToggle(value: boolean): void {
   localOutline.value = value;
-  scheduleEmit();
+  emitNow();
 }
 
 function onHeadingInput(value: string): void {
@@ -133,7 +155,7 @@ function onParagraphInput(value: string): void {
 
 function onIconChange(value: string): void {
   localIcon.value = value;
-  scheduleEmit();
+  emitNow();
 }
 
 // File-input ref + upload-handling.
