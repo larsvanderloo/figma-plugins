@@ -74,6 +74,12 @@ import welderLogo from './assets/welder-logo.svg';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
+
+// Vite injects this from package.json at build time — see vite.config.ts
+// `define` block. Surfaced as a "v0.x.y" UBadge in the splash and header
+// so plugin users (and beta testers reporting bugs) can identify which
+// release they're running without inspecting the manifest.
+const appVersion = __APP_VERSION__;
 const iconRecents = useIconRecents();
 const notifications = useNotifications();
 // Hand the Nuxt UI toast handle to the notifications store. Resolves
@@ -378,6 +384,7 @@ onBeforeUnmount(() => {
           <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
           <span>Voorbereiden…</span>
         </div>
+        <UBadge color="neutral" variant="subtle" size="sm">v{{ appVersion }}</UBadge>
       </div>
     </div>
 
@@ -390,7 +397,10 @@ onBeforeUnmount(() => {
             class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] space-y-5"
           >
             <div class="flex flex-col items-center text-center space-y-3">
-              <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
+              <div class="flex items-center gap-2">
+                <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
+                <UBadge color="neutral" variant="subtle" size="sm">v{{ appVersion }}</UBadge>
+              </div>
               <p class="text-base text-muted max-w-xs">
                 Selecteer een slide en wijzig de titel, het onderschrift en andere content.
               </p>

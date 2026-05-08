@@ -7,9 +7,17 @@
 
 import { defineConfig, type Plugin } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
+import { readFileSync } from 'node:fs';
 import vue from '@vitejs/plugin-vue';
 import ui from '@nuxt/ui/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+
+// Read the plugin's version from package.json at build time so the iframe
+// can render a small "v0.x.y" badge in the UI without having to know about
+// the manifest. Updated whenever you bump package.json before tagging.
+const pkg = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'),
+) as { version: string };
 
 /**
  * Vite's input is plugin-src/ui/index.html; plugin-side esbuild importeert
@@ -42,6 +50,10 @@ function renameIndexToUi(): Plugin {
 
 export default defineConfig({
   root: fileURLToPath(new URL('./plugin-src/ui', import.meta.url)),
+  define: {
+    // Replaced verbatim at bundle-time. Type declared in ui/env.d.ts.
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   plugins: [
     vue(),
     ui({
