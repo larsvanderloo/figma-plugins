@@ -81,11 +81,37 @@ const visualStatusLabel = computed<string>(() => {
   return 'Visual ingesteld';
 });
 
-// Slide-wissel of main-echo: sync lokale refs met prop.
-// localIcon valt terug op '' wanneer icon null is (T32: picker verborgen in dat geval).
+// Echo-guard: na een eigen emit landt er ~400-600ms later een
+// slide-loaded met de net-toegepaste waarde (sandbox commitUndo →
+// applyCard → documentchange → debounced postSlideContent → scan →
+// post). Zonder guard zou de watch hieronder localHeading /
+// localParagraph terugzetten naar de echo-waarde, wat de keystrokes
+// die de user in de tussentijd typte clobbert (cursor-spring,
+// letter-loss). Zelfde patroon als TableEditor.
+let echoExpected = false;
+let echoResetTimer: ReturnType<typeof setTimeout> | null = null;
+// Bijhouden welke cardNodeId we het laatst gezien hebben zodat
+// slide-wissel (dezelfde editor-instance, andere card) niet door de
+// echo-guard wordt geblokkeerd.
+let lastCardNodeId = props.modelValue.cardNodeId;
+
+// Re-sync van prop → local: bij slide-wissel of foreign edit. Echo's
+// van eigen emits worden geskipt zolang de guard openstaat. Wanneer
+// het cardNodeId verandert is het géén echo (slide-wissel / reorder);
+// dan sync'en we onvoorwaardelijk en resetten de guard.
 watch(
   () => props.modelValue,
   (next) => {
+    const isDifferentCard = next.cardNodeId !== lastCardNodeId;
+    if (echoExpected && !isDifferentCard) return;
+    if (isDifferentCard) {
+      echoExpected = false;
+      if (echoResetTimer !== null) {
+        clearTimeout(echoResetTimer);
+        echoResetTimer = null;
+      }
+    }
+    lastCardNodeId = next.cardNodeId;
     localHeading.value = next.heading;
     localParagraph.value = next.paragraph;
     localIcon.value = next.icon !== null ? next.icon : '';
@@ -94,6 +120,15 @@ watch(
 );
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
+
+function armEchoGuard(): void {
+  echoExpected = true;
+  if (echoResetTimer !== null) clearTimeout(echoResetTimer);
+  echoResetTimer = setTimeout(() => {
+    echoExpected = false;
+    echoResetTimer = null;
+  }, 2000);
+}
 
 function buildPayload(): CardItem {
   return {
@@ -120,6 +155,8 @@ function buildPayload(): CardItem {
 function scheduleEmit(): void {
   if (debounceTimer !== null) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
+    debounceTimer = null;
+    armEchoGuard();
     emit('update:modelValue', buildPayload());
   }, 200);
 }
@@ -135,6 +172,7 @@ function emitNow(): void {
     clearTimeout(debounceTimer);
     debounceTimer = null;
   }
+  armEchoGuard();
   emit('update:modelValue', buildPayload());
 }
 
