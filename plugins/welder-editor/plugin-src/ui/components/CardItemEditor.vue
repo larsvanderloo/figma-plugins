@@ -303,9 +303,9 @@ async function onFileSelected(event: Event): Promise<void> {
       <UTextarea
         :model-value="localParagraph"
         :rows="3"
-        :autoresize="true"
         placeholder="Alineatekst"
         class="w-full"
+        :ui="{ base: '[field-sizing:content]' }"
         @update:model-value="onParagraphInput"
       />
     </UFormField>
