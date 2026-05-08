@@ -291,23 +291,32 @@ async function onFileSelected(event: Event): Promise<void> {
     </div>
 
     <UFormField name="heading" label="Koptekst" size="md">
-      <UInput
-        :model-value="localHeading"
+      <!-- Native input — Nuxt UI's UInput re-renders ~10-15 vnodes per
+           keystroke (validation slot, ARIA wrappers, ring/state classes);
+           the parent's typing felt mushy on long bursts. Native <input>
+           with the matching token classes patches one DOM node per
+           keystroke and reads instant. -->
+      <input
+        :value="localHeading"
+        type="text"
         placeholder="Koptekst"
-        class="w-full"
-        @update:model-value="onHeadingInput"
+        class="block w-full rounded-[var(--ui-radius)] border border-[var(--ui-border-accented)] bg-[var(--ui-bg)] px-2.5 py-1.5 text-sm text-[var(--ui-text-highlighted)] placeholder:text-[var(--ui-text-dimmed)] focus:outline-none focus:ring-2 focus:ring-[var(--ui-primary)]"
+        @input="(e) => onHeadingInput((e.target as HTMLInputElement).value)"
       />
     </UFormField>
 
     <UFormField name="paragraph" label="Alinea" size="md">
-      <UTextarea
-        :model-value="localParagraph"
-        :rows="3"
+      <!-- Native textarea — same rationale as the heading input above.
+           field-sizing:content (Chromium 123+) gives CSS-only auto-grow
+           with zero JS per keystroke; falls back to the fixed rows="3"
+           on older runtimes. -->
+      <textarea
+        :value="localParagraph"
+        rows="3"
         placeholder="Alineatekst"
-        class="w-full"
-        :ui="{ base: '[field-sizing:content]' }"
-        @update:model-value="onParagraphInput"
-      />
+        class="block w-full resize-y rounded-[var(--ui-radius)] border border-[var(--ui-border-accented)] bg-[var(--ui-bg)] px-2.5 py-1.5 text-sm text-[var(--ui-text-highlighted)] placeholder:text-[var(--ui-text-dimmed)] focus:outline-none focus:ring-2 focus:ring-[var(--ui-primary)] [field-sizing:content]"
+        @input="(e) => onParagraphInput((e.target as HTMLTextAreaElement).value)"
+      ></textarea>
     </UFormField>
 
     <input
