@@ -1362,6 +1362,44 @@ let lastDisplayedSlideId: string | null = null;
 let pendingSlideContentUpdate: number | null = null;
 let lastSentSlideContentSignature: string = '';
 
+/**
+ * Self-write echo suppression — timestamp window.
+ *
+ * Each iframe-driven `applyXxx` calls `markSelfWrite()` after the
+ * mutation completes. `postSlideContent`'s debounced scan checks
+ * whether we're still within `SELF_WRITE_WINDOW_MS` of the last
+ * self-write; if so, skips the slide-loaded post.
+ *
+ * Why timestamps over the previous sig-pre-seed approach: pre-seed
+ * required an async `scanSlide` per apply, and rapid emits could
+ * complete out of order, leaving the seeded sig stale. The
+ * timestamp comparison is atomic and order-independent — it
+ * doesn't matter how many emits stack up; as long as the last one
+ * was recent, the documentchange-driven scan stays suppressed.
+ *
+ * Tradeoff: native Cmd+Z within ~250ms of a plugin write also gets
+ * suppressed (the iframe pickers won't update for that one undo).
+ * The window is short enough that this is rare and self-correcting
+ * — any subsequent documentchange (or pause + slide-pick) re-syncs.
+ * Plugin-driven undo (`trigger-undo` handler) bypasses
+ * `postSlideContent` entirely with its own explicit `slide-loaded`
+ * post, so iframe-button-driven undo always works.
+ */
+// Bumped 250 → 500ms after user-reported "words skipping" on long
+// applies. Apply chains that include figma.commitUndo + multi-node
+// text writes + auto-layout reflow + setProperties can take 100-300ms.
+// postSlideContent's 200ms debounce can fire BEFORE apply completes
+// if the timer was set by an early documentchange in the chain,
+// missing the final markSelfWrite. 500ms covers the worst-case apply
+// duration plus the debounce. Cmd+Z within 500ms of a self-write
+// still gets suppressed (acceptable — self-correcting on next change).
+const SELF_WRITE_WINDOW_MS = 500;
+let lastSelfWriteAt = 0;
+
+function markSelfWrite(): void {
+  lastSelfWriteAt = Date.now();
+}
+
 function postSlideContent(): void {
   if (lastDisplayedSlideId === null) return;
   if (pendingSlideContentUpdate !== null) {
@@ -1370,6 +1408,12 @@ function postSlideContent(): void {
   pendingSlideContentUpdate = setTimeout(() => {
     pendingSlideContentUpdate = null;
     if (lastDisplayedSlideId === null) return;
+    if (Date.now() - lastSelfWriteAt < SELF_WRITE_WINDOW_MS) {
+      // Inside the self-write window: this documentchange almost
+      // certainly came from our own apply path. Skip — the iframe
+      // already has the value it just emitted in its local refs.
+      return;
+    }
     void (async function () {
       try {
         const slide = findSlideById(lastDisplayedSlideId!);
@@ -1398,41 +1442,6 @@ function postSlideContent(): void {
       }
     })();
   }, 200) as unknown as number;
-}
-
-/**
- * Self-write echo suppression — call AFTER each iframe-driven `applyXxx`
- * mutation, BEFORE replying with `target-updated`. Synchronously rescans
- * `slide` and seeds `lastSentSlideContentSignature` with the post-write
- * signature, so the documentchange-driven `postSlideContent` 200ms later
- * sees a sig-match and short-circuits. Without this seed the iframe gets
- * a `slide-loaded` echo of its own write that clobbers `state.content`
- * via `view.setSlidePayload` mid-edit (CardItemEditor / TitleDescription
- * locals get reset in the middle of a typing burst — the "weird bugs"
- * users reported).
- *
- * Guards:
- *   - Only seeds when `slide.id === lastDisplayedSlideId`. Foreign-slide
- *     mutations (e.g. background tasks the iframe isn't viewing) keep
- *     their natural echo path so the iframe isn't left desynchronized.
- *   - Errors swallowed: a failed seed degrades to "echo fires" — the
- *     existing safe baseline. Never crash the apply path.
- *   - Cmd+Z and external canvas edits don't go through `applyXxx`, so
- *     the sig isn't seeded for them; their `slide-loaded` echo still
- *     fires (correct: undo MUST update iframe pickers).
- */
-async function preSeedSlideContentSignature(slide: InstanceNode): Promise<void> {
-  if (slide.id !== lastDisplayedSlideId) return;
-  try {
-    const scan = await scanSlide(slide);
-    lastSentSlideContentSignature = JSON.stringify({
-      g: scan.general,
-      c: scan.content,
-      h: scan.graphs,
-    });
-  } catch (err: unknown) {
-    console.log('[welder-slide-editor] preSeedSlideContentSignature failed:', err);
-  }
 }
 
 /**
@@ -1744,9 +1753,16 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     if (msg.section === 'titleDescription') {
       const payload = msg.payload as TitleDescriptionPayload;
       figma.commitUndo();
+      // Mark BEFORE apply: the apply chain triggers documentchange events
+      // that arm postSlideContent's 200ms debounce. If apply takes longer
+      // than 200ms (multi-text + auto-layout reflow), the debounce can
+      // fire before apply completes. Marking pre-apply opens the window
+      // early so the debounced scan still skips. We also mark post-apply
+      // to extend the window past completion.
+      markSelfWrite();
       await applyTitleDescription(slide, payload);
       await refreshTablesOnSlide(slide); // T39.3: re-render tables na CopyWrap-edit
-      await preSeedSlideContentSignature(slide);
+      markSelfWrite();
       postToUI({
         type: 'target-updated',
         ok: true,
@@ -1760,8 +1776,9 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       // checkpoint so the iframe's plugin-Undo button reverts EXACTLY
       // this action (and not a coalesced batch with whatever followed).
       figma.commitUndo();
+      markSelfWrite();
       await applyBadge(slide, payload);
-      await preSeedSlideContentSignature(slide);
+      markSelfWrite();
       postToUI({
         type: 'target-updated',
         ok: true,
@@ -1796,9 +1813,10 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       return;
     }
     figma.commitUndo();
+    markSelfWrite();
     await applyAccentRanges(headingNode, msg.dimRanges);
     await refreshTablesOnSlide(slide); // T39.3: heading-fill mutatie kan line-wrap reflowen
-    await preSeedSlideContentSignature(slide);
+    markSelfWrite();
     postToUI({ type: 'target-updated', ok: true, targetId: headingNode.id });
     return;
   }
@@ -1814,6 +1832,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       return;
     }
     figma.commitUndo();
+    markSelfWrite();
     await applyCard(slide, {
       cardNodeId: msg.cardNodeId,
       heading: msg.payload.heading,
@@ -1821,7 +1840,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       icon: msg.payload.icon,
       style: msg.payload.style,
     });
-    await preSeedSlideContentSignature(slide);
+    markSelfWrite();
     postToUI({
       type: 'target-updated',
       ok: true,
