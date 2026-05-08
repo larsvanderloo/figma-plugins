@@ -1385,7 +1385,15 @@ let lastSentSlideContentSignature: string = '';
  * `postSlideContent` entirely with its own explicit `slide-loaded`
  * post, so iframe-button-driven undo always works.
  */
-const SELF_WRITE_WINDOW_MS = 250;
+// Bumped 250 → 500ms after user-reported "words skipping" on long
+// applies. Apply chains that include figma.commitUndo + multi-node
+// text writes + auto-layout reflow + setProperties can take 100-300ms.
+// postSlideContent's 200ms debounce can fire BEFORE apply completes
+// if the timer was set by an early documentchange in the chain,
+// missing the final markSelfWrite. 500ms covers the worst-case apply
+// duration plus the debounce. Cmd+Z within 500ms of a self-write
+// still gets suppressed (acceptable — self-correcting on next change).
+const SELF_WRITE_WINDOW_MS = 500;
 let lastSelfWriteAt = 0;
 
 function markSelfWrite(): void {
@@ -1745,6 +1753,13 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     if (msg.section === 'titleDescription') {
       const payload = msg.payload as TitleDescriptionPayload;
       figma.commitUndo();
+      // Mark BEFORE apply: the apply chain triggers documentchange events
+      // that arm postSlideContent's 200ms debounce. If apply takes longer
+      // than 200ms (multi-text + auto-layout reflow), the debounce can
+      // fire before apply completes. Marking pre-apply opens the window
+      // early so the debounced scan still skips. We also mark post-apply
+      // to extend the window past completion.
+      markSelfWrite();
       await applyTitleDescription(slide, payload);
       await refreshTablesOnSlide(slide); // T39.3: re-render tables na CopyWrap-edit
       markSelfWrite();
@@ -1761,6 +1776,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       // checkpoint so the iframe's plugin-Undo button reverts EXACTLY
       // this action (and not a coalesced batch with whatever followed).
       figma.commitUndo();
+      markSelfWrite();
       await applyBadge(slide, payload);
       markSelfWrite();
       postToUI({
@@ -1797,6 +1813,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       return;
     }
     figma.commitUndo();
+    markSelfWrite();
     await applyAccentRanges(headingNode, msg.dimRanges);
     await refreshTablesOnSlide(slide); // T39.3: heading-fill mutatie kan line-wrap reflowen
     markSelfWrite();
@@ -1815,6 +1832,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       return;
     }
     figma.commitUndo();
+    markSelfWrite();
     await applyCard(slide, {
       cardNodeId: msg.cardNodeId,
       heading: msg.payload.heading,
