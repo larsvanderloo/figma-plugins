@@ -743,6 +743,7 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
       // Image picker shows iff the variant carries an image. On
       // unknown variants we fall back to the scan.
       visualHash: isIconType ? undefined : readCardVisualHash(card),
+      style: readCardStyleVariant(card),
     });
   }
   return items;
@@ -761,6 +762,25 @@ function readCardTypeVariant(card: InstanceNode): string | null {
   if (t === undefined || t === null) return null;
   if (t.type !== 'VARIANT') return null;
   return typeof t.value === 'string' ? t.value : null;
+}
+
+/**
+ * Reads the `Style` VARIANT property off a Card instance. Welder Card
+ * masters expose `Default` (filled) and `Outline` (bordered). Returns
+ * null when the card has no Style property OR its value isn't one of
+ * the two known options — protects the iframe toggle from rendering on
+ * card variants that don't actually support outline/fill switching
+ * (e.g. CardWrap layouts that flatten cards into inline divs).
+ */
+function readCardStyleVariant(card: InstanceNode): 'Default' | 'Outline' | null {
+  const props = card.componentProperties;
+  if (props === null || props === undefined) return null;
+  const s = props['Style'];
+  if (s === undefined || s === null) return null;
+  if (s.type !== 'VARIANT') return null;
+  if (s.value === 'Default') return 'Default';
+  if (s.value === 'Outline') return 'Outline';
+  return null;
 }
 
 /**
@@ -1761,6 +1781,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       heading: msg.payload.heading,
       paragraph: msg.payload.paragraph,
       icon: msg.payload.icon,
+      style: msg.payload.style,
     });
     postToUI({
       type: 'target-updated',

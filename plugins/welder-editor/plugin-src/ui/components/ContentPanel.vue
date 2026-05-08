@@ -104,11 +104,16 @@ function onCardUpdate(value: CardItem): void {
       list[idx].heading = value.heading;
       list[idx].paragraph = value.paragraph;
       list[idx].icon = value.icon;
+      list[idx].style = value.style;
     }
   }
   // T32: icon kan null zijn (icon-instance niet zichtbaar) — stuur het dan
   // niet mee in de payload (main-thread silent-skip bij ontbrekend icon-veld).
   const iconPayload: { icon?: string } = value.icon !== null ? { icon: value.icon } : {};
+  // Style-toggle alleen meesturen als de card-variant `Style` blootstelt
+  // (style !== null). Anders silent-skip; sandbox laat de prop met rust.
+  const stylePayload: { style?: 'Default' | 'Outline' } =
+    value.style !== null ? { style: value.style } : {};
   bridge.post({
     type: 'update-card',
     slideId: id,
@@ -117,6 +122,7 @@ function onCardUpdate(value: CardItem): void {
       heading: value.heading,
       paragraph: value.paragraph,
       ...iconPayload,
+      ...stylePayload,
     },
   });
 }

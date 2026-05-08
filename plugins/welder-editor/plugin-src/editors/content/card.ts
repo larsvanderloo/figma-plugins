@@ -44,6 +44,8 @@ export interface CardPayload {
   paragraph?: string;
   icon?: string;
   visualBytes?: Uint8Array;
+  /** Card `Style` VARIANT property — `Default` (filled) of `Outline`. */
+  style?: 'Default' | 'Outline';
 }
 
 // ============================================================
@@ -240,6 +242,21 @@ export async function applyCard(slide: InstanceNode, payload: CardPayload): Prom
   if (typeof payload.icon === 'string' && payload.icon.length > 0) {
     if (card.type === 'INSTANCE') {
       await applyCardIconSwap(card as InstanceNode, payload.icon);
+    }
+  }
+
+  if (payload.style !== undefined && card.type === 'INSTANCE') {
+    // Style is a VARIANT property on the Welder Card master with values
+    // 'Default' (filled) and 'Outline' (bordered). Silent-skip when the
+    // card-instance doesn't expose a `Style` prop — some CardWrap
+    // layout-variants flatten Cards into inline divs and the toggle
+    // wouldn't have surfaced in the iframe in the first place
+    // (`CardItem.style === null`).
+    try {
+      (card as InstanceNode).setProperties({ Style: payload.style });
+      console.log('[card] style → ' + payload.style);
+    } catch (e) {
+      console.log('[card] setProperties Style failed: ' + String(e));
     }
   }
 
