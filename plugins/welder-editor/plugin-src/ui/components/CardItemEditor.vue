@@ -62,6 +62,10 @@ const emit = defineEmits<{
 const localHeading = ref<string>(props.modelValue.heading);
 const localParagraph = ref<string>(props.modelValue.paragraph);
 const localIcon = ref<string>(props.modelValue.icon !== null ? props.modelValue.icon : '');
+// Card `Style` variant — true = Outline, false = Default (filled).
+// Hidden in the UI when modelValue.style === null (card-instance has
+// no `Style` variant prop; e.g. flattened CardWrap layout-variants).
+const localOutline = ref<boolean>(props.modelValue.style === 'Outline');
 
 // Visual-slot aanwezigheid: undefined = geen slot, null = lege slot,
 // string = gevulde slot. We tonen de upload-knop alleen als de slot
@@ -85,6 +89,7 @@ watch(
     localHeading.value = next.heading;
     localParagraph.value = next.paragraph;
     localIcon.value = next.icon !== null ? next.icon : '';
+    localOutline.value = next.style === 'Outline';
   },
 );
 
@@ -99,8 +104,21 @@ function scheduleEmit(): void {
       paragraph: localParagraph.value,
       icon: localIcon.value,
       visualHash: props.modelValue.visualHash,
+      // Pass null through unchanged when the card variant doesn't
+      // expose Style; otherwise reflect the current toggle state.
+      style:
+        props.modelValue.style === null
+          ? null
+          : localOutline.value
+            ? 'Outline'
+            : 'Default',
     });
   }, 200);
+}
+
+function onOutlineToggle(value: boolean): void {
+  localOutline.value = value;
+  scheduleEmit();
 }
 
 function onHeadingInput(value: string): void {
@@ -149,7 +167,23 @@ async function onFileSelected(event: Event): Promise<void> {
   <section
     class="space-y-3 rounded-[calc(var(--ui-radius)*4)] bg-default px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
   >
-    <h3 class="text-base font-semibold text-default">Kaart {{ index }}</h3>
+    <div class="flex items-center justify-between gap-3">
+      <h3 class="text-base font-semibold text-default">Kaart {{ index }}</h3>
+      <!-- Style toggle — only when the Card variant exposes a `Style`
+           prop. Hidden on flattened CardWrap layouts that have no
+           variant. Off = Default (filled), On = Outline (bordered). -->
+      <label
+        v-if="modelValue.style !== null"
+        class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none"
+      >
+        <span>Outline</span>
+        <USwitch
+          :model-value="localOutline"
+          size="xs"
+          @update:model-value="onOutlineToggle"
+        />
+      </label>
+    </div>
 
     <!--
       Visual / Icon block — both occupy the same slot above the text

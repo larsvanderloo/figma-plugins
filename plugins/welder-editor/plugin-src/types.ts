@@ -326,6 +326,13 @@ export interface CardItem {
    * (de visual-editor verschijnt dan niet in de UI).
    */
   visualHash: string | null | undefined;
+  /**
+   * Card `Style` VARIANT property — `Default` (filled) of `Outline`.
+   * `null` wanneer de card-instance geen `Style`-variant blootstelt (sommige
+   * CardWrap-layout-varianten bakken Cards plat in zonder variant-prop —
+   * de UI verbergt de toggle dan).
+   */
+  style: 'Default' | 'Outline' | null;
 }
 
 /**
@@ -531,6 +538,8 @@ export type UIToPluginMessage =
         paragraph: string;
         icon: string;
         visualHash: string;
+        /** `Default` = filled card; `Outline` = bordered card. */
+        style: 'Default' | 'Outline';
       }>;
     }
   | {
