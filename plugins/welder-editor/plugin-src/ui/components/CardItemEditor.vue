@@ -181,7 +181,7 @@ function emitNow(): void {
 
 function onOutlineToggle(value: boolean): void {
   localOutline.value = value;
-  emitNow();
+  scheduleEmit();
 }
 
 function onHeadingInput(value: string): void {
@@ -196,7 +196,7 @@ function onParagraphInput(value: string): void {
 
 function onIconChange(value: string): void {
   localIcon.value = value;
-  emitNow();
+  scheduleEmit();
 }
 
 // File-input ref + upload-handling.
