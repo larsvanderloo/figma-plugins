@@ -8,16 +8,47 @@
 import { defineConfig, type Plugin } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
 import { readFileSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import vue from '@vitejs/plugin-vue';
 import ui from '@nuxt/ui/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
-// Read the plugin's version from package.json at build time so the iframe
-// can render a small "v0.x.y" badge in the UI without having to know about
-// the manifest. Updated whenever you bump package.json before tagging.
-const pkg = JSON.parse(
-  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'),
-) as { version: string };
+/**
+ * Resolve the iframe's "v0.x.y" badge version. Source priority:
+ *
+ *   1. The most recent `welder-editor@v*` git tag (via `git describe`).
+ *      This auto-tracks tagging without anyone having to bump package.json
+ *      — fixes the long-running drift where local dev builds and CI
+ *      release zips both showed stale badges after a tag bump.
+ *   2. package.json — fallback for environments without git (e.g. shallow
+ *      checkouts, CI containers without the .git directory).
+ *
+ * The release workflow checks out the tagged commit, so step 1 returns
+ * the exact tag of the build. Local dev returns the latest tag (with no
+ * commits-ahead suffix — `--abbrev=0` is intentional, the badge stays
+ * stable between tags rather than churning on every commit).
+ */
+function resolvePluginVersion(): string {
+  try {
+    const tag = execSync("git describe --tags --match 'welder-editor@v*' --abbrev=0", {
+      cwd: fileURLToPath(new URL('.', import.meta.url)),
+      stdio: ['ignore', 'pipe', 'ignore'],
+    })
+      .toString()
+      .trim();
+    if (tag.startsWith('welder-editor@v')) {
+      return tag.slice('welder-editor@v'.length);
+    }
+  } catch (_e) {
+    // No git, no matching tag, or shallow checkout — fall through.
+  }
+  const pkg = JSON.parse(
+    readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'),
+  ) as { version: string };
+  return pkg.version;
+}
+
+const pluginVersion = resolvePluginVersion();
 
 /**
  * Vite's input is plugin-src/ui/index.html; plugin-side esbuild importeert
@@ -52,7 +83,7 @@ export default defineConfig({
   root: fileURLToPath(new URL('./plugin-src/ui', import.meta.url)),
   define: {
     // Replaced verbatim at bundle-time. Type declared in ui/env.d.ts.
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(pluginVersion),
   },
   plugins: [
     vue(),
