@@ -116,6 +116,18 @@ jobs:
             npm install --no-audit --no-fund
           fi
 
+      - name: Sync package.json version to tag
+        # vite.config.ts reads package.json.version at build time and
+        # injects it as __APP_VERSION__ for the iframe's "v0.x.y" badge.
+        # main's package.json drifts from the tags (no commit bumps it),
+        # so without this step every release ships with whatever stale
+        # version was last committed (e.g. v0.2.3 zip showed v0.2.2 badge).
+        # `npm version --no-git-tag-version` rewrites only the version
+        # field; no commit, no tag, just the file in this checkout used
+        # for the build.
+        working-directory: plugins/welder-editor
+        run: npm version --no-git-tag-version --allow-same-version "${{ steps.version.outputs.version }}"
+
       - name: Build + typecheck
         working-directory: plugins/welder-editor
         run: |
