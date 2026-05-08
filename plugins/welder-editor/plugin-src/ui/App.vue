@@ -384,7 +384,6 @@ onBeforeUnmount(() => {
           <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
           <span>Voorbereiden…</span>
         </div>
-        <UBadge color="neutral" variant="subtle" size="sm">v{{ appVersion }}</UBadge>
       </div>
     </div>
 
@@ -397,13 +396,11 @@ onBeforeUnmount(() => {
             class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] space-y-5"
           >
             <div class="flex flex-col items-center text-center space-y-3">
-              <div class="flex items-center gap-2">
-                <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
-                <UBadge color="neutral" variant="subtle" size="sm">v{{ appVersion }}</UBadge>
-              </div>
+              <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
               <p class="text-base text-muted max-w-xs">
                 Selecteer een slide en wijzig de titel, het onderschrift en andere content.
               </p>
+              <span class="text-[0.7rem] text-muted/70 tracking-wide">v{{ appVersion }}</span>
             </div>
 
             <div class="border-t border-[var(--ui-border)] pt-5 space-y-3">
