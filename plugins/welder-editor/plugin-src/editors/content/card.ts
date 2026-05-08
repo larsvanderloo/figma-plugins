@@ -225,23 +225,42 @@ export async function applyCard(slide: InstanceNode, payload: CardPayload): Prom
   const card: SceneNode | null = cardNode !== null ? cardNode : null;
   if (card === null) return;
 
+  // Per-field no-op-skip: the iframe emits the FULL CardItem on every
+  // typing-debounce fire (heading + paragraph + icon + style), even if
+  // only one field changed. Without these checks every keystroke re-runs
+  // the heavy icon swap (getMainComponentAsync + cache lookup +
+  // importComponentByKeyAsync + setProperties) AND a Style setProperties
+  // — adding 30-100ms of wasted sandbox work per keystroke that the user
+  // perceives as typing lag. Reading current state is cheap; skipping
+  // the writes when state already matches is the win.
+
   if (typeof payload.heading === 'string') {
     const headingNode = findTextByName(card, 'Heading');
-    if (headingNode !== null) {
+    if (headingNode !== null && headingNode.characters !== payload.heading) {
       await setTextCharactersSafe(headingNode, payload.heading);
     }
   }
 
   if (typeof payload.paragraph === 'string') {
     const paragraphNode = findTextByName(card, 'Paragraph');
-    if (paragraphNode !== null) {
+    if (paragraphNode !== null && paragraphNode.characters !== payload.paragraph) {
       await setTextCharactersSafe(paragraphNode, payload.paragraph);
     }
   }
 
   if (typeof payload.icon === 'string' && payload.icon.length > 0) {
     if (card.type === 'INSTANCE') {
-      await applyCardIconSwap(card as InstanceNode, payload.icon);
+      const cardInst = card as InstanceNode;
+      // Cheap pre-check: peek at the nested icon's component name and
+      // compare normalized to the desired icon. Skips the entire
+      // INSTANCE_SWAP round-trip on the common no-op path.
+      const currentIconInstance = findNestedIconInstance(cardInst);
+      const currentIconKey =
+        currentIconInstance !== null ? normalizeIconKey(currentIconInstance.name) : '';
+      const desiredIconKey = normalizeIconKey(payload.icon);
+      if (currentIconKey !== desiredIconKey) {
+        await applyCardIconSwap(cardInst, payload.icon);
+      }
     }
   }
 
@@ -252,11 +271,16 @@ export async function applyCard(slide: InstanceNode, payload: CardPayload): Prom
     // layout-variants flatten Cards into inline divs and the toggle
     // wouldn't have surfaced in the iframe in the first place
     // (`CardItem.style === null`).
-    try {
-      (card as InstanceNode).setProperties({ Style: payload.style });
-      console.log('[card] style → ' + payload.style);
-    } catch (e) {
-      console.log('[card] setProperties Style failed: ' + String(e));
+    const cardInst = card as InstanceNode;
+    const props = cardInst.componentProperties;
+    const currentStyle = props && props['Style'] ? props['Style'].value : undefined;
+    if (currentStyle !== payload.style) {
+      try {
+        cardInst.setProperties({ Style: payload.style });
+        console.log('[card] style → ' + payload.style);
+      } catch (e) {
+        console.log('[card] setProperties Style failed: ' + String(e));
+      }
     }
   }
 
