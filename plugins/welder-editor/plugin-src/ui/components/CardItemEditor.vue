@@ -81,16 +81,40 @@ const visualStatusLabel = computed<string>(() => {
   return 'Visual ingesteld';
 });
 
-// Slide-wissel of main-echo: sync lokale refs met prop.
-// localIcon valt terug op '' wanneer icon null is (T32: picker verborgen in dat geval).
+// Slide-wissel, ContentPanel optimistic update, of main-echo:
+// sync lokale refs met prop. localIcon valt terug op '' wanneer icon
+// null is (T32: picker verborgen in dat geval).
+//
+// `{ deep: true }` zodat we ook in-place mutaties zien (bv. ContentPanel
+// muteert `cards[idx].heading` zonder de array of het card-object te
+// vervangen — zonder deep zou de watch nooit firen voor de wholesale
+// replace bij slide-loaded uitgesloten).
+//
+// Per-veld equality-guard: skip de assignment als de incoming waarde
+// gelijk is aan wat we al lokaal hebben. Dat voorkomt mid-keystroke
+// clobber wanneer een sandbox-echo (van onze eigen optimistic update of
+// van de sandbox round-trip) toch nog door PR #99's 250ms-window
+// glipt — de assignment is dan een no-op én forceert geen reactivity-
+// trigger op localXxx, dus geen redundant template re-eval.
 watch(
   () => props.modelValue,
   (next) => {
-    localHeading.value = next.heading;
-    localParagraph.value = next.paragraph;
-    localIcon.value = next.icon !== null ? next.icon : '';
-    localOutline.value = next.style === 'Outline';
+    if (next.heading !== localHeading.value) {
+      localHeading.value = next.heading;
+    }
+    if (next.paragraph !== localParagraph.value) {
+      localParagraph.value = next.paragraph;
+    }
+    const nextIcon = next.icon !== null ? next.icon : '';
+    if (nextIcon !== localIcon.value) {
+      localIcon.value = nextIcon;
+    }
+    const nextOutline = next.style === 'Outline';
+    if (nextOutline !== localOutline.value) {
+      localOutline.value = nextOutline;
+    }
   },
+  { deep: true },
 );
 
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
