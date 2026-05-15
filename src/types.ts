@@ -152,8 +152,8 @@ export interface SlideSummary {
 export type TabId = 'general' | 'graphs';
 
 export interface PluginView {
-  slides: SlideSummary[];
-  currentSlideId: string | null;
+  /** Current slide summary (id, number, name, isSkipped); null when no slide selected. */
+  currentSummary: SlideSummary | null;
   activeTab: TabId;
   /** null tot er een slide is gekozen óf als de slide deze wrapper niet heeft. */
   general: GeneralSections | null;
@@ -414,14 +414,6 @@ export interface JourneyWrapModel {
  */
 export type UIToPluginMessage =
   | { type: 'ui-ready' }
-  | { type: 'pick-slide'; slideId: string }
-  /**
-   * Iframe regained focus — sandbox should re-scan and post the current
-   * slide list. Belt-and-suspenders for the early-window after plugin
-   * open, before `documentchange` is registered (which requires
-   * loadAllPagesAsync to complete in dynamic-page mode).
-   */
-  | { type: 'refresh-slides' }
   | {
       type: 'update-general';
       slideId: string;
@@ -560,29 +552,42 @@ export type UIToPluginMessage =
 export type PluginToUIMessage =
   | {
       type: 'init';
-      slides: SlideSummary[];
-      initialSlideId: string | null;
     }
   | {
+      /**
+       * Posted whenever the focused slide changes (selectionchange) or its
+       * content changes (documentchange). Carries both the summary (name,
+       * skip-state) and the full content payload. The UI replaces its
+       * entire slide-state on receipt.
+       */
       type: 'slide-loaded';
-      slideId: string;
+      summary: SlideSummary;
       general: GeneralSections | null;
       content: ContentItems | null;
       graphs: GraphItems | null;
+    }
+  | {
+      /**
+       * Posted when only the slide's summary fields (name, isSkipped)
+       * change — cheaper than a full slide-loaded since content doesn't
+       * need to re-scan.
+       */
+      type: 'slide-summary';
+      summary: SlideSummary;
+    }
+  | {
+      /**
+       * Posted when the user's selection no longer resolves to a slide
+       * (selection cleared, or selected node has no slide ancestor). UI
+       * clears its slide-state and shows the empty prompt.
+       */
+      type: 'slide-deselected';
     }
   | {
       type: 'target-updated';
       ok: boolean;
       targetId?: string;
       error?: string;
-    }
-  | {
-      type: 'page-changed';
-      slides: SlideSummary[];
-    }
-  | {
-      type: 'slide-focused';
-      slideId: string;
     }
   | {
       type: 'icons-ready';

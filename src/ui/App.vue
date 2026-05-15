@@ -15,12 +15,11 @@
     - SlideSelector-wijziging: pickSlide-store + `pick-slide` bridge.
 -->
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useToast } from '@nuxt/ui/composables';
 
 import { PDFDocument } from 'pdf-lib';
 
-import SlideSelector from './components/SlideSelector.vue';
 
 // Constant PDF metadata applied to every Welder export. Title is set
 // per-document by the caller. Copyright lives in /Subject because
@@ -66,7 +65,6 @@ import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
-import { useSlideNavigation } from './composables/useSlideNavigation';
 import { useSlideSettings } from './composables/useSlideSettings';
 import { useExport } from './composables/useExport';
 import { usePluginView } from './stores/usePluginView';
@@ -76,7 +74,6 @@ import welderLogo from './assets/welder-logo.svg';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
-const nav = useSlideNavigation();
 const settings = useSlideSettings();
 const exporter = useExport();
 
@@ -94,30 +91,12 @@ notifications.init(useToast());
 
 // true until the first 'init' message arrives from main thread
 const initializing = ref<boolean>(true);
-// true while waiting for 'slide-loaded' after a slide pick
-const loadingSlide = ref<boolean>(false);
 
 // One-shot guard: when the sandbox hydrates the recents list via
 // `setItems`, the deep watcher below would otherwise echo the
 // just-loaded array back as a save. Flipped on hydration, consumed
 // by the next watcher tick.
 let skipIconRecentsSave = false;
-
-// Bind current slide via computed<get/set> zodat SlideSelector's v-model
-// direct de store muteert + een pick-slide-bericht triggert.
-const currentSlide = computed<string | null>({
-  get() {
-    return view.state.currentSlideId;
-  },
-  set(next: string | null) {
-    if (next !== null) {
-      loadingSlide.value = true;
-      nav.pick(next);
-    } else {
-      view.pickSlide(null);
-    }
-  },
-});
 
 function toggleSkip(): void {
   const summary = view.currentSummary;
@@ -182,45 +161,20 @@ function onThemeChange(modeId: string | null): void {
 // bericht niet missen (main kan onmiddellijk terugantwoorden).
 bridge.onMessage((msg) => {
   if (msg.type === 'init') {
-    view.setSlides(msg.slides);
-    if (msg.initialSlideId !== null) {
-      // Set the active slide directly via the store. The sandbox sends
-      // the matching `slide-loaded` (and previews) immediately after
-      // `init` during the ui-ready handshake, so we don't need to post
-      // `pick-slide` and pay an extra round-trip / second scan.
-      // `initializing` stays true until that slide-loaded lands so we
-      // don't flash the empty-state between init and slide-loaded.
-      view.pickSlide(msg.initialSlideId);
-    } else {
-      initializing.value = false;
-    }
+    initializing.value = false;
     return;
   }
   if (msg.type === 'slide-loaded') {
-    // Defensief: main kan `slide-loaded` sturen voor een slide die de user
-    // intussen gewisseld heeft. Alleen accepteren als id matcht.
-    if (msg.slideId === view.state.currentSlideId) {
-      view.setSlidePayload(msg.general, msg.content, msg.graphs);
-      loadingSlide.value = false;
-      initializing.value = false;
-    }
+    view.setSlideLoaded(msg.summary, msg.general, msg.content, msg.graphs);
+    initializing.value = false;
     return;
   }
-  if (msg.type === 'page-changed') {
-    view.setSlides(msg.slides);
-    // Als huidige slide niet meer bestaat op de nieuwe pagina: reset.
-    const stillThere = msg.slides.some((s) => s.id === view.state.currentSlideId);
-    if (!stillThere) view.pickSlide(null);
+  if (msg.type === 'slide-summary') {
+    view.setSummary(msg.summary);
     return;
   }
-  if (msg.type === 'slide-focused') {
-    // Auto-follow: switch dropdown only wanneer de user daadwerkelijk een
-    // andere slide heeft gekozen — voorkomt lelijke re-loads wanneer de
-    // user binnen dezelfde slide klikt.
-    if (view.state.currentSlideId !== msg.slideId) {
-      loadingSlide.value = true;
-      nav.pick(msg.slideId);
-    }
+  if (msg.type === 'slide-deselected') {
+    view.clearSlide();
     return;
   }
   if (msg.type === 'icon-recents') {
@@ -335,20 +289,7 @@ watch(
 );
 
 onMounted(() => {
-  nav.ready();
-});
-
-// Belt-and-suspenders for the loadAllPagesAsync window in the sandbox:
-// when the plugin iframe regains focus (user tabs back after creating
-// or renaming a slide outside), ask the sandbox to re-scan and post the
-// current slide list. Sandbox's `postSlideList` is debounced + dedup'd
-// so a redundant refresh on focus is cheap.
-function onWindowFocus(): void {
-  nav.refresh();
-}
-window.addEventListener('focus', onWindowFocus);
-onBeforeUnmount(() => {
-  window.removeEventListener('focus', onWindowFocus);
+  bridge.post({ type: 'ui-ready' });
 });
 </script>
 
@@ -375,28 +316,34 @@ onBeforeUnmount(() => {
     <div v-else class="flex h-full flex-col bg-elevated text-default">
       <main class="flex-1 overflow-y-auto">
         <div class="mx-auto max-w-2xl space-y-3 p-3">
-          <!-- Header-card: logo + intro + slide selector -->
+          <!-- Header-card: logo + current slide name + eye toggle + theme picker -->
           <section
             class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] space-y-5"
           >
             <div class="flex flex-col items-center text-center space-y-3">
               <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
               <p class="text-base text-muted max-w-xs">
-                Selecteer een slide en wijzig de titel, het onderschrift en andere content.
+                Klik op een slide in Figma om de inhoud te bewerken.
               </p>
               <span class="text-[0.7rem] text-muted/70 tracking-wide">v{{ appVersion }}</span>
             </div>
 
-            <div class="border-t border-[var(--ui-border)] pt-5 space-y-3">
-              <div class="flex items-center gap-2">
-                <SlideSelector v-model="currentSlide" :slides="view.state.slides" class="flex-1" />
+            <div
+              v-if="
+                (view.currentSummary && view.currentSummary.isSkipped !== null) ||
+                view.state.general?.theme
+              "
+              class="border-t border-[var(--ui-border)] pt-5 space-y-3"
+            >
+              <div
+                v-if="view.currentSummary && view.currentSummary.isSkipped !== null"
+                class="flex justify-end"
+              >
                 <UButton
-                  v-if="view.currentSummary && view.currentSummary.isSkipped !== null"
                   :icon="view.currentSummary.isSkipped ? 'i-lucide-eye-off' : 'i-lucide-eye'"
                   variant="ghost"
                   color="neutral"
                   size="md"
-                  class="shrink-0"
                   :title="
                     view.currentSummary.isSkipped
                       ? 'Slide is uitgesloten — klik om terug te zetten'
@@ -419,68 +366,44 @@ onBeforeUnmount(() => {
             </div>
           </section>
 
-          <!-- Skeleton: slide loading — shown after pick-slide until
-               slide-loaded arrives. -->
-          <template v-if="loadingSlide">
-            <section
-              class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] space-y-3"
-            >
-              <USkeleton class="h-4 w-32" />
-              <USkeleton class="h-9 w-full" />
-              <USkeleton class="h-20 w-full" />
-            </section>
-            <section
-              class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] space-y-3"
-            >
-              <USkeleton class="h-4 w-24" />
-              <USkeleton class="h-9 w-full" />
-              <USkeleton class="h-9 w-2/3" />
-            </section>
-          </template>
-
           <!-- Content-area: gestapeld — elk panel beheert zijn eigen
                card-layout. Empty-states worden getoond wanneer er geen
                slide geselecteerd is of geen bewerkbare inhoud aanwezig is.
           -->
-          <template v-else>
-            <!-- No slide selected -->
-            <section
-              v-if="view.noSlide"
-              class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
-            >
-              <p class="text-sm text-muted">Selecteer een slide om te beginnen.</p>
-            </section>
+          <!-- No slide selected -->
+          <section
+            v-if="view.noSlide"
+            class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
+          >
+            <p class="text-sm text-muted">
+              Klik op een slide in Figma om te beginnen met bewerken.
+            </p>
+          </section>
 
-            <!-- Slide selected but nothing editable -->
-            <section
-              v-else-if="view.allEmpty"
-              class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
-            >
-              <p class="text-sm text-muted">Geen bewerkbare inhoud op deze slide.</p>
-            </section>
+          <!-- Slide selected but nothing editable -->
+          <section
+            v-else-if="view.allEmpty"
+            class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
+          >
+            <p class="text-sm text-muted">Geen bewerkbare inhoud op deze slide.</p>
+          </section>
 
-            <!-- Stacked panels — each panel manages its own card layout.
-                 Wrapped in een <fieldset disabled> zodat alle form-controls
-                 automatisch disabled worden wanneer de slide is uitgesloten
-                 van presenteren (oogje uit). `contents` haalt fieldset uit
-                 layout zodat de parent `space-y-3` de panel-gaps blijft
-                 regelen; bij skipped schakelen we over naar een wrapping
-                 variant met `opacity-50 pointer-events-none` voor visuele
-                 feedback + extra click-block (een fieldset::disabled alleen
-                 blokkeert de form-controls, niet de container-klikken). -->
-            <fieldset
-              v-else
-              :disabled="view.isSkipped"
-              :class="
-                view.isSkipped ? 'space-y-3 opacity-50 pointer-events-none' : 'contents space-y-3'
-              "
-              style="border: 0; padding: 0; margin: 0; min-width: 0"
-            >
-              <GeneralPanel v-if="view.hasGeneral" />
-              <ContentPanel v-if="view.hasContent" />
-              <GraphsPanel v-if="view.hasGraphs" />
-            </fieldset>
-          </template>
+          <!-- Stacked panels — wrapped in <fieldset disabled> when the
+               slide is skipped, so all form controls disable + the
+               container gets `opacity-50 pointer-events-none` for
+               feedback. -->
+          <fieldset
+            v-else
+            :disabled="view.isSkipped"
+            :class="
+              view.isSkipped ? 'space-y-3 opacity-50 pointer-events-none' : 'contents space-y-3'
+            "
+            style="border: 0; padding: 0; margin: 0; min-width: 0"
+          >
+            <GeneralPanel v-if="view.hasGeneral" />
+            <ContentPanel v-if="view.hasContent" />
+            <GraphsPanel v-if="view.hasGraphs" />
+          </fieldset>
 
           <!-- Export — single entry point that opens the picker modal.
                Sits at the bottom of the content (scrolls with it). -->

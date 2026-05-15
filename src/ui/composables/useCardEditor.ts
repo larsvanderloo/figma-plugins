@@ -45,11 +45,18 @@ export function useCardEditor() {
   });
   onUnmounted(unsubscribe);
 
+  // Per-card snapshot of what we last emitted to the sandbox. Lets the
+  // update() function include only changed fields in the payload — and
+  // skip the bridge call entirely when nothing changed. Cleared on
+  // slide-switch so cardNodeIds from a previous slide don't leak.
+  const lastSent: Record<string, CardItem> = {};
+
   watch(
     () => view.state.currentSlideId,
     () => {
       previewUrls.value = {};
       previewSizes.value = {};
+      for (const key in lastSent) delete lastSent[key];
     },
   );
 
@@ -57,8 +64,34 @@ export function useCardEditor() {
     const slideId = view.state.currentSlideId;
     if (slideId === null) return;
 
-    // Optimistic local update so the next typing tick validates against
-    // the fresh canonical state (no flicker during 200ms debounce).
+    // Build a delta payload — only include fields that actually changed
+    // since the last emit for this card. Saves a bridge round-trip and a
+    // sandbox tree walk per keystroke when the user is just typing into
+    // one field and the others (icon, style) are unchanged.
+    const prev = lastSent[value.cardNodeId];
+    const payload: {
+      heading?: string;
+      paragraph?: string;
+      icon?: string;
+      style?: 'Default' | 'Outline';
+    } = {};
+    if (prev === undefined || prev.heading !== value.heading) {
+      payload.heading = value.heading;
+    }
+    if (prev === undefined || prev.paragraph !== value.paragraph) {
+      payload.paragraph = value.paragraph;
+    }
+    // T32: icon may be null (icon-instance hidden) — omit when null.
+    if ((prev === undefined || prev.icon !== value.icon) && value.icon !== null) {
+      payload.icon = value.icon;
+    }
+    if ((prev === undefined || prev.style !== value.style) && value.style !== null) {
+      payload.style = value.style;
+    }
+    if (Object.keys(payload).length === 0) return;
+
+    // Optimistic local update — always write all fields so the store
+    // matches what the user sees, even when we only emit a delta.
     const list = view.state.content?.cards ?? null;
     if (list !== null) {
       const idx = list.findIndex((c) => c.cardNodeId === value.cardNodeId);
@@ -70,23 +103,14 @@ export function useCardEditor() {
       }
     }
 
-    // T32: icon may be null (icon-instance hidden) — omit from payload then.
-    const iconPayload: { icon?: string } = value.icon !== null ? { icon: value.icon } : {};
-    const stylePayload: { style?: 'Default' | 'Outline' } =
-      value.style !== null ? { style: value.style } : {};
-
     tracker.register();
     bridge.post({
       type: 'update-card',
       slideId: slideId,
       cardNodeId: value.cardNodeId,
-      payload: {
-        heading: value.heading,
-        paragraph: value.paragraph,
-        ...iconPayload,
-        ...stylePayload,
-      },
+      payload: payload,
     });
+    lastSent[value.cardNodeId] = { ...value };
   }
 
   function uploadVisual(cardNodeId: string, bytes: Uint8Array): void {

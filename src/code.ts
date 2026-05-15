@@ -1133,75 +1133,17 @@ async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
 // Slide-lookup helpers
 // ============================================================
 
-// Per-slide summary cache. `slideSummary` walks each slide's subtree
-// looking for a Heading TEXT, which on a complex 50-slide deck adds up
-// to thousands of node-visits per `buildSlideList` call. Caching by
-// slide-id collapses per-documentchange cost from O(total slides) to
-// O(changed slides). Invalidation runs from the documentchange handler
-// via `invalidateSlideSummaryForChange`, plus a full clear on
-// page-change. Cached entries also store the last-seen 1-based number
-// so we recompute when the slide's index in the list changes (caller's
-// position determines `name` fallback for un-titled slides).
-const slideSummaryCache = new Map<string, SlideSummary>();
-
-function clearSlideSummaryCache(): void {
-  slideSummaryCache.clear();
-}
-
-function buildSlideList(): { summaries: SlideSummary[]; nodes: InstanceNode[] } {
-  const nodes = findSlidesOnPage();
-  const summaries: SlideSummary[] = [];
-  for (let i = 0; i < nodes.length; i++) {
-    const slide = nodes[i];
-    const number = i + 1;
-    const cached = slideSummaryCache.get(slide.id);
-    if (cached !== undefined && cached.number === number) {
-      summaries.push(cached);
-      continue;
-    }
-    const fresh = slideSummary(slide, number);
-    slideSummaryCache.set(slide.id, fresh);
-    summaries.push(fresh);
-  }
-  return { summaries: summaries, nodes: nodes };
-}
-
 /**
- * Drop cached summary entries that may no longer match the canvas truth
- * after an incoming DocumentChange. Coarse on purpose — the cache is
- * cheap to rebuild lazily on the next `buildSlideList` call, and an
- * over-invalidation wastes one slide-summary scan, while an under-
- * invalidation surfaces stale picker labels.
- *
- * Rules (mirrors the relevance filter in the documentchange handler):
- *   - CREATE / DELETE → full clear (slide list shape may have changed,
- *     and number ↦ slide mapping shifts for every entry).
- *   - PROPERTY_CHANGE on SLIDE → clear that slide's child Welder
- *     INSTANCE entry (id is on the SLIDE child, not the SLIDE itself,
- *     so we full-clear conservatively).
- *   - PROPERTY_CHANGE on TEXT named 'Heading' → walk up to the
- *     enclosing Welder slide and drop only its entry.
+ * Compute the SlideSummary for a single slide. Used by every slide-loaded
+ * / slide-summary emission. `findSlidesOnPage` here is for the 1-based
+ * `number` fallback when the slide has no heading text — most slides have
+ * a heading, so the number rarely shows in the UI but it keeps the
+ * SlideSummary shape consistent with the export-document filename logic.
  */
-function invalidateSlideSummaryForChange(change: DocumentChange): void {
-  if (change.type === 'CREATE' || change.type === 'DELETE') {
-    clearSlideSummaryCache();
-    return;
-  }
-  if (change.type === 'PROPERTY_CHANGE') {
-    if (change.node.type === 'SLIDE') {
-      // The cached key is the Welder INSTANCE id, not the SlideNode id;
-      // be conservative and clear the lot. SlideNode property changes
-      // (rename, isSkippedSlide, reorder) are infrequent compared to
-      // text-edit bursts, so the over-invalidation cost is bounded.
-      clearSlideSummaryCache();
-      return;
-    }
-    if (change.node.type === 'TEXT' && change.node.name === 'Heading') {
-      const slide = findSlideAncestor(change.node);
-      if (slide !== null) slideSummaryCache.delete(slide.id);
-      return;
-    }
-  }
+function summaryForSlide(slide: InstanceNode): SlideSummary {
+  const slides = findSlidesOnPage();
+  const idx = slides.indexOf(slide);
+  return slideSummary(slide, idx >= 0 ? idx + 1 : 1);
 }
 
 function findSlideById(id: string): InstanceNode | null {
@@ -1281,25 +1223,8 @@ function postToUI(msg: PluginToUIMessage): void {
 }
 
 // ============================================================
-// Live slide-list refresh — debounced postSlideList
+// Live current-slide refresh — debounced content + summary posts
 // ============================================================
-
-/**
- * Debounce-handle voor pending slide-list-updates. Wanneer meerdere
- * documentchanges binnen 200ms binnenkomen (bv. bulk-delete of een
- * snelle add+rename), coalesce we naar één buildSlideList-call.
- *
- * Type `number` i.p.v. `ReturnType<typeof setTimeout>` om mismatches
- * tussen node-/dom-typings in de Figma-sandbox te vermijden — de eerdere
- * crash-poging (commit 35298c4) leed hier mogelijk onder.
- */
-let pendingSlideListUpdate: number | null = null;
-
-/**
- * Signature van de laatst geposte slide-list. Dedupliceert updates
- * wanneer burst-events snel achter elkaar binnenkomen.
- */
-let lastSlideListSignature: string = '';
 
 // Module-level: last-sent imageHash per imageWrapId — prevents re-posting on unrelated documentchange events.
 var lastSentPreviewHash: Map<string, string> = new Map();
@@ -1348,15 +1273,16 @@ let lastSentSlideContentSignature: string = '';
  * `postSlideContent` entirely with its own explicit `slide-loaded`
  * post, so iframe-button-driven undo always works.
  */
-// Bumped 250 → 500ms after user-reported "words skipping" on long
-// applies. Apply chains that include figma.commitUndo + multi-node
-// text writes + auto-layout reflow + setProperties can take 100-300ms.
-// postSlideContent's 200ms debounce can fire BEFORE apply completes
-// if the timer was set by an early documentchange in the chain,
-// missing the final markSelfWrite. 500ms covers the worst-case apply
-// duration plus the debounce. Cmd+Z within 500ms of a self-write
-// still gets suppressed (acceptable — self-correcting on next change).
-const SELF_WRITE_WINDOW_MS = 500;
+// Bumped 500 → 1500ms after user-reported typing-skip on slower accounts.
+// Apply chains on accounts without the Welder library subscribed pay
+// repeated importVariableByKeyAsync / importComponentByKeyAsync failure
+// timeouts, and apply can run 600-1200ms. The 500ms window let the
+// post-apply documentchange-driven re-scan slip past, which clobbered
+// in-progress typing. 1500ms covers the worst-case apply duration plus
+// the 200ms postSlideContent debounce with margin to spare. Cmd+Z
+// within 1500ms of a self-write still gets suppressed (acceptable —
+// self-correcting on next documentchange).
+const SELF_WRITE_WINDOW_MS = 1500;
 let lastSelfWriteAt = 0;
 
 function markSelfWrite(): void {
@@ -1395,7 +1321,7 @@ function postSlideContent(): void {
         lastSentSlideContentSignature = sig;
         postToUI({
           type: 'slide-loaded',
-          slideId: slide.id,
+          summary: summaryForSlide(slide),
           general: scan.general,
           content: scan.content,
           graphs: scan.graphs,
@@ -1408,42 +1334,151 @@ function postSlideContent(): void {
 }
 
 /**
- * Bouwt een stabiele string die alleen wijzigt als de slide-list
- * inhoudelijk veranderde. Combineert id + number + name + isSkipped —
- * wijziging van één van deze triggert een refresh richting de UI.
+ * Lightweight summary-only post for the currently-displayed slide.
+ * Used by the documentchange handler when the slide's name (heading
+ * text) or isSkipped flag changes — no need to rescan content.
  *
- * `isSkipped` hoort in de signature omdat Figma's native skip-toggle
- * (oogje in de left-panel thumbnail) via `PROPERTY_CHANGE` binnenkomt;
- * zonder deze component zou de signature ongewijzigd blijven en de
- * UI-sync met `SlideNode.isSkippedSlide` verloren gaan.
+ * Debounced 200ms and signature-deduped against the last emit so a
+ * burst of name-keystrokes doesn't spam the bridge.
  */
-function slideListSignature(summaries: SlideSummary[]): string {
-  const parts: string[] = [];
-  for (let i = 0; i < summaries.length; i++) {
-    const s = summaries[i];
-    parts.push(s.id + '|' + String(s.number) + '|' + s.name + '|' + String(s.isSkipped));
-  }
-  return String(summaries.length) + '#' + parts.join(';');
-}
+let pendingSlideSummaryUpdate: number | null = null;
+let lastSentSummarySignature: string = '';
 
-function postSlideList(): void {
-  if (pendingSlideListUpdate !== null) {
-    clearTimeout(pendingSlideListUpdate);
+function postSlideSummary(): void {
+  if (lastDisplayedSlideId === null) return;
+  if (pendingSlideSummaryUpdate !== null) {
+    clearTimeout(pendingSlideSummaryUpdate);
   }
-  pendingSlideListUpdate = setTimeout(() => {
-    pendingSlideListUpdate = null;
+  pendingSlideSummaryUpdate = setTimeout(() => {
+    pendingSlideSummaryUpdate = null;
+    if (lastDisplayedSlideId === null) return;
     try {
-      const list = buildSlideList();
-      const sig = slideListSignature(list.summaries);
-      // Skip if nothing changed since last post — voorkomt redundante updates
-      // bij burst-events (bv. bulk-delete of snelle rename-sequenties).
-      if (sig === lastSlideListSignature) return;
-      lastSlideListSignature = sig;
-      postToUI({ type: 'page-changed', slides: list.summaries });
+      const slide = findSlideById(lastDisplayedSlideId);
+      if (slide === null) return;
+      const summary = summaryForSlide(slide);
+      const sig = summary.id + '|' + summary.name + '|' + String(summary.isSkipped);
+      if (sig === lastSentSummarySignature) return;
+      lastSentSummarySignature = sig;
+      postToUI({ type: 'slide-summary', summary: summary });
     } catch (err: unknown) {
-      console.log('[welder-slide-editor] postSlideList failed:', err);
+      console.log('[welder-slide-editor] postSlideSummary failed:', err);
     }
   }, 200) as unknown as number;
+}
+
+/**
+ * Scan + post slide-loaded for the given slide. Wraps the scan, the
+ * signature-cache update, the slide-loaded post, and the fire-and-forget
+ * preview emissions. Called by ui-ready, selectionchange, and
+ * currentpagechange.
+ */
+async function emitSlideLoaded(slide: InstanceNode): Promise<void> {
+  try {
+    const scan = await scanSlide(slide);
+    lastDisplayedSlideId = slide.id;
+    lastSentSlideContentSignature = JSON.stringify({
+      g: scan.general,
+      c: scan.content,
+      h: scan.graphs,
+    });
+    const summary = summaryForSlide(slide);
+    lastSentSummarySignature = summary.id + '|' + summary.name + '|' + String(summary.isSkipped);
+    postToUI({
+      type: 'slide-loaded',
+      summary: summary,
+      general: scan.general,
+      content: scan.content,
+      graphs: scan.graphs,
+    });
+    void postInitialSlidePreviews(slide, scan);
+    void primeIconCacheForSlide(scan);
+    void preloadSlideFonts(slide);
+    // Pre-warm the Text/Text Dimmer variable imports so the first
+    // heading-accent edit doesn't pay the importVariableByKeyAsync cost.
+    // loadAccentVars is Promise-cached, so subsequent edits are free.
+    void loadAccentVars();
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] emitSlideLoaded failed:', err);
+  }
+}
+
+/**
+ * Pre-load every unique font used by editable TEXT descendants of the
+ * slide. Lets the per-keystroke setTextCharactersSafe call hit Figma's
+ * font cache instead of paying loadFontAsync on the first edit. Run
+ * fire-and-forget after slide-loaded; even on slow accounts it finishes
+ * before the user finishes reading the slide.
+ */
+async function preloadSlideFonts(slide: InstanceNode): Promise<void> {
+  try {
+    const textNodes = slide.findAll((n: SceneNode) => n.type === 'TEXT') as TextNode[];
+    const seen: { [k: string]: boolean } = {};
+    const loads: Array<Promise<void>> = [];
+    for (let i = 0; i < textNodes.length; i++) {
+      const node = textNodes[i];
+      const fontName = node.fontName;
+      if (fontName === figma.mixed) {
+        const segments = node.getStyledTextSegments(['fontName']);
+        for (let s = 0; s < segments.length; s++) {
+          const fn = segments[s].fontName;
+          const key = fn.family + '::' + fn.style;
+          if (seen[key] === true) continue;
+          seen[key] = true;
+          loads.push(figma.loadFontAsync(fn));
+        }
+      } else {
+        const fn = fontName as FontName;
+        const key = fn.family + '::' + fn.style;
+        if (seen[key] === true) continue;
+        seen[key] = true;
+        loads.push(figma.loadFontAsync(fn));
+      }
+    }
+    await Promise.all(loads);
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] preloadSlideFonts failed:', err);
+  }
+}
+
+/**
+ * Prime the icon-swap cache using the first card or badge on the slide
+ * so the IconPicker doesn't pay the import cost on first open. Posts
+ * `icons-ready` when done (or immediately if no suitable node found) so
+ * the picker UI can unlock.
+ */
+async function primeIconCacheForSlide(scan: SlideScan): Promise<void> {
+  let cardNodeId: string | null = null;
+  if (scan.content !== null && scan.content.cards.length > 0) {
+    cardNodeId = scan.content.cards[0].cardNodeId;
+  }
+  let targetNode: InstanceNode | null = null;
+  if (cardNodeId !== null) {
+    try {
+      const n = await figma.getNodeByIdAsync(cardNodeId);
+      if (n !== null && n.type === 'INSTANCE') {
+        targetNode = n as InstanceNode;
+      }
+    } catch (_e) {
+      /* node not found — skip */
+    }
+  }
+  if (targetNode === null) {
+    postToUI({ type: 'icons-ready' });
+    return;
+  }
+  try {
+    await primeIconCache(targetNode);
+  } catch (_e) {
+    // fall through to icons-ready so the picker can open even if priming fails
+  }
+  postToUI({ type: 'icons-ready' });
+}
+
+function clearDisplayedSlide(): void {
+  lastDisplayedSlideId = null;
+  lastSentSlideContentSignature = '';
+  lastSentSummarySignature = '';
+  postToUI({ type: 'slide-deselected' });
 }
 
 // ============================================================
@@ -1452,56 +1487,14 @@ function postSlideList(): void {
 
 async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   if (msg.type === 'ui-ready') {
-    const list = buildSlideList();
-    // Seed de dedup-signature zodat de eerste poll-tick na init geen
-    // duplicaat `page-changed` post met dezelfde content als `init`.
-    lastSlideListSignature = slideListSignature(list.summaries);
-    const initialSlideId = list.summaries.length > 0 ? list.summaries[0].id : null;
+    // Selection-driven: post init, then if there's a currently-focused
+    // slide on the active page, scan + emit slide-loaded. Otherwise the
+    // iframe stays in its empty state until the user clicks a slide.
+    postToUI({ type: 'init' });
 
-    // Pre-scan the initial slide so init + slide-loaded can be posted
-    // back-to-back. The iframe stays on its splash screen until init
-    // arrives, so awaiting the scan here moves the "first slide switch"
-    // latency into the splash window. Scan failures fall through; the
-    // iframe will hide the splash on init and the first user pick re-
-    // does the work.
-    let initialScan: SlideScan | null = null;
-    let initialSlide: InstanceNode | null = null;
-    if (initialSlideId !== null) {
-      initialSlide = findSlideById(initialSlideId);
-      if (initialSlide !== null) {
-        try {
-          initialScan = await scanSlide(initialSlide);
-          lastDisplayedSlideId = initialSlideId;
-          lastSentSlideContentSignature = JSON.stringify({
-            g: initialScan.general,
-            c: initialScan.content,
-            h: initialScan.graphs,
-          });
-        } catch (err: unknown) {
-          console.log('[welder-slide-editor] initial scanSlide failed:', err);
-          initialScan = null;
-        }
-      }
-    }
-
-    postToUI({
-      type: 'init',
-      slides: list.summaries,
-      initialSlideId: initialSlideId,
-    });
-    if (initialSlide !== null && initialScan !== null) {
-      postToUI({
-        type: 'slide-loaded',
-        slideId: initialSlide.id,
-        general: initialScan.general,
-        content: initialScan.content,
-        graphs: initialScan.graphs,
-      });
-      // Fire-and-forget image-preview + card-visual-preview for the
-      // initial slide — same pattern as the pick-slide handler. Don't
-      // block init on these; the iframe renders a fallback until they
-      // arrive.
-      void postInitialSlidePreviews(initialSlide, initialScan);
+    const focused = findFocusedWelderSlide();
+    if (focused !== null) {
+      await emitSlideLoaded(focused);
     }
 
     // Hydrate icon-recents from clientStorage. Fire-and-forget; init
@@ -1527,179 +1520,6 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     figma.clientStorage.setAsync(ICON_RECENTS_KEY, msg.items).catch((err: unknown) => {
       console.log('[welder-slide-editor] icon-recents save failed:', err);
     });
-    return;
-  }
-
-  if (msg.type === 'refresh-slides') {
-    // Iframe regained focus — re-scan and post the current list.
-    // Closes the gap during the loadAllPagesAsync window when
-    // `documentchange` is not yet registered.
-    postSlideList();
-    return;
-  }
-
-  if (msg.type === 'pick-slide') {
-    const slide = findSlideById(msg.slideId);
-    if (slide === null) {
-      postToUI({
-        type: 'target-updated',
-        ok: false,
-        error: 'Slide not found: ' + msg.slideId,
-      });
-      return;
-    }
-    // Track which slide the iframe is showing so documentchange-driven
-    // mutations (native Cmd+Z, externally-triggered edits) can re-emit
-    // slide-loaded for the right target via postSlideContent.
-    lastDisplayedSlideId = msg.slideId;
-    lastSentSlideContentSignature = '';
-    figma.viewport.scrollAndZoomIntoView([slide]);
-    const scan = await scanSlide(slide);
-    postToUI({
-      type: 'slide-loaded',
-      slideId: slide.id,
-      general: scan.general,
-      content: scan.content,
-      graphs: scan.graphs,
-    });
-
-    // Image-preview bytes — fire-and-forget; post PNG/JPG bytes for the
-    // current ImagePaint so the UI can render a live preview. Geen dedup
-    // meer op pick-slide: de UI gooit preview-bytes weg bij pickSlide
-    // (general → null), dus bij terug-navigatie naar een eerder bezochte
-    // slide moet main ze opnieuw sturen. lastSentPreviewHash wordt nog
-    // steeds gevuld zodat upload-image de dedup-cache kan bijwerken.
-    // Async IIFE — fire-and-forget; faalt stil.
-    (async function () {
-      if (scan.general === null) return;
-      if (scan.general.image === null) return;
-      if (scan.general.image.imageHash === null) return;
-      var imageWrapId = scan.general.image.imageWrapId;
-      var imageHash = scan.general.image.imageHash;
-      var img = figma.getImageByHash(imageHash);
-      if (img === null) return;
-
-      // Haal slot-dimensies op zodat de UI-preview dezelfde aspect-ratio
-      // kan tonen als het Figma image-slot (T28a-fix).
-      var fillW = 0;
-      var fillH = 0;
-      try {
-        var wrapNode = await figma.getNodeByIdAsync(imageWrapId);
-        if (wrapNode !== null && wrapNode.type === 'INSTANCE') {
-          var slot = findImageSlot(wrapNode as InstanceNode);
-          if (slot !== null && 'width' in slot && 'height' in slot) {
-            var slotW = (slot as LayoutMixin).width;
-            var slotH = (slot as LayoutMixin).height;
-            if (slotW > 0 && slotH > 0) {
-              fillW = slotW;
-              fillH = slotH;
-            }
-          }
-        }
-      } catch (_e) {
-        // Fallback: laat fillW/fillH op 0 staan; UI toont h-36 fallback.
-      }
-
-      var bytes: Uint8Array;
-      try {
-        bytes = await img.getBytesAsync();
-      } catch (_e) {
-        return;
-      }
-      postToUI({
-        type: 'image-preview',
-        imageWrapId: imageWrapId,
-        bytes: bytes,
-        fillW: fillW,
-        fillH: fillH,
-      });
-      lastSentPreviewHash.set(imageWrapId, imageHash);
-    })().catch(function (_e) {});
-
-    // Card visual previews — same fire-and-forget pattern as the slide-
-    // level image-preview above, but per Type=Image / Type=User card.
-    // The iframe's CardItemEditor renders the bytes as a thumbnail so
-    // the user sees the current visual instead of just a "Visual
-    // ingesteld"-status string.
-    (async function () {
-      if (scan.content === null) return;
-      const cards = scan.content.cards;
-      for (let i = 0; i < cards.length; i++) {
-        const ci = cards[i];
-        if (typeof ci.visualHash !== 'string') continue; // null or undefined → no visual
-        try {
-          const cardNode = await figma.getNodeByIdAsync(ci.cardNodeId);
-          if (cardNode === null || cardNode.type !== 'INSTANCE') continue;
-          const slot = findCardVisualSlot(cardNode as InstanceNode);
-          if (slot === null) continue;
-          const fills = (slot as GeometryMixin).fills;
-          if (fills === figma.mixed || !Array.isArray(fills)) continue;
-          let imageHash: string | null = null;
-          for (let f = 0; f < fills.length; f++) {
-            if (fills[f].type === 'IMAGE') {
-              imageHash = (fills[f] as ImagePaint).imageHash;
-              break;
-            }
-          }
-          if (imageHash === null) continue;
-          const img = figma.getImageByHash(imageHash);
-          if (img === null) continue;
-          const bytes = await img.getBytesAsync();
-          let fillW = 0;
-          let fillH = 0;
-          if ('width' in slot && 'height' in slot) {
-            const w = (slot as LayoutMixin).width;
-            const h = (slot as LayoutMixin).height;
-            if (w > 0 && h > 0) {
-              fillW = w;
-              fillH = h;
-            }
-          }
-          postToUI({
-            type: 'card-visual-preview',
-            cardNodeId: ci.cardNodeId,
-            bytes: bytes,
-            fillW: fillW,
-            fillH: fillH,
-          });
-        } catch (_e) {
-          // Per-card failure is silent — other cards still post.
-        }
-      }
-    })().catch(function (_e) {});
-
-    // Prime icon cache in background using first card/badge found.
-    // Async IIFE — fire-and-forget; errors caught so UI never gets stuck.
-    (async function () {
-      var cardNodeId: string | null = null;
-      if (scan.content !== null && scan.content.cards.length > 0) {
-        cardNodeId = scan.content.cards[0].cardNodeId;
-      }
-      var targetNode: InstanceNode | null = null;
-      if (cardNodeId !== null) {
-        try {
-          var n = await figma.getNodeByIdAsync(cardNodeId);
-          if (n !== null && n.type === 'INSTANCE') {
-            targetNode = n as InstanceNode;
-          }
-        } catch (e) {
-          /* node not found — skip */
-        }
-      }
-      if (targetNode !== null) {
-        primeIconCache(targetNode)
-          .then(function () {
-            postToUI({ type: 'icons-ready' });
-          })
-          .catch(function () {
-            postToUI({ type: 'icons-ready' });
-          });
-      } else {
-        // No suitable node — send icons-ready immediately so UI isn't stuck.
-        postToUI({ type: 'icons-ready' });
-      }
-    })();
-
     return;
   }
 
@@ -2178,13 +1998,12 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     }
     figma.commitUndo();
     (skipParent as SlideNode).isSkippedSlide = msg.skipped;
-    // Re-build slide-list zodat elke SlideSummary een verse `isSkipped` meekrijgt.
-    // `page-changed` draagt de volledige lijst en gaat ongededuped uit — we
-    // resetten de signature zodat postSlideList niet als duplicaat-skip wordt afgedaan.
-    lastSlideListSignature = '';
-    var refreshed = buildSlideList();
-    lastSlideListSignature = slideListSignature(refreshed.summaries);
-    postToUI({ type: 'page-changed', slides: refreshed.summaries });
+    // Post the refreshed summary so the UI's eye toggle reflects the new
+    // isSkipped state. Cheaper than rescanning the slide's content.
+    postToUI({
+      type: 'slide-summary',
+      summary: summaryForSlide(skipSlide),
+    });
     postToUI({
       type: 'target-updated',
       ok: true,
@@ -2211,7 +2030,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
           const scan = await scanSlide(undoSlide);
           postToUI({
             type: 'slide-loaded',
-            slideId: undoSlide.id,
+            summary: summaryForSlide(undoSlide),
             general: scan.general,
             content: scan.content,
             graphs: scan.graphs,
@@ -2433,12 +2252,16 @@ async function main(): Promise<void> {
 
   figma.on('currentpagechange', () => {
     try {
-      // Slides on the new page are different nodes; the cache keys on
-      // slide-INSTANCE id but the prior page's entries become irrelevant
-      // and the new page's slides will all be cache-misses anyway —
-      // clearing keeps memory bounded.
-      clearSlideSummaryCache();
-      postSlideList();
+      // Page changed — the previously-focused slide is on a different page
+      // now, so the iframe should re-evaluate based on the new page's
+      // current selection.
+      const focused = findFocusedWelderSlide();
+      if (focused === null) {
+        clearDisplayedSlide();
+        return;
+      }
+      if (focused.id === lastDisplayedSlideId) return;
+      void emitSlideLoaded(focused);
     } catch (err: unknown) {
       console.log('[welder-slide-editor] currentpagechange handler failed:', err);
     }
@@ -2447,32 +2270,26 @@ async function main(): Promise<void> {
   // documentchange-registratie: in dynamic-page mode vereist Figma dat
   // loadAllPagesAsync gedraaid heeft voordat we kunnen subscribe'n.
   // We doen die load in de achtergrond (non-blocking) zodat de plugin
-  // direct openbaar is. De `refresh-slides`-handler hieronder vangt de
-  // gap af tussen plugin-open en het moment dat documentchange live is
-  // (typisch <1s op kleine docs, 10-30s op grote docs).
+  // direct openbaar is.
   figma
     .loadAllPagesAsync()
     .then(() => {
       try {
         figma.on('documentchange', (event: DocumentChangeEvent) => {
           try {
-            // Single pass over the changes: drop affected entries from
-            // the slide-summary cache AND decide if we need a list-post.
-            // Doing both in one loop avoids walking the changes array
-            // twice on every keystroke (cheap, but with N slides every
-            // shaved cycle helps).
-            let relevant = false;
+            // Walk the changes once. Two signals are extracted:
+            //   - summaryDirty: the currently-displayed slide's name
+            //     (Heading text) or isSkipped flag changed → cheap
+            //     slide-summary post.
+            //   - any change → debounced postSlideContent for the current
+            //     slide. The signature dedup makes no-op changes free.
+            let summaryDirty = false;
             const changes = event.documentChanges;
             for (let i = 0; i < changes.length; i++) {
               const change = changes[i];
-              invalidateSlideSummaryForChange(change);
-              if (relevant) continue;
-              if (change.type === 'CREATE' || change.type === 'DELETE') {
-                relevant = true;
-                continue;
-              }
+              if (summaryDirty) continue;
               if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') {
-                relevant = true;
+                summaryDirty = true;
                 continue;
               }
               if (
@@ -2480,17 +2297,10 @@ async function main(): Promise<void> {
                 change.node.type === 'TEXT' &&
                 change.node.name === 'Heading'
               ) {
-                relevant = true;
+                summaryDirty = true;
               }
             }
-            if (relevant) postSlideList();
-            // postSlideContent runs on EVERY documentchange — including
-            // INSTANCE PROPERTY_CHANGE (icon swaps via setProperties)
-            // and other in-slide mutations that the slide-list filter
-            // intentionally ignores. It's debounced (200ms) and signature-
-            // deduped, so no-op events don't reach the bridge. This is
-            // what catches native Cmd+Z and any external state change
-            // that affects pickers in the currently-displayed slide.
+            if (summaryDirty) postSlideSummary();
             postSlideContent();
           } catch (err: unknown) {
             console.log('[welder-slide-editor] documentchange handler failed:', err);
@@ -2504,16 +2314,21 @@ async function main(): Promise<void> {
       console.log('[welder-slide-editor] loadAllPagesAsync failed:', err);
     });
 
-  // Auto-follow: when user navigates slides in Figma (Slides navigator click
-  // or selecting content in a slide in Design), signal the UI to switch.
+  // Selection-driven slide switching. When the user selects a slide (or
+  // anything inside one), the sandbox scans it and posts slide-loaded.
+  // When the selection no longer resolves to a slide, posts slide-deselected.
   // Full try/catch — crashing this would re-introduce the earlier "plugin
-  // opent niet meer" bug; silent skip is fine since polling keeps list fresh.
+  // opent niet meer" bug; silent skip is fine.
   try {
     figma.on('selectionchange', () => {
       try {
         const focused = findFocusedWelderSlide();
-        if (focused === null) return;
-        postToUI({ type: 'slide-focused', slideId: focused.id });
+        if (focused === null) {
+          if (lastDisplayedSlideId !== null) clearDisplayedSlide();
+          return;
+        }
+        if (focused.id === lastDisplayedSlideId) return;
+        void emitSlideLoaded(focused);
       } catch (err: unknown) {
         console.log('[welder-slide-editor] selectionchange handler failed:', err);
       }
@@ -2524,9 +2339,13 @@ async function main(): Promise<void> {
 
   figma.on('close', () => {
     // Cleanup hook — Figma ruimt listeners automatisch op. FIG-CLOSE-01.
-    if (pendingSlideListUpdate !== null) {
-      clearTimeout(pendingSlideListUpdate);
-      pendingSlideListUpdate = null;
+    if (pendingSlideContentUpdate !== null) {
+      clearTimeout(pendingSlideContentUpdate);
+      pendingSlideContentUpdate = null;
+    }
+    if (pendingSlideSummaryUpdate !== null) {
+      clearTimeout(pendingSlideSummaryUpdate);
+      pendingSlideSummaryUpdate = null;
     }
   });
 }

@@ -1,28 +1,24 @@
 // ============================================================
-// usePluginView — centrale UI-store voor de drie-tab-editor.
+// usePluginView — central UI store for the iframe.
 //
-// Pinia setup-store. State leeft als één `reactive()`-object onder
-// `state`. Derived state (noSlide, currentSummary, isSkipped, hasX,
-// allEmpty) wordt geëxposeerd als getters zodat consumers de
-// derivatie niet zelf hoeven te schrijven en future panels dezelfde
-// boolean-set delen.
+// Pinia setup-store. State lives in one `reactive()` under `state`.
+// Derived state (noSlide, isSkipped, hasX, allEmpty) is exposed as
+// getters so consumers don't repeat the same booleans.
 //
-// State-shape volgt spec §3.2 (PluginView). `general`/`content`/
-// `graphs` blijven `null` tot main-thread een `slide-loaded`-bericht
-// stuurt; de panels renderen dan hun sectie of een empty-state.
-//
-// Actions zijn mutaties, niet async — bridge-sends gebeuren in
-// App.vue (watchers of expliciete handler-binding). Dat houdt de
-// store thread-agnostisch en makkelijk te testen.
+// The sandbox owns slide selection: it watches `selectionchange` and
+// drives `currentSummary` + payload via `slide-loaded` / `slide-summary`
+// / `slide-deselected`. The iframe never asks "switch to slide X" — the
+// user picks slides by clicking them on the Figma canvas.
 // ============================================================
 
 import { reactive, computed } from 'vue';
 import { defineStore } from 'pinia';
 import type { ContentItems, GeneralSections, GraphItems, SlideSummary, TabId } from '../../types';
 
-/** Shape van de top-level reactive state. Zie spec §3.2. */
 export interface PluginViewState {
-  slides: SlideSummary[];
+  /** Current slide summary; null when no slide is selected on the canvas. */
+  currentSummary: SlideSummary | null;
+  /** Mirrors currentSummary.id for the editor composables that read it. */
   currentSlideId: string | null;
   activeTab: TabId;
   general: GeneralSections | null;
@@ -32,7 +28,7 @@ export interface PluginViewState {
 
 export const usePluginView = defineStore('pluginView', () => {
   const state = reactive<PluginViewState>({
-    slides: [],
+    currentSummary: null,
     currentSlideId: null,
     activeTab: 'general',
     general: null,
@@ -43,15 +39,10 @@ export const usePluginView = defineStore('pluginView', () => {
   // ── Getters ────────────────────────────────────────────────────────────
   const noSlide = computed<boolean>(() => state.currentSlideId === null);
 
-  const currentSummary = computed<SlideSummary | null>(() => {
-    const id = state.currentSlideId;
-    if (id === null) return null;
-    const match = state.slides.find((s) => s.id === id);
-    return match !== undefined ? match : null;
-  });
+  const currentSummary = computed<SlideSummary | null>(() => state.currentSummary);
 
   const isSkipped = computed<boolean>(() => {
-    const summary = currentSummary.value;
+    const summary = state.currentSummary;
     return summary !== null && summary.isSkipped === true;
   });
 
@@ -67,41 +58,37 @@ export const usePluginView = defineStore('pluginView', () => {
   );
 
   // ── Actions ────────────────────────────────────────────────────────────
-  /** Overschrijf de slidelist (bij `init` én `page-changed`). */
-  function setSlides(slides: SlideSummary[]): void {
-    state.slides = slides;
-  }
-
-  /**
-   * Markeer een slide als gekozen. Reset de payloads zodat de UI
-   * direct een loading-state kan tonen; de volgende `slide-loaded`
-   * van main vult general/content/graphs opnieuw.
-   */
-  function pickSlide(id: string | null): void {
-    state.currentSlideId = id;
-    state.general = null;
-    state.content = null;
-    state.graphs = null;
-  }
-
-  /** Wissel actieve tab (general / content / graphs). */
   function setActiveTab(tab: TabId): void {
     state.activeTab = tab;
   }
 
-  /**
-   * Vul de drie tab-payloads tegelijk — dit is wat main stuurt na
-   * `pick-slide`. Per-section setters worden toegevoegd zodra T8+
-   * incremental refreshes nodig heeft.
-   */
-  function setSlidePayload(
+  /** Apply a full slide-loaded payload from the sandbox. */
+  function setSlideLoaded(
+    summary: SlideSummary,
     general: GeneralSections | null,
     content: ContentItems | null,
     graphs: GraphItems | null,
   ): void {
+    state.currentSummary = summary;
+    state.currentSlideId = summary.id;
     state.general = general;
     state.content = content;
     state.graphs = graphs;
+  }
+
+  /** Apply a summary-only update (slide renamed or skip-toggled). */
+  function setSummary(summary: SlideSummary): void {
+    state.currentSummary = summary;
+    state.currentSlideId = summary.id;
+  }
+
+  /** Selection cleared on the canvas — drop slide state entirely. */
+  function clearSlide(): void {
+    state.currentSummary = null;
+    state.currentSlideId = null;
+    state.general = null;
+    state.content = null;
+    state.graphs = null;
   }
 
   return {
@@ -115,9 +102,9 @@ export const usePluginView = defineStore('pluginView', () => {
     hasGraphs,
     allEmpty,
     // actions
-    setSlides,
-    pickSlide,
     setActiveTab,
-    setSlidePayload,
+    setSlideLoaded,
+    setSummary,
+    clearSlide,
   };
 });

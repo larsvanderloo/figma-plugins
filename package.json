@@ -1,6 +1,6 @@
 {
   "name": "welder-editor",
-  "version": "0.3.3",
+  "version": "0.4.3",
   "type": "module",
   "scripts": {
     "build": "npm run build:aliases && npm run build:ui && npm run build:widget",
