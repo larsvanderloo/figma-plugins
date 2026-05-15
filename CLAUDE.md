@@ -5,24 +5,21 @@ A single-plugin repo. Targets **Figma design** and **Figma Slides** (see `manife
 ## Layout
 
 ```
-manifest.json          Figma plugin manifest
-plugin-src/
-  code.ts              plugin-sandbox entry (runs figma.*)
-  ui/                  iframe Vue app (Vue 3 + Nuxt UI v4)
-  editors/             feature editors composed by the UI
-  chart-core/          chart rendering logic
-  slide-machine.ts     slide-build state machine
+manifest.json                    Figma plugin manifest
+src/
+  code.ts                        plugin-sandbox entry (runs figma.*)
+  ui/                            iframe Vue app (Vue 3 + Nuxt UI v4)
+  editors/                       feature editors composed by the UI
+  chart-core/                    chart rendering logic
+  slide-machine.ts               slide-build state machine
   ...
 docs/
-  api-spec/            Figma API surface and capabilities
-  architecture/        high-level architecture notes
-  threading/           message-bus contract between code/ui
-  perf/                bundle-size and render budgets
-  product/             product spec + research notes
-validation/            golden snapshots, e2e harness scratch
-scripts/               build-time codegen (lucide aliases)
-vite.config.ts         builds the iframe UI to dist/ui.html
-esbuild.config.mjs     builds the plugin sandbox to dist/code.js
+  architecture/                  architecture notes
+  perf/                          perf investigations
+  product/specs/spec.md          full product spec (Dutch, ~2300 lines)
+vite.config.ts                   builds the iframe UI to dist/ui.html
+esbuild.config.mjs               builds the plugin sandbox to dist/code.js
+generate-lucide-aliases.mjs      build-time codegen for icon-alias map
 ```
 
 ## Build commands
@@ -40,14 +37,14 @@ Loadable via Figma → Plugins → Development → Import plugin from manifest �
 
 The Figma plugin runtime has two threads with strict separation. Crossing them outside the message bus is a blocking review comment.
 
-**`plugin-src/code.ts` (Figma sandbox, runs `figma.*`)**
+**`src/code.ts` (Figma sandbox, runs `figma.*`)**
 
 - No DOM — no `document`, `window`, `localStorage`, `fetch` against arbitrary URLs (only `allowedDomains` from manifest; currently `["none"]`).
 - ES2017 target only — no optional chaining, nullish coalescing, or catch-without-binding in the sandbox bundle. The UI bundle (Vite) may use ES2020+.
 - No silent error-eats — operations return typed results through the message bus.
 - Document mutations grouped under a single user-visible undo step where possible (`figma.commitUndo()` discipline).
 
-**`plugin-src/ui/` (iframe, runs Vue)**
+**`src/ui/` (iframe, runs Vue)**
 
 - No `figma.*` imports — the iframe has no Figma API surface.
 - No direct DOM mutation outside Vue's reactivity.

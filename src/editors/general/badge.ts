@@ -25,7 +25,7 @@ import {
   LUCIDE_SLUG_RE,
   trySwapViaInstanceProperty,
   swapComponentByName,
-} from '../shared/icon-swap';
+} from '../_shared/icon-swap';
 import { setTextCharactersSafe } from '../_shared/fonts';
 
 /** Payload-shape voor `update-general` met section `badge`. */

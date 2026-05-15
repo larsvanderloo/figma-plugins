@@ -1,5 +1,5 @@
 // ============================================================
-// esbuild — bouwt uitsluitend de plugin-thread (plugin-src/code.ts
+// esbuild — bouwt uitsluitend de plugin-thread (src/code.ts
 // -> dist/code.js). De iframe-UI wordt gebouwd door Vite naar
 // dist/ui.html; esbuild laadt die file als string via de
 // chunked-text-loader zodat code.ts hem aan figma.showUI kan geven.
@@ -65,7 +65,7 @@ function chunkedTextLoader(options = {}) {
 }
 
 const codeContext = await esbuild.context({
-  entryPoints: ['plugin-src/code.ts'],
+  entryPoints: ['src/code.ts'],
   bundle: true,
   outfile: 'dist/code.js',
   platform: 'browser',
@@ -78,7 +78,7 @@ const codeContext = await esbuild.context({
 
 if (isWatch) {
   await codeContext.watch();
-  console.log('[esbuild] Watching plugin-src/code.ts...');
+  console.log('[esbuild] Watching src/code.ts...');
 } else {
   await codeContext.rebuild();
   await codeContext.dispose();

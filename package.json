@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "build": "npm run build:aliases && npm run build:ui && npm run build:widget",
-    "build:aliases": "node scripts/generate-lucide-aliases.mjs",
+    "build:aliases": "node generate-lucide-aliases.mjs",
     "build:ui": "vite build",
     "build:widget": "node esbuild.config.mjs",
     "watch": "npm run build:aliases && concurrently --kill-others-on-fail \"vite build --watch\" \"node esbuild.config.mjs --watch\"",

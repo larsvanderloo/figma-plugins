@@ -43,7 +43,7 @@ import {
 import { applyBadge, BadgePayload } from './editors/general/badge';
 import { applyImage, findImageSlot } from './editors/general/image';
 import { applyCard, applyCardVisual } from './editors/content/card';
-import { normalizeIconKey, LUCIDE_SLUG_RE, primeIconCache } from './editors/shared/icon-swap';
+import { normalizeIconKey, LUCIDE_SLUG_RE, primeIconCache } from './editors/_shared/icon-swap';
 import { renderChart, replaceChartContent } from './editors/chart/renderer';
 import { applyTable, scanTableSlot } from './editors/table/renderer';
 import { applyJourney, scanJourneySlot } from './editors/journey/renderer';

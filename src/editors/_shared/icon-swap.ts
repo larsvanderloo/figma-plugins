@@ -1,5 +1,5 @@
 // ============================================================
-// editors/shared/icon-swap.ts
+// editors/_shared/icon-swap.ts
 //
 // Gedeeld hulpmodule voor icon-swapping via INSTANCE_SWAP
 // component-properties (preferredValues + setProperties).

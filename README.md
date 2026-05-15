@@ -20,11 +20,11 @@ Load in Figma → Plugins → Development → Import plugin from manifest → po
 
 ## Architecture
 
-- `plugin-src/code.ts` — plugin-sandbox entry (runs `figma.*`, ES2017 target).
-- `plugin-src/ui/` — iframe Vue 3 app (Nuxt UI v4, ES2020+ target).
-- `plugin-src/types.ts` — message-bus contract between the two threads.
-- `plugin-src/editors/` — per-editor logic.
-- `plugin-src/chart-core/` — chart rendering + CSV parser.
+- `src/code.ts` — plugin-sandbox entry (runs `figma.*`, ES2017 target).
+- `src/ui/` — iframe Vue 3 app (Nuxt UI v4, ES2020+ target).
+- `src/types.ts` — message-bus contract between the two threads.
+- `src/editors/` — per-editor logic.
+- `src/chart-core/` — chart rendering + CSV parser.
 
 The two threads are isolated; everything they share crosses the message bus. See `CLAUDE.md` for the non-negotiable thread rules.
 

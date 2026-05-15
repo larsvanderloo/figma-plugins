@@ -9,6 +9,6 @@
     "lib": ["ES2017"],
     "typeRoots": ["./node_modules/@types", "./node_modules/@figma"]
   },
-  "include": ["plugin-src/**/*.ts"],
-  "exclude": ["plugin-src/ui/**/*", "node_modules", "dist"]
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/ui/**/*", "node_modules", "dist"]
 }

@@ -51,7 +51,7 @@ import {
   JOURNEY_SUBHEADER_FONT_PX,
   JOURNEY_DIVIDER_WEIGHT,
 } from '../../constants';
-import { trySwapViaInstanceProperty, swapComponentByName } from '../shared/icon-swap';
+import { trySwapViaInstanceProperty, swapComponentByName } from '../_shared/icon-swap';
 import { loadAllFontsForNode } from '../_shared/fonts';
 
 // -------------------------------------------------------------------

@@ -20,7 +20,7 @@ const pkg = JSON.parse(
 ) as { version: string };
 
 /**
- * Vite's input is plugin-src/ui/index.html; plugin-side esbuild importeert
+ * Vite's input is src/ui/index.html; plugin-side esbuild importeert
  * via `import uiHtml from './dist/ui.html'`. Deze plugin hernoemt de HTML-
  * output van `index.html` naar `ui.html` in de post-write stap.
  *
@@ -49,7 +49,7 @@ function renameIndexToUi(): Plugin {
 }
 
 export default defineConfig({
-  root: fileURLToPath(new URL('./plugin-src/ui', import.meta.url)),
+  root: fileURLToPath(new URL('./src/ui', import.meta.url)),
   define: {
     // Replaced verbatim at bundle-time. Type declared in ui/env.d.ts.
     __APP_VERSION__: JSON.stringify(pkg.version),
@@ -73,7 +73,7 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      '@': fileURLToPath(new URL('./plugin-src/ui', import.meta.url)),
+      '@': fileURLToPath(new URL('./src/ui', import.meta.url)),
     },
   },
   build: {
