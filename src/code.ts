@@ -26,7 +26,6 @@ import {
   findBadge,
   findImageWrap,
   findCardWrap,
-  findChartWrap,
   findTableWrap,
   findTableSlot,
   findTimelineWrap,
@@ -44,7 +43,6 @@ import { applyBadge, BadgePayload } from './editors/general/badge';
 import { applyImage, findImageSlot } from './editors/general/image';
 import { applyCard, applyCardVisual } from './editors/content/card';
 import { normalizeIconKey, LUCIDE_SLUG_RE, primeIconCache } from './editors/_shared/icon-swap';
-import { renderChart, replaceChartContent } from './editors/chart/renderer';
 import { applyTable, scanTableSlot } from './editors/table/renderer';
 import { applyJourney, scanJourneySlot } from './editors/journey/renderer';
 import { importCSV } from './editors/table/csv';
@@ -58,7 +56,6 @@ import type {
   GraphItems,
   CardItem,
   TimelineItem,
-  ChartData,
   TableWrapModel,
   JourneyWrapModel,
   UIToPluginMessage,
@@ -887,64 +884,30 @@ function scanContent(slide: InstanceNode): ContentItems | null {
   };
 }
 
-/**
- * Leest persisterende model-data uit `node.getPluginData('model')` (spec §6).
- * Retourneert null wanneer de wrapper nog geen pluginData draagt (nieuwe
- * instance) of wanneer de JSON corrupt is — editor valt dan terug op zijn
- * DEFAULT_*_DATA uit {chart,table}-core/constants.
- *
- * Werkt voor zowel ChartWrap als TableWrap (zelfde pluginData-conventie).
- */
-function readModelData(wrap: InstanceNode): unknown | null {
-  const raw = wrap.getPluginData('model');
-  if (raw === '' || raw === null) return null;
-  try {
-    return JSON.parse(raw);
-  } catch (_err) {
-    return null;
-  }
-}
-
 function scanGraphs(slide: InstanceNode): GraphItems | null {
-  // v0.1.0 wrapper-finders geven de eerste hit; in de praktijk heeft een
-  // Slide-template precies één ChartWrap en één TableWrap. De instance-
-  // selector in GraphsPanel kan hier later groeien wanneer we meerdere
-  // charts per slide toestaan (out of scope v0.1.0).
-  const chartWrap = findChartWrap(slide);
+  // v0.1.0 wrapper-finder geeft de eerste TableWrap; in de praktijk heeft
+  // een Slide-template precies één TableWrap. De instance-selector in
+  // GraphsPanel kan hier later groeien wanneer we meerdere tables per
+  // slide toestaan (out of scope v0.1.0).
   const tableWrap = findTableWrap(slide);
+  if (tableWrap === null) return null;
 
-  const instances: GraphItems['instances'] = [];
+  // T34.2: lees via findTableSlot + scanTableSlot. Wanneer de TableWrap
+  // een Slot heeft, gebruiken we het Slot-id als nodeId zodat
+  // `update-table` en `import-csv` direct naar de Slot kunnen.
+  const slot = findTableSlot(slide);
+  const tableModel: TableWrapModel | null = slot !== null ? scanTableSlot(slot) : null;
+  const nodeId = slot !== null ? slot.id : tableWrap.id;
 
-  if (chartWrap !== null) {
-    instances.push({
-      nodeId: chartWrap.id,
-      type: 'chart',
-      label: 'Chart — ' + chartWrap.name,
-      chartData: readModelData(chartWrap) as ChartData | null,
-    });
-  }
-  if (tableWrap !== null) {
-    // T34.2: lees nu via findTableSlot + scanTableSlot; `tableData` (legacy)
-    // blijft null zodat de UI-stub niet crasht. T34.3 leest `tableModel`.
-    const slot = findTableSlot(slide);
-    const tableModel: TableWrapModel | null = slot !== null ? scanTableSlot(slot) : null;
-    // Wanneer de TableWrap een Slot heeft, gebruiken we het Slot-id als
-    // nodeId zodat `update-table` en `import-csv` direct naar de Slot kunnen.
-    const nodeId = slot !== null ? slot.id : tableWrap.id;
-    instances.push({
-      nodeId: nodeId,
-      type: 'table',
-      label: 'Table — ' + tableWrap.name,
-      tableData: null,
-      tableModel: tableModel,
-    });
-  }
-
-  if (instances.length === 0) return null;
+  const instance: GraphItems['instances'][number] = {
+    nodeId: nodeId,
+    label: 'Table — ' + tableWrap.name,
+    tableModel: tableModel,
+  };
 
   return {
-    instances: instances,
-    selectedGraphId: instances[0].nodeId,
+    instances: [instance],
+    selectedGraphId: nodeId,
   };
 }
 
@@ -1899,108 +1862,6 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       type: 'target-updated',
       ok: true,
       targetId: msg.copyWrapNodeId,
-    });
-    return;
-  }
-
-  if (msg.type === 'update-graph') {
-    // T12: persisteer ChartData op de ChartWrap (`pluginData.model` +
-    // `kind: 'welder-chartwrap'`), plus een relaunch-knop zodat de user
-    // de editor direct kan heropenen vanaf de canvas-selection.
-    //
-    // Canvas-rendering volgt in T13 (editors/chart/renderer.ts); voor
-    // v0.1.0-T12 volstaat persistentie + ACK zodat de UI een save-state
-    // kan tonen en T13 alleen nog de render-call hoeft toe te voegen.
-    const target = await figma.getNodeByIdAsync(msg.chartWrapId);
-    if (target === null) {
-      postToUI({
-        type: 'target-updated',
-        ok: false,
-        error: 'ChartWrap not found: ' + msg.chartWrapId,
-      });
-      return;
-    }
-    if (target.type !== 'INSTANCE' && target.type !== 'FRAME') {
-      postToUI({
-        type: 'target-updated',
-        ok: false,
-        error: 'Target is not a wrapper node: ' + msg.chartWrapId,
-      });
-      return;
-    }
-    figma.commitUndo();
-    const scene = target as SceneNode;
-    scene.setPluginData('kind', 'welder-chartwrap');
-    scene.setPluginData('v', '1');
-    scene.setPluginData('model', JSON.stringify(msg.data));
-    if ('setRelaunchData' in scene) {
-      (
-        scene as SceneNode & { setRelaunchData: (data: { [k: string]: string }) => void }
-      ).setRelaunchData({
-        open: 'Bewerk met Slide Editor',
-      });
-    }
-
-    // T13: render een vers chart-frame en vervang ChartWrap's content.
-    // Fallback-pad: wanneer de wrapper geen appendChild toestaat (locked
-    // library-instance), plaatsen we het frame naast de wrapper in zijn
-    // parent op dezelfde x/y — de user kan dan handmatig herplaatsen.
-    const fresh = await renderChart(msg.data);
-    const swapped = replaceChartContent(scene, fresh);
-    if (!swapped) {
-      // Remove any previously-placed fallback frame to prevent accumulation.
-      const prevId = scene.getPluginData('fallbackFrameId');
-      if (prevId !== '' && prevId !== null) {
-        const prevNode = await figma.getNodeByIdAsync(prevId);
-        if (prevNode !== null && 'remove' in prevNode) {
-          try {
-            (prevNode as SceneNode).remove();
-          } catch (_e) {}
-        }
-      }
-      // T33: in Slide Machine zit de wrapper-parent óók binnen een Slide-
-      // INSTANCE. Een kale `parentFrame.appendChild(fresh)` throws dan
-      // `Cannot move node. New parent is an instance or is inside of an
-      // instance` en crasht de hele handler. We proberen eerst de parent,
-      // maar vangen de failure op en vallen door naar currentPage.
-      const parent = 'parent' in scene ? (scene as SceneNode).parent : null;
-      let placed = false;
-      if (parent !== null && parent !== undefined && 'appendChild' in parent) {
-        const parentFrame = parent as FrameNode | PageNode | GroupNode;
-        if ('x' in scene && 'y' in scene) {
-          fresh.x = (scene as LayoutMixin).x;
-          fresh.y = (scene as LayoutMixin).y;
-        }
-        try {
-          parentFrame.appendChild(fresh);
-          placed = true;
-        } catch (_err) {
-          // Parent zit ook binnen een INSTANCE — fall through naar
-          // currentPage-drop hieronder.
-        }
-      }
-      if (!placed) {
-        // Laatste redmiddel: op de current page droppen zodat het frame
-        // niet gewoon verdwijnt. User kan het handmatig naar de goede
-        // plek slepen.
-        try {
-          figma.currentPage.appendChild(fresh);
-        } catch (_err) {
-          // Zeer onwaarschijnlijk (bv. tijdens page-switch), maar we
-          // kiezen liever een stille log dan een crash-toast.
-          console.log('[welder-slide-editor] could not place chart fallback frame');
-        }
-      }
-      // Track fresh frame so next render can clean it up.
-      try {
-        scene.setPluginData('fallbackFrameId', fresh.id);
-      } catch (_e) {}
-    }
-
-    postToUI({
-      type: 'target-updated',
-      ok: true,
-      targetId: msg.chartWrapId,
     });
     return;
   }

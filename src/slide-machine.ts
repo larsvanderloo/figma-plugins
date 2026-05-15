@@ -223,11 +223,6 @@ export function findCardWrap(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, (n) => n.name === 'CardWrap');
 }
 
-/** ChartWrap: INSTANCE met name 'ChartWrap' (exact match). */
-export function findChartWrap(slide: InstanceNode): InstanceNode | null {
-  return findFirstInstance(slide, (n) => n.name === 'ChartWrap');
-}
-
 /**
  * TableWrap: instances die een tabel representeren (NIET timeline).
  * Matcht:
@@ -415,7 +410,7 @@ export function findEnclosingInstanceByName(
 
 /**
  * JourneyWrap: INSTANCE met name 'JourneyWrap'.
- * Analoog aan findChartWrap / findTableWrap.
+ * Analoog aan findTableWrap.
  */
 export function findJourneyWrap(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, function (n) {

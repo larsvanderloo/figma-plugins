@@ -23,7 +23,7 @@
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../types';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS, TABLE_WIDTHS } from '../../constants';
-import { tokenize } from '../../chart-core/csv';
+import { tokenize } from '../../csv';
 import { useNotifications } from '../stores/useNotifications';
 
 const notifications = useNotifications();

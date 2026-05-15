@@ -1,77 +1,13 @@
 // ============================================================
 // Welder Slide Editor — Shared Types
 //
-// Consumed by both main-thread (plugin-src/code.ts, slide-machine.ts,
-// editors/**) en UI-iframe (plugin-src/ui/**). Deze types zijn de
-// single-source-of-truth voor het plugin-datamodel en de bridge-
-// messages tussen UI en main-thread.
+// Consumed by both main-thread (src/code.ts, slide-machine.ts, editors/**)
+// en UI-iframe (src/ui/**). Deze types zijn de single-source-of-truth voor
+// het plugin-datamodel en de bridge-messages tussen UI en main-thread.
 //
 // Bridge-messages volgen FIG-MSG-01 (typed discriminated unions).
 // Zie spec.md §3 (Data-modellen) en §5 (Bridge-messages).
 // ============================================================
-
-// ============================================================
-// Chart-editor types (T12 — 1-op-1 overgenomen uit chart-builder v0.3.0)
-//
-// Deze types voeden zowel het UI-iframe (ChartEditor + useChartStore +
-// CsvImport) als de main-thread (editors/chart/renderer.ts, T13). De
-// shape blijft bewust identiek aan chart-builder's widget-src/types.ts
-// zodat de ported UI-components geen refactor nodig hebben.
-// ============================================================
-
-export const CHART_DATA_VERSION = 1 as const;
-
-export type ChartType = 'bar' | 'line' | 'pie' | 'donut' | 'progressbar' | 'radial';
-
-/**
- * Persisteerbare CSV-bron: ruwe tekst + mapping-instellingen. File-object
- * wordt NIET opgeslagen (niet serialiseerbaar); UI herstelt alleen uit
- * `text` + `fileName`.
- */
-export interface CsvSource {
-  text: string;
-  fileName: string;
-  selectedBlockIndex: number;
-  labelColumn: number;
-  valueColumn: number;
-  skipHeader: boolean;
-  valueFormat: 'number' | 'percentage';
-}
-
-export interface DataPoint {
-  /** Niet leeg, max 32 tekens. */
-  label: string;
-  /** >= 0. */
-  value: number;
-  /** Optionele markering — zichtbaar wanneer showBenchmarkDelta actief is. */
-  markering?: number;
-}
-
-export interface ChartData {
-  version: typeof CHART_DATA_VERSION;
-  chartType: ChartType;
-  theme: 'orange' | 'blue';
-  /** Max 64 tekens. */
-  title: string;
-  /**
-   * Effectieve output — bepaald door activeDataTab. Renderers lezen
-   * altijd dit veld; de store synchroniseert het.
-   */
-  dataPoints: DataPoint[];
-  manualDataPoints?: DataPoint[];
-  csvDataPoints?: DataPoint[];
-  activeDataTab?: 'manual' | 'csv';
-  valueFormat?: 'number' | 'percentage';
-  showLegend?: boolean;
-  benchmark?: number;
-  min?: number;
-  max?: number;
-  showBenchmarkDelta?: boolean;
-  csvSource?: CsvSource;
-  showYAxis?: boolean;
-  /** Size-preset; 'medium' default. */
-  size?: 'small' | 'medium' | 'large' | 'fill';
-}
 
 // ============================================================
 // Table-editor types — v0.2.0 Slot-based (T34.1)
@@ -368,57 +304,34 @@ export interface ContentItems {
 }
 
 // ============================================================
-// Graphs-tab — chart-editor + multi-instance selector (spec §3.5)
+// Graphs-tab — table-instance selector
 //
 // Per §12-Q1 (2026-04-23): één Graphs-tab met instance-selector die alle
-// ChartWrap + TableWrap instances op de slide kan tonen. Voor v0.1.0
-// modelleren we alleen het chart-gedeelte (ChartData); table-support
-// in T14. `selectedGraphId` verwijst naar het geselecteerde wrapper-id
-// wanneer er meerdere instances zijn.
+// TableWrap-instances op de slide kan tonen. `selectedGraphId` verwijst
+// naar het geselecteerde wrapper-id wanneer er meerdere tables zijn.
 // ============================================================
 
 /**
- * Eén bewerkbaar wrapper-instance binnen de Graphs-tab.
- * `type: 'chart'`  → ChartWrap, gerenderd door ChartEditor.
- * `type: 'table'`  → TableWrap, gerenderd door TableEditor.
+ * Eén bewerkbaar TableWrap-instance binnen de Graphs-tab.
  *
- * T31 (2026-04-24): TimelineWrap zit NIET meer in deze Graphs-lijst; het
- * wordt via `ContentItems.timelineItems` naar de Content-tab gerouteerd.
+ * `nodeId` is het Slot-id binnen de TableWrap-INSTANCE (het Slot-id wordt
+ * direct gebruikt door `update-table` en `import-csv` bridge-messages).
  */
 export interface GraphInstance {
   nodeId: string;
-  type: 'chart' | 'table';
-  /** Menselijk leesbare naam, bv. "Chart 1 (bar)" of "Table 1". Samengesteld door main-thread. */
+  /** Menselijk leesbare naam, bv. "Table 1". Samengesteld door main-thread. */
   label: string;
   /**
-   * Chart-specifieke data — alleen aanwezig wanneer type === 'chart'.
-   * `null` wanneer de ChartWrap nog geen pluginData draagt (nieuwe instance);
-   * ChartEditor valt dan terug op DEFAULT_CHART_DATA.
-   */
-  chartData?: ChartData | null;
-  /**
-   * Table-specifieke data — alleen aanwezig wanneer type === 'table'.
-   * `null` wanneer de TableWrap nog geen pluginData draagt (nieuwe instance);
-   * TableEditor valt dan terug op DEFAULT_TABLE_DATA.
-   *
-   * @deprecated — legacy v0.1.x. T34.2 populate't niet langer dit veld;
-   * nieuwe code (T34.3 UI) leest `tableModel` hieronder.
-   */
-  tableData?: TableData | null;
-  /**
-   * Slot-based table-model (T34.2, v0.2.0). Alleen aanwezig wanneer
-   * type === 'table'. `null` wanneer de TableWrap geen Slot bevat
+   * Slot-based table-model. `null` wanneer de TableWrap geen Slot bevat
    * (nieuwe variant zonder inhoud) óf wanneer de scan geen rijen vindt.
-   * TableEditor leest dit veld in T34.3 in.
    */
-  tableModel?: TableWrapModel | null;
+  tableModel: TableWrapModel | null;
 }
 
 export interface GraphItems {
   /**
-   * Alle ChartWrap + TableWrap instances op de slide (gesorteerd: charts
-   * eerst, dan tables; binnen elk type op render-volgorde). Lengte >=1;
-   * wanneer de slide geen graph/table-wrappers heeft is het omhullende
+   * Alle TableWrap-instances op de slide (op render-volgorde). Lengte >=1;
+   * wanneer de slide geen table-wrappers heeft is het omhullende
    * `graphs`-veld in PluginView `null` i.p.v. deze lijst leeg.
    */
   instances: GraphInstance[];
@@ -555,12 +468,6 @@ export type UIToPluginMessage =
         heading: string;
         paragraph: string;
       }>;
-    }
-  | {
-      type: 'update-graph';
-      slideId: string;
-      chartWrapId: string;
-      data: ChartData;
     }
   | {
       /**

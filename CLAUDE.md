@@ -10,7 +10,7 @@ src/
   code.ts                        plugin-sandbox entry (runs figma.*)
   ui/                            iframe Vue app (Vue 3 + Nuxt UI v4)
   editors/                       feature editors composed by the UI
-  chart-core/                    chart rendering logic
+  csv/                           CSV tokenizer (consumed by table editor)
   slide-machine.ts               slide-build state machine
   ...
 docs/

@@ -4,7 +4,7 @@
 // CSV-import → applyTable-adapter (T34.2).
 //
 // Parsing leunt op de gedeelde RFC 4180-achtige tokenizer in
-// `chart-core/csv/`. Die module ondersteunt:
+// `csv/`. Die module ondersteunt:
 //   - dialect-detectie (',' / ';' / tab)
 //   - quoted cells met embedded comma's én quotes (""-escape)
 //   - meerregelige cellen binnen quotes
@@ -22,7 +22,7 @@
 
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../types';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../constants';
-import { tokenize } from '../../chart-core/csv';
+import { tokenize } from '../../csv';
 import { applyTable } from './renderer';
 
 type WidthKey = 'sm' | 'md' | 'lg';

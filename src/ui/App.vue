@@ -1,11 +1,11 @@
 <!--
-  Welder Slide Editor — iframe root (T6 chassis).
+  Welder Slide Editor — iframe root.
 
-  Layout volgt chart-builder's App.vue-template (project_widget_template):
+  Layout:
     - Header: welder-logo (links) + SlideSelector (midden) + close-knop (rechts).
     - Body: gestapelde panelen (General / Content / Graphs) in cards met
-      rounded corners + shadow. Tabs zijn verwijderd; alle aanwezige panelen
-      verschijnen verticaal op één pagina.
+      rounded corners + shadow. Alle aanwezige panelen verschijnen verticaal
+      op één pagina.
     - Empty-state wanneer geen slide gekozen óf de gekozen slide geen
       bewerkbare wrappers heeft.
 
@@ -13,7 +13,6 @@
     - onMounted: `onMessage`-handler voor init / slide-loaded / page-changed
       en daarna `ui-ready` posten.
     - SlideSelector-wijziging: pickSlide-store + `pick-slide` bridge.
-    - Panels zelf blijven leeg — T7-T14 vullen de drie slots in.
 -->
 <script setup lang="ts">
 import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue';

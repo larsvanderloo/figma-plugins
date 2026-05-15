@@ -36,7 +36,7 @@ const emit = defineEmits<{
 
 const TAB_LABELS: Record<TabId, string> = {
   general: 'Titel & onderschrift',
-  graphs: 'Grafieken en tabellen',
+  graphs: 'Tabellen',
 };
 
 const items = computed(() => {
