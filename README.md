@@ -1,136 +1,80 @@
-# figma-plugins
+# Welder Editor
 
-Single repo for the Figma-plugins team. Each plugin is a directory under `plugins/`, sharing a common toolchain (Vue 3 + Nuxt UI v4 + TypeScript), agent prompts, runbooks, and CI workflows. Targets Figma design, FigJam, and Figma Slides via the Plugin API. Widgets are out of scope for now.
+Figma plugin for editing existing Welder-branded slides in Figma Design and Figma Slides. The user picks a slide on the current page from a dropdown, then edits its content across three tabs (General / Content / Graphs) wiring up sub-editors for TitleDescription, Badge, Image, Card list, Chart, Table, and Journey/Timeline. Consolidates the predecessors `welder-table` v0.2.0 (plugin) and `chart-builder` v0.3.0 (widget) — those tags remain in their respective repos as a rollback path.
 
-## Layout
+The full product specification is in [`docs/product/specs/spec.md`](./docs/product/specs/spec.md) (Dutch, ~2300 lines). The org bookkeeping (api-spec, threading, perf) is under [`docs/`](./docs/).
+
+## Imported from external scaffold
+
+This plugin was imported from an external zip carrying the working v0.2.1 Welder Editor build, then fitted with the canonical org bookkeeping non-destructively. The original `plugin-src/` layout is retained pending a follow-up refactor to the canonical `code/` + `ui/` + `shared/` split — see the import ADR in the top-level `docs/adr/` for the rationale and the planned `T_REFACTOR_LAYOUT` task.
+
+Onboarding debt that still needs to be paid down:
+
+- **Lockfile migration.** The zip ships `package-lock.json` (npm) and the `name` field in `package.json` is `welder-editor` — neither matches the org's pnpm workspace + `@figma-plugins/...` naming convention. Until migrated, build with `npm install && npm run build` from inside this folder. TODO(project-pm + ui-engineer): migrate to pnpm workspace member, rename to `@figma-plugins/welder-editor`, drop `package-lock.json`. The `pnpm-workspace.yaml` `plugins/*` glob already picks this folder up; only the per-plugin `package.json` and lockfile need to change.
+- **Layout refactor.** Move `plugin-src/code.ts` → `code/main.ts`, `plugin-src/ui/` → `ui/`, `plugin-src/{types,constants,slide-machine}.ts` → `shared/`, and rewire `vite.config.ts` + `esbuild.config.mjs`. See the import ADR for scope.
+- ~~**Monday folder + Scrum Team boards.**~~ Done — folder `placeholder-plugin team` (id 2996351) with the standard Scrum Team boards is wired in `plugin.toml [monday]`. Sync targets the Tasks board (id 5095985440) on PR events that carry `Resolves MON-<id>`.
+- **Real (gzipped) bundle budgets.** The numbers in `plugin.toml` `[validation]` are raw-byte placeholders pulled from the imported zip. A measured gzipped pass is required before the next release; see `docs/perf/budget.md`.
+
+## Layout (current — deviation from canonical, see import ADR)
 
 ```
-figma-plugins/
-├── plugins/                  One directory per plugin
-│   ├── _template/            Canonical plugin skeleton (copied by bootstrap-plugin)
-│   ├── welder-editor/        First plugin
-│   └── ...
-├── components/               Shared library: atomic Vue primitives + design tokens (atop Nuxt UI v4)
-├── sections/                 Shared library: composite reusable views built from components
-├── packages/
-│   └── figma-api/            Typed wrappers around figma.* + message-bus router
-├── runbooks/                 Team-wide process docs
-├── learnings/                Cross-plugin patterns, anti-patterns, post-mortems
-├── tools/
-│   ├── bootstrap_plugin.py   Scaffold a new plugin (console script: `bootstrap-plugin`)
-│   ├── monday-sync/          GitHub → Monday.com sync
-│   ├── demos/                Demo-pipeline source files and headless demo tool
-│   └── perf/                 Bundle-size + perf benchmark helpers
-├── .claude/agents/           Six agent prompt files (matches Monday Owner Agent labels)
-├── .github/
-│   ├── workflows/
-│   │   ├── validate.yml      Lint + vue-tsc + vitest + build matrix
-│   │   └── monday-sync.yml   PR events → Monday columns (path-filtered per plugin)
-│   ├── PULL_REQUEST_TEMPLATE.md
-│   └── CODEOWNERS
-├── .githooks/commit-msg      Auto-injects [#MON-<id>] suffix on commit subjects
-├── CLAUDE.md                 Team-wide agent operating instructions
-├── package.json              Root workspace config (pnpm)
-├── pnpm-workspace.yaml       pnpm workspace member list
-├── tsconfig.base.json        Shared strict TypeScript config
-├── pyproject.toml            Python tooling (monday-sync, bootstrap, perf)
-└── README.md                 This file
+welder-editor/
+├── plugin.toml          # Plugin metadata (slug, owner_agent, monday, budgets, message-bus version)
+├── manifest.json        # Figma plugin manifest (editorType: figma + slides; documentAccess: dynamic-page)
+├── package.json         # npm-managed today; TODO migrate to pnpm workspace
+├── package-lock.json    # npm — TODO drop after pnpm migration
+├── vite.config.ts       # builds plugin-src/ui/ → dist/ui.html (single-file)
+├── esbuild.config.mjs   # builds plugin-src/code.ts → dist/code.js (chunked-text-loader inlines dist/ui.html)
+├── tsconfig.json        # code-side, ES2017
+├── tsconfig.ui.json     # ui-side, ES2020
+├── app.config.ts        # Nuxt UI palette
+├── plugin-src/          # NON-CANONICAL layout — to be split into code/, ui/, shared/
+│   ├── code.ts          # main-thread bundle entry
+│   ├── types.ts         # message-bus types + domain models (the de-facto contract)
+│   ├── constants.ts
+│   ├── slide-machine.ts # wrapper detectors
+│   ├── editors/         # per-editor logic (general, content, chart, table, journey, shared)
+│   ├── chart-core/csv/  # CSV parser
+│   └── ui/              # Vue 3 iframe app (components, composables, assets)
+├── docs/                # org bookkeeping
+│   ├── api-spec/overview.md
+│   ├── threading/overview.md
+│   ├── perf/budget.md
+│   ├── perf/investigations/   # prior perf-investigation reports
+│   └── product/specs/spec.md  # full product spec (Dutch, ~2300 lines)
+└── validation/          # plugin-tester landing zone (e2e gauntlet, listening tests, submissions)
 ```
 
-## Getting started (first-time setup)
+The agent ownership map from `CLAUDE.md` applies to `plugin-src/` paths during the deviation window: `plugin-src/code.ts` is owned by `figma-api-engineer`; `plugin-src/ui/` by `ui-engineer`; `plugin-src/types.ts` + `plugin-src/constants.ts` + `plugin-src/slide-machine.ts` (the contract) by `figma-api-engineer`. The chart-core CSV parser belongs to `figma-api-engineer` (data shape) with `ui-engineer` consultation when the parser is consumed in the iframe. Editors under `plugin-src/editors/` cross both — touch `code/` paths via `figma-api-engineer`, ui rendering via `ui-engineer`.
 
-1. **Clone this repo** to your machine.
-
-2. **Install Node tooling deps** (Node 20+, pnpm 9+):
-
-   ```bash
-   pnpm install
-   ```
-
-3. **Install Python tooling deps** (Python 3.11+ for `tomllib`):
-
-   ```bash
-   pip install -e .
-   ```
-
-   (macOS: `brew install python@3.11` if not already.)
-
-4. **Set the GitHub repo secret** for Monday sync:
-   - GitHub repo → Settings → Secrets and variables → Actions → New repository secret
-   - Name: `MONDAY_API_TOKEN`
-   - Value: your Monday API token (Monday avatar → Developers → My Access Tokens)
-
-That's the entire org-level setup.
-
-The Figma Plugins workspace is **6325546** at `larsvdloo-team.monday.com/`. Each plugin lives in its own folder containing the standard **Scrum Team** template (6 boards). There is no PR Inbox board.
-
-## Adding a new plugin
+## Dev loop (interim — npm)
 
 ```bash
-bootstrap-plugin <slug> "<Display Name>" --folder-id <monday-folder-id>
+# From inside this folder
+npm install                                          # installs from package-lock.json
+npm run build                                        # build:ui (vite) + build:widget (esbuild)
+npm run watch                                        # parallel watch mode (concurrently)
+# In Figma desktop: Plugins → Development → Import plugin from manifest…
+# Select plugins/welder-editor/manifest.json
+# Plugin appears under Plugins → Development → Welder Editor
 ```
 
-Example:
+After the pnpm migration the canonical commands will be `pnpm --filter @figma-plugins/welder-editor build` etc.
+
+## Validation
 
 ```bash
-bootstrap-plugin token-extract "Token Extract" --folder-id <id>
+npm run typecheck:ui     # vue-tsc --noEmit -p tsconfig.ui.json
+# Code-side typecheck and unit tests are TODO — they require the layout refactor
+# (no shared/ or tests/ wiring exists in plugin-src/ yet).
 ```
 
-This creates `plugins/<slug>/` from the `plugins/_template/` skeleton. After scaffolding, edit `plugins/<slug>/plugin.toml` to fill in the 6 Monday board IDs from the duplicated Scrum Team folder.
+Before tagging, run the e2e gauntlet per `runbooks/e2e-gauntlet.md` in each enabled editor type (Figma Design + Figma Slides) on Figma desktop.
 
-To set up Monday for a new plugin:
+## Editor types
 
-1. Open [workspace 6325546 (Figma Plugins)](https://larsvdloos-team.monday.com/workspaces/6325546).
-2. "+" → "Add folder from template" → select **"Scrum Team"** → name the folder `<plugin-slug>`.
-3. The 6 boards (Epics, Sprints, Tasks, Retrospectives, Bugs Queue, Capacity) appear in the new folder. Open each, copy the numeric ID from the URL.
-4. Paste the IDs into `plugins/<slug>/plugin.toml` under `[monday]`.
+This plugin's `manifest.json` declares `["figma", "slides"]`. FigJam is excluded — the Slide Machine library components are not hostable in FigJam (same rationale as ADR-0002, scoped to the deleted scaffold but still applicable per ADR-0018). Narrowing scope after launch requires an ADR.
 
-Skip Monday entirely with `--no-monday` for offline/experimental plugins.
+## Workflow
 
-## How the sync works
-
-`tools/monday-sync/sync.py` is the single source of truth for GitHub→Monday updates. It detects which `plugins/<slug>/` directories the PR touched (via `git diff --name-only`), reads each affected plugin's `plugin.toml` to find the Tasks board ID, and updates that item's `task_status` and `link` columns when the PR body has `Resolves MON-{id}`. Cross-plugin PRs update each touched plugin's Tasks board.
-
-PRs that only touch shared code (`components/`, `sections/`, `packages/`, `tools/`, `runbooks/`) and don't have a `Resolves MON-{id}` line are not tracked.
-
-There are two ways to invoke it.
-
-**Default — CI on self-hosted runner.** `monday-sync.yml` runs on every PR open / ready-for-review / close / review-submitted event. The runner is the local Mac (`runs-on: [self-hosted, macOS, ARM64]`), so there's no GitHub Actions billing exposure.
-
-**Fallback — local CLI.** If the runner is offline:
-
-```bash
-sync-pr <pr-number> [event]    # event: opened (default) | ready_for_review | closed
-```
-
-Reads `MONDAY_API_TOKEN` from `.monday-token` (gitignored) at the repo root, or the env var. Reads `GITHUB_TOKEN` from `gh auth token`. Same `tools/monday-sync/sync.py` code path as the workflow.
-
-## Conventions
-
-- **Item names** in Monday: `[TYPE] <slug>` — e.g. `[FEAT] Toolbar redesign`, `[BUG] Selection lost on undo`
-- **Branch names**: `<type>/MON-{id}-<slug>` — e.g. `feature/MON-1234-toolbar-redesign`
-- **Commit subjects**: `<type>(<scope>): <subject> [#MON-{id}]`
-- **PR descriptions** must contain `Resolves MON-{id}` to link back to Monday
-- **Sprint names**: `S{year}-W{start}-W{end}` — e.g. `S2026-W18-W19`
-
-## Why monorepo
-
-For a solo dev shipping multiple plugins, monorepo wins on:
-
-- **Single secret/variable setup** — `MONDAY_API_TOKEN` once, not per-repo.
-- **Shared library imports as workspace packages** — `@figma-plugins/ui-components` instead of versioned npm packages.
-- **Cross-plugin refactors are single-PR** — no multi-repo coordination.
-- **Agent prompts live alongside code** — the `.claude/agents/` directory is shared; agents see the whole picture.
-
-The trade-off: independent plugin release cadences are awkward in a monorepo. When you reach that point — multiple plugins shipping on independent cycles, or a second engineer joining — split with `git filter-repo --subdirectory-filter plugins/<slug>` into a per-plugin repo. Until then, this is simpler.
-
-## Reference docs
-
-- `runbooks/monday-workflow.md` — canonical Monday-first workflow
-- `runbooks/audit-pipeline.md` — external feedback intake
-- `runbooks/demo-pipeline.md` — release-engineer's pipeline
-- `runbooks/decision-discipline.md` — anti-pleasing-loop protocol for agents
-- `runbooks/e2e-gauntlet.md` — manual e2e validation in design + FigJam + slides
-- `learnings/` — cross-plugin patterns and post-mortems
-
-The Monday workspace at `https://larsvdloo-team.monday.com/` is the system of record for plan state. This repo is the system of record for code state. They sync via `monday-sync.yml`.
+See `CLAUDE.md` (repo root) for the agent ownership map, validation thresholds, and plugin-thread rules. See the import ADR in `docs/adr/` for the deviation window covering the `plugin-src/` layout.
