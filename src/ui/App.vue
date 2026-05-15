@@ -66,6 +66,9 @@ import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
+import { useSlideNavigation } from './composables/useSlideNavigation';
+import { useSlideSettings } from './composables/useSlideSettings';
+import { useExport } from './composables/useExport';
 import { usePluginView } from './stores/usePluginView';
 import { useIconRecents } from './stores/useIconRecents';
 import { useNotifications } from './stores/useNotifications';
@@ -73,6 +76,9 @@ import welderLogo from './assets/welder-logo.svg';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
+const nav = useSlideNavigation();
+const settings = useSlideSettings();
+const exporter = useExport();
 
 // Vite injects this from package.json at build time — see vite.config.ts
 // `define` block. Surfaced as a "v0.x.y" UBadge in the splash and header
@@ -104,10 +110,11 @@ const currentSlide = computed<string | null>({
     return view.state.currentSlideId;
   },
   set(next: string | null) {
-    view.pickSlide(next);
     if (next !== null) {
       loadingSlide.value = true;
-      bridge.post({ type: 'pick-slide', slideId: next });
+      nav.pick(next);
+    } else {
+      view.pickSlide(null);
     }
   },
 });
@@ -116,11 +123,7 @@ function toggleSkip(): void {
   const summary = view.currentSummary;
   if (summary === null) return;
   if (summary.isSkipped === null) return;
-  bridge.post({
-    type: 'set-slide-skipped',
-    slideId: summary.id,
-    skipped: !summary.isSkipped,
-  });
+  settings.setSkipped(summary.id, !summary.isSkipped);
 }
 
 // Export-modal state: target = wat exporteren we, format = welk
@@ -162,18 +165,9 @@ function submitExport(): void {
   if (exportTarget.value === 'slide') {
     const id = view.state.currentSlideId;
     if (id === null) return;
-    bridge.post({
-      type: 'export-document',
-      target: 'slide',
-      format: exportFormat.value,
-      slideId: id,
-    });
+    exporter.exportSlide(id, exportFormat.value);
   } else {
-    bridge.post({
-      type: 'export-document',
-      target: 'presentation',
-      format: exportFormat.value,
-    });
+    exporter.exportPresentation(exportFormat.value);
   }
   exportModalOpen.value = false;
 }
@@ -181,15 +175,7 @@ function submitExport(): void {
 function onThemeChange(modeId: string | null): void {
   const id = view.state.currentSlideId;
   if (id === null) return;
-  // Optimistic: flip the picker's active swatch immediately. The
-  // sandbox confirms with `target-updated` and does NOT re-emit the
-  // slide payload, since a theme change doesn't affect content state.
-  const theme = view.state.general?.theme;
-  if (theme) {
-    theme.explicitModeId = modeId;
-    if (modeId !== null) theme.resolvedModeId = modeId;
-  }
-  bridge.post({ type: 'set-slide-theme', slideId: id, modeId });
+  settings.setTheme(id, modeId);
 }
 
 // Register bridge-handlers vóór de ui-ready handshake zodat we het init-
@@ -232,9 +218,8 @@ bridge.onMessage((msg) => {
     // andere slide heeft gekozen — voorkomt lelijke re-loads wanneer de
     // user binnen dezelfde slide klikt.
     if (view.state.currentSlideId !== msg.slideId) {
-      view.pickSlide(msg.slideId);
-      bridge.post({ type: 'pick-slide', slideId: msg.slideId });
       loadingSlide.value = true;
+      nav.pick(msg.slideId);
     }
     return;
   }
@@ -350,7 +335,7 @@ watch(
 );
 
 onMounted(() => {
-  bridge.post({ type: 'ui-ready' });
+  nav.ready();
 });
 
 // Belt-and-suspenders for the loadAllPagesAsync window in the sandbox:
@@ -359,7 +344,7 @@ onMounted(() => {
 // current slide list. Sandbox's `postSlideList` is debounced + dedup'd
 // so a redundant refresh on focus is cheap.
 function onWindowFocus(): void {
-  bridge.post({ type: 'refresh-slides' });
+  nav.refresh();
 }
 window.addEventListener('focus', onWindowFocus);
 onBeforeUnmount(() => {

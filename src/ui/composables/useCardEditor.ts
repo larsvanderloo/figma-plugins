@@ -3,7 +3,7 @@
 
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
-import { usePluginBridge } from './usePluginBridge';
+import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { CardItem } from '../../types';
 
 function bytesToDataUrl(bytes: Uint8Array): string {
@@ -25,6 +25,7 @@ function bytesToDataUrl(bytes: Uint8Array): string {
 export function useCardEditor() {
   const view = usePluginView();
   const bridge = usePluginBridge();
+  const tracker = useBridgePending(bridge);
 
   const cards = computed<CardItem[]>(() => view.state.content?.cards ?? []);
 
@@ -74,6 +75,7 @@ export function useCardEditor() {
     const stylePayload: { style?: 'Default' | 'Outline' } =
       value.style !== null ? { style: value.style } : {};
 
+    tracker.register();
     bridge.post({
       type: 'update-card',
       slideId: slideId,
@@ -92,6 +94,7 @@ export function useCardEditor() {
     if (slideId === null) return;
     // Reuses the `upload-image` channel; sandbox routes to applyCardVisual
     // based on card-parent (see code.ts upload-image handler).
+    tracker.register();
     bridge.post({
       type: 'upload-image',
       targetNodeId: cardNodeId,
@@ -99,5 +102,12 @@ export function useCardEditor() {
     });
   }
 
-  return reactive({ cards, previewUrls, previewSizes, update, uploadVisual });
+  return reactive({
+    cards,
+    pending: tracker.pending,
+    previewUrls,
+    previewSizes,
+    update,
+    uploadVisual,
+  });
 }

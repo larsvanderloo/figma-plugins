@@ -21,7 +21,7 @@
 // unsubscribe-fn die de caller zelf aanroept.
 // ============================================================
 
-import { getCurrentInstance, onUnmounted } from 'vue';
+import { computed, getCurrentInstance, onUnmounted, ref, type ComputedRef } from 'vue';
 import type { PluginToUIMessage, UIToPluginMessage } from '../../types';
 
 /** Handler voor een inkomend plugin-bericht. */
@@ -48,6 +48,37 @@ export interface PluginBridge {
 
 function post(msg: UIToPluginMessage): void {
   parent.postMessage({ pluginMessage: msg }, '*');
+}
+
+/**
+ * Tracks in-flight writes for a single editor. `register()` increments a
+ * counter (called when posting a mutating message); the next
+ * `target-updated` decrements it. `pending` is true while the counter > 0.
+ *
+ * Correlation is approximate — a target-updated from another in-flight
+ * editor's write will decrement this counter instead. For typical
+ * sequential UX (user edits one field at a time) the approximation is
+ * invisible. Acceptable for spinner/disabled-during-save UX without
+ * touching the sandbox-side message contract.
+ */
+export interface BridgePendingTracker {
+  pending: ComputedRef<boolean>;
+  register(): void;
+}
+
+export function useBridgePending(bridge: PluginBridge): BridgePendingTracker {
+  const count = ref(0);
+  bridge.onMessage((msg) => {
+    if (msg.type === 'target-updated' && count.value > 0) {
+      count.value -= 1;
+    }
+  });
+  return {
+    pending: computed(() => count.value > 0),
+    register(): void {
+      count.value += 1;
+    },
+  };
 }
 
 export function usePluginBridge(): PluginBridge {

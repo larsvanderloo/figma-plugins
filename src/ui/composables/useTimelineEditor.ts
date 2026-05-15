@@ -2,12 +2,13 @@
 
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
-import { usePluginBridge } from './usePluginBridge';
+import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { TimelineItem } from '../../types';
 
 export function useTimelineEditor() {
   const view = usePluginView();
   const bridge = usePluginBridge();
+  const tracker = useBridgePending(bridge);
 
   const items = computed<TimelineItem[]>(() => view.state.content?.timelineItems ?? []);
 
@@ -24,6 +25,7 @@ export function useTimelineEditor() {
       }
     }
 
+    tracker.register();
     bridge.post({
       type: 'update-timeline-item',
       slideId: slideId,
@@ -35,5 +37,5 @@ export function useTimelineEditor() {
     });
   }
 
-  return reactive({ items, update });
+  return reactive({ items, pending: tracker.pending, update });
 }

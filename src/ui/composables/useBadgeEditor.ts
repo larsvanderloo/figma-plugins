@@ -2,12 +2,13 @@
 
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
-import { usePluginBridge } from './usePluginBridge';
+import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { BadgeValue } from '../components/BadgeEditor.vue';
 
 export function useBadgeEditor() {
   const view = usePluginView();
   const bridge = usePluginBridge();
+  const tracker = useBridgePending(bridge);
 
   const model = computed<BadgeValue | null>(() => {
     const b = view.state.general?.badge;
@@ -23,6 +24,7 @@ export function useBadgeEditor() {
     b.label = next.label;
     b.icon = next.icon;
 
+    tracker.register();
     bridge.post({
       type: 'update-general',
       slideId: slideId,
@@ -34,5 +36,5 @@ export function useBadgeEditor() {
     });
   }
 
-  return reactive({ model, update });
+  return reactive({ model, pending: tracker.pending, update });
 }

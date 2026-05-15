@@ -4,7 +4,7 @@
 
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
-import { usePluginBridge } from './usePluginBridge';
+import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { ImageValue } from '../components/ImageEditor.vue';
 
 /** Uint8Array → data-URL. JPEG sniff via magic bytes; PNG default.
@@ -28,6 +28,7 @@ function bytesToDataUrl(bytes: Uint8Array): string {
 export function useImageEditor() {
   const view = usePluginView();
   const bridge = usePluginBridge();
+  const tracker = useBridgePending(bridge);
 
   const model = computed<ImageValue | null>(() => {
     const img = view.state.general?.image;
@@ -68,6 +69,7 @@ export function useImageEditor() {
   function upload(bytes: Uint8Array): void {
     const img = view.state.general?.image;
     if (img === null || img === undefined) return;
+    tracker.register();
     bridge.post({
       type: 'upload-image',
       targetNodeId: img.imageWrapId,
@@ -75,5 +77,5 @@ export function useImageEditor() {
     });
   }
 
-  return reactive({ model, previewUrl, fillW, fillH, sizeBytes, upload });
+  return reactive({ model, pending: tracker.pending, previewUrl, fillW, fillH, sizeBytes, upload });
 }

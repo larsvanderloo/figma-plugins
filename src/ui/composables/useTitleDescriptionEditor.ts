@@ -5,12 +5,13 @@
 
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
-import { usePluginBridge } from './usePluginBridge';
+import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { TitleDescriptionValue } from '../components/TitleDescriptionEditor.vue';
 
 export function useTitleDescriptionEditor() {
   const view = usePluginView();
   const bridge = usePluginBridge();
+  const tracker = useBridgePending(bridge);
 
   const model = computed<TitleDescriptionValue | null>(() => {
     const td = view.state.general?.titleDescription;
@@ -30,6 +31,7 @@ export function useTitleDescriptionEditor() {
     td.heading = next.heading;
     td.paragraph = next.paragraph;
 
+    tracker.register();
     bridge.post({
       type: 'update-general',
       slideId: slideId,
@@ -48,6 +50,7 @@ export function useTitleDescriptionEditor() {
 
     td.headingDim = ranges;
 
+    tracker.register();
     bridge.post({
       type: 'update-accent',
       slideId: slideId,
@@ -58,5 +61,5 @@ export function useTitleDescriptionEditor() {
   // reactive() wrapper unwraps `model` so `editor.model` returns the
   // current value directly in both script and template — no `.value`
   // dance at the call site.
-  return reactive({ model, update, updateHeadingDim });
+  return reactive({ model, pending: tracker.pending, update, updateHeadingDim });
 }

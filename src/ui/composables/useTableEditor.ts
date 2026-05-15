@@ -2,12 +2,13 @@
 
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
-import { usePluginBridge } from './usePluginBridge';
+import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { GraphInstance, TableWrapModel } from '../../types';
 
 export function useTableEditor() {
   const view = usePluginView();
   const bridge = usePluginBridge();
+  const tracker = useBridgePending(bridge);
 
   const instances = computed<GraphInstance[]>(() => view.state.graphs?.instances ?? []);
 
@@ -38,6 +39,7 @@ export function useTableEditor() {
 
     inst.tableModel = next;
 
+    tracker.register();
     bridge.post({
       type: 'update-table',
       slideId: slideId,
@@ -51,6 +53,7 @@ export function useTableEditor() {
     const inst = selected.value;
     if (slideId === null || inst === null || inst.tableModel === null) return;
 
+    tracker.register();
     bridge.post({
       type: 'import-csv',
       slideId: slideId,
@@ -59,5 +62,13 @@ export function useTableEditor() {
     });
   }
 
-  return reactive({ instances, selectedId, selected, model, update, importCsv });
+  return reactive({
+    instances,
+    selectedId,
+    selected,
+    model,
+    pending: tracker.pending,
+    update,
+    importCsv,
+  });
 }

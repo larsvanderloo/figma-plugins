@@ -2,12 +2,13 @@
 
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
-import { usePluginBridge } from './usePluginBridge';
+import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { JourneyWrapModel } from '../../types';
 
 export function useJourneyEditor() {
   const view = usePluginView();
   const bridge = usePluginBridge();
+  const tracker = useBridgePending(bridge);
 
   const model = computed<JourneyWrapModel | null>(
     () => view.state.content?.journeyModel ?? null,
@@ -21,6 +22,7 @@ export function useJourneyEditor() {
       view.state.content.journeyModel = value;
     }
 
+    tracker.register();
     bridge.post({
       type: 'update-journey',
       slideId: slideId,
@@ -29,5 +31,5 @@ export function useJourneyEditor() {
     });
   }
 
-  return reactive({ model, update });
+  return reactive({ model, pending: tracker.pending, update });
 }
