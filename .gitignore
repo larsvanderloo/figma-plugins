@@ -1,5 +1,7 @@
 # Build artifacts
-dist/
+# dist/ is intentionally tracked so a fresh clone loads in Figma without
+# requiring `npm install && npm run build` — rebuild + commit alongside
+# source changes to keep them in sync.
 build/
 out/
 .cache/
