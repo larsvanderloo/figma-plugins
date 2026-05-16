@@ -171,6 +171,28 @@ export interface TitleDescriptionSection {
   /** null wanneer CopyWrap geen Paragraph-textnode heeft. */
   paragraph: string | null;
   /**
+   * Heading-section visibility. Driven by the `TypHeading` wrapper's
+   * `.visible` flag. The iframe always renders the heading input and
+   * exposes a switch so the user can preserve the text while hiding
+   * the section in Figma.
+   */
+  headingVisible: boolean;
+  /**
+   * Paragraph-section visibility (driven by the `showParagraph` BOOLEAN
+   * component property on CopyWrap). Null when the master has neither
+   * the BOOLEAN nor a Paragraph TextNode — iframe hides the input then.
+   */
+  paragraphVisible: boolean | null;
+  /**
+   * CopyWrap heading-size VARIANT property (spec §7.2; variant typically
+   * ranges from "display" through "h4"). Null when the CopyWrap master
+   * doesn't expose a Size property — the iframe hides the slider then.
+   * `current` is the active value; `options` mirrors the master's
+   * `variantOptions` array in declaration order so the slider can map
+   * an index directly to a variant string without hardcoding names.
+   */
+  size: { current: string; options: ReadonlyArray<string> } | null;
+  /**
    * Dim-accent-ranges op de heading (Text Dimmer-variable, spec §13 T30).
    *
    * - `Array<[start, end]>` — canonicale, niet-overlappende, gesorteerde
@@ -189,6 +211,12 @@ export interface BadgeSection {
   label: string;
   /** Lucide-icon-key, zie constants.BADGE_ICON_OPTIONS. */
   icon: string;
+  /**
+   * Driven by `showBadge` BOOLEAN on CopyWrap (Slide Machine canonical).
+   * Null when the master has no such property — the iframe hides the
+   * switch then but keeps the label / icon editors active.
+   */
+  visible: boolean | null;
 }
 
 export interface ImageSection {
@@ -442,6 +470,13 @@ export type UIToPluginMessage =
         heading: string;
         paragraph: string;
         icon: string;
+        /**
+         * Full SVG document string for the chosen Lucide icon, generated
+         * iframe-side from the bundled Lucide body map. Sent alongside
+         * `icon` so the sandbox can replace the icon node directly via
+         * `figma.createNodeFromSvg` — no INSTANCE_SWAP, no library import.
+         */
+        iconSvg: string;
         visualHash: string;
         /** `Default` = filled card; `Outline` = bordered card. */
         style: 'Default' | 'Outline';
@@ -488,11 +523,17 @@ export type UIToPluginMessage =
        * Full-state PUT van een JourneyWrap (T45). `slotId` identificeert
        * de SlotNode binnen de JourneyWrap-INSTANCE; `desired` is het complete
        * gewenste model inclusief alle items.
+       *
+       * `iconSvgs` is een `{ lucideName: svgString }` map die de iframe
+       * meelevert zodat de sandbox elk distinct icon via de pill-slot kan
+       * renderen zonder INSTANCE_SWAP + library-import. Optioneel; sandbox
+       * valt terug op legacy swap wanneer een naam ontbreekt in de map.
        */
       type: 'update-journey';
       slideId: string;
       slotId: string;
       desired: JourneyWrapModel;
+      iconSvgs?: { [name: string]: string };
     }
   | {
       type: 'upload-image';
@@ -500,9 +541,52 @@ export type UIToPluginMessage =
       bytes: Uint8Array;
     }
   | {
+      /**
+       * Apply a global card size to every Card on the slide in one pass:
+       * resize each card's icon-slot child to `iconSize` × `iconSize`
+       * pixels AND apply the named text style to its Heading TextNode AND
+       * switch the slide's explicit-variable mode for the collection that
+       * owns the CardWrap's `itemSpacing` binding (so the gap follows).
+       * One sandbox walk + one commitUndo for all three mutations.
+       */
+      type: 'set-card-size';
+      slideId: string;
+      iconSize: number;
+      headingStyleName: 'Heading4' | 'Heading4-sm' | 'Heading4-xs';
+      /** Mode name on the spacing variable's collection (e.g. "5", "6"). */
+      gapModeName: string;
+      /** When false, the icon node inside each card's icon-slot is hidden. */
+      iconVisible: boolean;
+    }
+  | {
       type: 'set-slide-skipped';
       slideId: string;
       skipped: boolean;
+    }
+  | {
+      /**
+       * Toggle visibility of the Heading or Paragraph subtree on the
+       * slide's CopyWrap. Heading routes through the TypHeading wrapper's
+       * `.visible` flag; Paragraph through the `showParagraph` BOOLEAN
+       * component property on CopyWrap. Text content is preserved on
+       * both sides so toggling off-then-on doesn't lose what the user
+       * typed.
+       */
+      type: 'set-typography-visibility';
+      slideId: string;
+      field: 'heading' | 'paragraph' | 'badge';
+      visible: boolean;
+    }
+  | {
+      /**
+       * Set the CopyWrap's `Size` VARIANT property (Display/H1/.../H4).
+       * The variant master holds the per-size text style, so swapping the
+       * variant value re-renders the Heading automatically — no separate
+       * text-style rebind needed. Fired on slider release (commit).
+       */
+      type: 'set-copywrap-size';
+      slideId: string;
+      size: string;
     }
   /**
    * Persist the user's recently-picked icon list. Sandbox writes the

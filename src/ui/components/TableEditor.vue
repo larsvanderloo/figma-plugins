@@ -25,6 +25,7 @@ import type { TableWrapModel, TableRowModel, TableCellModel } from '../../types'
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS, TABLE_WIDTHS } from '../../constants';
 import { tokenize } from '../../csv';
 import { useNotifications } from '../stores/useNotifications';
+import BInput from './BInput.vue';
 
 const notifications = useNotifications();
 
@@ -415,7 +416,7 @@ watch(csvText, () => {
 
 <template>
   <div
-    class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-[var(--ui-border)]"
+    class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
   >
     <section class="space-y-4 px-5 py-6">
       <h3 class="text-sm font-semibold text-highlighted">Tabel</h3>
@@ -442,7 +443,7 @@ watch(csvText, () => {
             :class="
               localTextSize === opt.value
                 ? 'border-primary bg-primary/5'
-                : 'border-[var(--ui-border)] bg-default hover:bg-elevated'
+                : 'border-default bg-default hover:bg-elevated'
             "
             @click="setTextSize(opt.value)"
           >
@@ -507,7 +508,7 @@ watch(csvText, () => {
                Toggle aan = cells expanded; uit = enkel banner zichtbaar.
                Visueel identiek aan body-rijen — toggle is de enige ON-indicator. -->
           <div
-            class="rounded-[calc(var(--ui-radius)*2)] border border-[var(--ui-border)] overflow-hidden"
+            class="rounded-[calc(var(--ui-radius)*2)] border border-default overflow-hidden"
           >
             <div class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated">
               <div class="flex items-center gap-2">
@@ -531,7 +532,7 @@ watch(csvText, () => {
               <template #content>
                 <div
                   v-if="localRows.length > 0"
-                  class="space-y-2 px-4 py-3 bg-elevated border-t border-[var(--ui-border)]"
+                  class="space-y-2 px-4 py-3 bg-elevated border-t border-default"
                 >
                   <div
                     v-for="(cell, j) in localRows[0].cells"
@@ -539,7 +540,7 @@ watch(csvText, () => {
                     class="grid grid-cols-[80px_1fr] items-center gap-3"
                   >
                     <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-                    <UInput
+                    <BInput
                       :model-value="cell.value"
                       :placeholder="`Waarde voor kolom ${j + 1}`"
                       size="sm"
@@ -560,10 +561,10 @@ watch(csvText, () => {
           >
             <div
               v-if="idx >= bodyRowOffset"
-              class="rounded-[calc(var(--ui-radius)*2)] border border-[var(--ui-border)] overflow-hidden"
+              class="rounded-[calc(var(--ui-radius)*2)] border border-default overflow-hidden"
             >
               <div
-                class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated border-b border-[var(--ui-border)]"
+                class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated border-b border-default"
               >
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-semibold text-default"
@@ -594,7 +595,7 @@ watch(csvText, () => {
                   class="grid grid-cols-[80px_1fr] items-center gap-3"
                 >
                   <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-                  <UInput
+                  <BInput
                     :model-value="cell.value"
                     :placeholder="`Waarde voor kolom ${j + 1}`"
                     size="sm"
@@ -621,7 +622,7 @@ watch(csvText, () => {
     <section class="space-y-3 px-5 py-6">
       <h3 class="text-sm font-semibold text-highlighted">CSV importeren</h3>
       <label
-        class="flex flex-col items-center gap-3 rounded-[calc(var(--ui-radius)*2)] border-2 border-dashed border-[var(--ui-border)] p-6 cursor-pointer hover:bg-elevated transition-colors"
+        class="flex flex-col items-center gap-3 rounded-[calc(var(--ui-radius)*2)] border-2 border-dashed border-default p-6 cursor-pointer hover:bg-elevated transition-colors"
         @drop.prevent="onDrop"
         @dragover.prevent
       >

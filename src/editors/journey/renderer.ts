@@ -52,6 +52,7 @@ import {
   JOURNEY_DIVIDER_WEIGHT,
 } from '../../constants';
 import { trySwapViaInstanceProperty, swapComponentByName } from '../_shared/icon-swap';
+import { replaceIconViaSlot } from '../_shared/icon-slot';
 import { loadAllFontsForNode } from '../_shared/fonts';
 
 // -------------------------------------------------------------------
@@ -288,6 +289,24 @@ function findNestedIconInstance(item: InstanceNode): InstanceNode | null {
  *   2. INSTANCE_SWAP-property op de nested icon-INSTANCE.
  *   3. swapComponentByName op de nested icon-INSTANCE.
  */
+/**
+ * Vóór legacy INSTANCE_SWAP: probeer eerst de slot-based SVG-route.
+ * Wanneer de pill een `icon-slot` SlotNode bevat én de iframe het svg-
+ * document voor `iconName` meeleverde, doen we de in-place swap zonder
+ * library-import. Bij geen slot of geen svg-string → return false zodat
+ * de caller terugvalt op `applyJourneyIconSwap`.
+ */
+function trySlotIconSwap(
+  item: InstanceNode,
+  iconName: string,
+  iconSvgs: { [name: string]: string } | undefined,
+): boolean {
+  if (iconSvgs === undefined) return false;
+  const svg = iconSvgs[iconName];
+  if (typeof svg !== 'string' || svg.length === 0) return false;
+  return replaceIconViaSlot(item, iconName, svg);
+}
+
 async function applyJourneyIconSwap(item: InstanceNode, iconName: string): Promise<boolean> {
   // Strategy 1: INSTANCE_SWAP op de item-instance zelf.
   console.log('[journey-icon] strategy 1: trySwapViaInstanceProperty on item "' + item.name + '"');
@@ -543,7 +562,11 @@ export function scanJourneySlot(slot: SlotNode): JourneyWrapModel {
  * Width-strategie (spiegel TableWrap):
  *   Probeer parent-chain te resizen naar JOURNEY_WIDTH.
  */
-export async function applyJourney(slot: SlotNode, desired: JourneyWrapModel): Promise<void> {
+export async function applyJourney(
+  slot: SlotNode,
+  desired: JourneyWrapModel,
+  iconSvgs?: { [name: string]: string },
+): Promise<void> {
   // Vind bestaande WelderJourneyContent-container of maak een nieuwe.
   var container: FrameNode | null = null;
   for (var ci = 0; ci < slot.children.length; ci++) {
@@ -663,7 +686,14 @@ export async function applyJourney(slot: SlotNode, desired: JourneyWrapModel): P
   // Match-by-index: update bestaand of create nieuw.
   for (var i = 0; i < desired.items.length; i++) {
     if (i < existingItems.length) {
-      await updateJourneyItem(existingItems[i], desired.items[i], i, safeContentWidth, pillYBase);
+      await updateJourneyItem(
+        existingItems[i],
+        desired.items[i],
+        i,
+        safeContentWidth,
+        pillYBase,
+        iconSvgs,
+      );
     } else {
       await renderJourneyItem(
         container,
@@ -672,6 +702,7 @@ export async function applyJourney(slot: SlotNode, desired: JourneyWrapModel): P
         safeContentWidth,
         journeyItemComp,
         pillYBase,
+        iconSvgs,
       );
     }
   }
@@ -738,6 +769,7 @@ async function renderJourneyItem(
   contentWidth: number,
   comp: ComponentNode,
   pillYBase: number,
+  iconSvgs?: { [name: string]: string },
 ): Promise<void> {
   var instance = comp.createInstance();
   instance.name = 'JourneyItem';
@@ -762,9 +794,13 @@ async function renderJourneyItem(
   instance.setPluginData('journey-start-pct', String(item.startPct));
   instance.setPluginData('journey-end-pct', String(item.endPct));
 
-  // Icon-swap (3-strategie patroon — mirror card.ts).
+  // Icon-swap. Preferred: slot-based SVG via shared helper (no library
+  // import). Fallback: legacy INSTANCE_SWAP (3-strategy pattern) when
+  // the pill component doesn't expose an `icon-slot` SlotNode yet.
   if (item.icon.length > 0) {
-    await applyJourneyIconSwap(instance, item.icon);
+    if (!trySlotIconSwap(instance, item.icon, iconSvgs)) {
+      await applyJourneyIconSwap(instance, item.icon);
+    }
   }
 
   // Label-text: vind de eerste TEXT-descendant en schrijf.
@@ -841,6 +877,7 @@ async function updateJourneyItem(
   index: number,
   contentWidth: number,
   pillYBase: number,
+  iconSvgs?: { [name: string]: string },
 ): Promise<void> {
   // Clamp percentages (zelfde logica als renderJourneyItem).
   var startPct = item.startPct;
@@ -861,7 +898,9 @@ async function updateJourneyItem(
   // ─── Icon-swap: alleen als veranderd ───
   var currentIcon = instance.getPluginData('journey-icon');
   if (currentIcon !== item.icon && item.icon.length > 0) {
-    await applyJourneyIconSwap(instance, item.icon);
+    if (!trySlotIconSwap(instance, item.icon, iconSvgs)) {
+      await applyJourneyIconSwap(instance, item.icon);
+    }
     instance.setPluginData('journey-icon', item.icon);
   }
 

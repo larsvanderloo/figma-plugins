@@ -30,19 +30,23 @@ import {
   trySwapViaInstanceProperty,
   swapComponentByName,
 } from '../_shared/icon-swap';
+import { replaceIconViaSlot } from '../_shared/icon-slot';
 import { setTextCharactersSafe } from '../_shared/fonts';
 
 /** Payload-shape voor `update-card` (text-velden) + `upload-image`
  *  (visualBytes wanneer CardItemEditor een file selecteert).
  *  `visualBytes` is optioneel en wordt door de `upload-image`-route
  *  naar `applyCardVisual` geleid (zie code.ts).
- *  `icon` is optioneel — wanneer aanwezig, swap de icon-property op
- *  de card-instance zelf. */
+ *  `icon` is de Lucide-naam (voor diff-checks + node-naming);
+ *  `iconSvg` is het volledige SVG-document dat de iframe meelevert
+ *  zodat de sandbox direct kan renderen via figma.createNodeFromSvg —
+ *  geen INSTANCE_SWAP / library-import meer nodig. */
 export interface CardPayload {
   cardNodeId: string;
   heading?: string;
   paragraph?: string;
   icon?: string;
+  iconSvg?: string;
   visualBytes?: Uint8Array;
   /** Card `Style` VARIANT property — `Default` (filled) of `Outline`. */
   style?: 'Default' | 'Outline';
@@ -83,6 +87,9 @@ function findNestedIconInstance(card: InstanceNode): InstanceNode | null {
 
   return null;
 }
+
+// Card-icon-swap loopt via de shared `replaceIconViaSlot` helper in
+// `editors/_shared/icon-slot.ts` — zie daar voor de algoritme-beschrijving.
 
 /**
  * Best-effort icon-swap voor een card. Probeert in volgorde:
@@ -248,38 +255,64 @@ export async function applyCard(slide: InstanceNode, payload: CardPayload): Prom
     }
   }
 
-  if (typeof payload.icon === 'string' && payload.icon.length > 0) {
-    if (card.type === 'INSTANCE') {
-      const cardInst = card as InstanceNode;
-      // Cheap pre-check: peek at the nested icon's component name and
-      // compare normalized to the desired icon. Skips the entire
-      // INSTANCE_SWAP round-trip on the common no-op path.
-      const currentIconInstance = findNestedIconInstance(cardInst);
-      const currentIconKey =
-        currentIconInstance !== null ? normalizeIconKey(currentIconInstance.name) : '';
-      const desiredIconKey = normalizeIconKey(payload.icon);
-      if (currentIconKey !== desiredIconKey) {
-        await applyCardIconSwap(cardInst, payload.icon);
-      }
-    }
-  }
-
+  // Style first — when both `style` and `icon` arrive together (e.g. the
+  // user toggled Outline and the iframe re-sent the icon so we can refresh
+  // the slot's stroke paint), the variant must already be active when the
+  // icon swap runs so the captured paint comes from the NEW variant's
+  // bound stroke variable, not the old one.
+  let styleJustChanged = false;
   if (payload.style !== undefined && card.type === 'INSTANCE') {
-    // Style is a VARIANT property on the Welder Card master with values
-    // 'Default' (filled) and 'Outline' (bordered). Silent-skip when the
-    // card-instance doesn't expose a `Style` prop — some CardWrap
-    // layout-variants flatten Cards into inline divs and the toggle
-    // wouldn't have surfaced in the iframe in the first place
-    // (`CardItem.style === null`).
     const cardInst = card as InstanceNode;
     const props = cardInst.componentProperties;
     const currentStyle = props && props['Style'] ? props['Style'].value : undefined;
     if (currentStyle !== payload.style) {
       try {
         cardInst.setProperties({ Style: payload.style });
+        styleJustChanged = true;
         console.log('[card] style → ' + payload.style);
       } catch (e) {
         console.log('[card] setProperties Style failed: ' + String(e));
+      }
+    }
+  }
+
+  if (typeof payload.icon === 'string' && payload.icon.length > 0) {
+    console.log(
+      '[card] icon update for "' + payload.icon + '", iconSvg ' +
+        (typeof payload.iconSvg === 'string' ? 'present (' + String(payload.iconSvg.length) + ' chars)' : 'MISSING'),
+    );
+    if (card.type === 'INSTANCE') {
+      const cardInst = card as InstanceNode;
+      // Cheap pre-check: peek at the nested icon's component name and
+      // compare normalized to the desired icon. Skips the entire
+      // icon-replacement round-trip on the common no-op path — unless
+      // the Style variant just changed, in which case the slot content
+      // needs to be re-rendered to pick up the new variant's stroke
+      // paint binding.
+      const currentIconInstance = findNestedIconInstance(cardInst);
+      const currentIconKey =
+        currentIconInstance !== null ? normalizeIconKey(currentIconInstance.name) : '';
+      const desiredIconKey = normalizeIconKey(payload.icon);
+      console.log('[card] currentIconKey="' + currentIconKey + '" desiredIconKey="' + desiredIconKey + '"');
+      if (currentIconKey !== desiredIconKey || styleJustChanged) {
+        // Preferred path: iframe shipped the SVG body — we render it
+        // directly via createNodeFromSvg. No library import, no INSTANCE_SWAP.
+        let handled = false;
+        if (typeof payload.iconSvg === 'string' && payload.iconSvg.length > 0) {
+          handled = replaceIconViaSlot(
+            cardInst,
+            payload.icon,
+            payload.iconSvg,
+            styleJustChanged,
+          );
+        }
+        // Fallback to the legacy INSTANCE_SWAP path (kept for safety while
+        // the new path is being smoke-tested; can be removed once the SVG
+        // route is verified across all Card variants).
+        if (!handled) {
+          console.log('[card] SVG path failed/skipped, falling back to legacy swap');
+          await applyCardIconSwap(cardInst, payload.icon);
+        }
       }
     }
   }

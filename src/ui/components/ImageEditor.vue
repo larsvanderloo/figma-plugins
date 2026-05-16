@@ -208,7 +208,7 @@ async function applyCrop(): Promise<void> {
     -->
     <div v-if="isCropOpen && cropSourceUrl !== null" class="space-y-2">
       <div
-        class="w-full overflow-hidden rounded-xl bg-[--ui-bg-muted]"
+        class="w-full overflow-hidden rounded-xl bg-muted"
         :class="{ 'h-64': useFixedHeight }"
         :style="previewBoxStyle"
       >
@@ -231,7 +231,7 @@ async function applyCrop(): Promise<void> {
     -->
     <div
       v-else-if="previewUrl !== null"
-      class="relative w-full overflow-hidden rounded-xl bg-[--ui-bg-muted] select-none"
+      class="relative w-full overflow-hidden rounded-xl bg-muted select-none"
       :class="{ 'h-36': useFixedHeight }"
       :style="previewBoxStyle"
     >

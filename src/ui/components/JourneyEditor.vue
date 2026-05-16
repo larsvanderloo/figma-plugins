@@ -53,6 +53,7 @@ import {
   JOURNEY_DEFAULT_COLUMN,
 } from '../../constants';
 import IconPicker from './IconPicker.vue';
+import BInput from './BInput.vue';
 
 interface Props {
   modelValue: JourneyWrapModel;
@@ -334,7 +335,7 @@ function updateColumnSubheader(index: number, value: string): void {
 
 <template>
   <div
-    class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-[var(--ui-border)]"
+    class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
   >
     <!-- Kolommen-sectie -->
     <section class="space-y-3 px-5 py-6">
@@ -349,11 +350,11 @@ function updateColumnSubheader(index: number, value: string): void {
       <div
         v-for="(col, idx) in localColumns"
         :key="'col-' + idx"
-        class="rounded-[calc(var(--ui-radius)*2)] border border-[var(--ui-border)] overflow-hidden"
+        class="rounded-[calc(var(--ui-radius)*2)] border border-default overflow-hidden"
       >
         <!-- Card-header -->
         <div
-          class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated border-b border-[var(--ui-border)]"
+          class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated border-b border-default"
         >
           <span class="text-sm font-semibold text-default">Kolom {{ idx + 1 }}</span>
           <UButton
@@ -371,7 +372,7 @@ function updateColumnSubheader(index: number, value: string): void {
         <div class="space-y-2 px-4 py-3 bg-elevated">
           <div class="grid grid-cols-[80px_1fr] items-center gap-3">
             <span class="text-xs font-medium text-muted">Header</span>
-            <UInput
+            <BInput
               :model-value="col.header"
               placeholder="Titel"
               size="sm"
@@ -380,7 +381,7 @@ function updateColumnSubheader(index: number, value: string): void {
           </div>
           <div class="grid grid-cols-[80px_1fr] items-center gap-3">
             <span class="text-xs font-medium text-muted">Subheader</span>
-            <UInput
+            <BInput
               :model-value="col.subheader"
               placeholder="Beschrijving"
               size="sm"
@@ -423,11 +424,11 @@ function updateColumnSubheader(index: number, value: string): void {
         <div
           v-for="(item, idx) in localItems"
           :key="item.itemNodeId !== '' ? item.itemNodeId : 'item-' + idx"
-          class="rounded-[calc(var(--ui-radius)*2)] border border-[var(--ui-border)] overflow-hidden"
+          class="rounded-[calc(var(--ui-radius)*2)] border border-default overflow-hidden"
         >
           <!-- Card-header -->
           <div
-            class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated border-b border-[var(--ui-border)]"
+            class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated border-b border-default"
           >
             <span class="text-sm font-semibold text-default">Item {{ idx + 1 }}</span>
             <UButton
@@ -448,7 +449,7 @@ function updateColumnSubheader(index: number, value: string): void {
                 :model-value="item.icon"
                 @update:model-value="(v: string) => updateItemIcon(idx, v)"
               />
-              <UInput
+              <BInput
                 :model-value="item.label"
                 placeholder="Pill-tekst"
                 size="sm"

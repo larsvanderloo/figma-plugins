@@ -60,12 +60,10 @@ function downloadBlob(bytes: Uint8Array, filename: string, mime: string): void {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
-import SlideThemeSwitcher from './components/SlideThemeSwitcher.vue';
 import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
-import { useSlideSettings } from './composables/useSlideSettings';
 import { useExport } from './composables/useExport';
 import { usePluginView } from './stores/usePluginView';
 import { useIconRecents } from './stores/useIconRecents';
@@ -74,7 +72,6 @@ import welderLogo from './assets/welder-logo.svg';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
-const settings = useSlideSettings();
 const exporter = useExport();
 
 // Vite injects this from package.json at build time — see vite.config.ts
@@ -97,13 +94,6 @@ const initializing = ref<boolean>(true);
 // just-loaded array back as a save. Flipped on hydration, consumed
 // by the next watcher tick.
 let skipIconRecentsSave = false;
-
-function toggleSkip(): void {
-  const summary = view.currentSummary;
-  if (summary === null) return;
-  if (summary.isSkipped === null) return;
-  settings.setSkipped(summary.id, !summary.isSkipped);
-}
 
 // Export-modal state: target = wat exporteren we, format = welk
 // bestandsformaat. Beide blijven hangen tussen exports zodat een
@@ -149,12 +139,6 @@ function submitExport(): void {
     exporter.exportPresentation(exportFormat.value);
   }
   exportModalOpen.value = false;
-}
-
-function onThemeChange(modeId: string | null): void {
-  const id = view.state.currentSlideId;
-  if (id === null) return;
-  settings.setTheme(id, modeId);
 }
 
 // Register bridge-handlers vóór de ui-ready handshake zodat we het init-
@@ -316,53 +300,13 @@ onMounted(() => {
     <div v-else class="flex h-full flex-col bg-elevated text-default">
       <main class="flex-1 overflow-y-auto">
         <div class="mx-auto max-w-2xl space-y-3 p-3">
-          <!-- Header-card: logo + current slide name + eye toggle + theme picker -->
+          <!-- Header-card: logo + version + theme/skip controls -->
           <section
-            class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] space-y-5"
+            class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-5 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
           >
-            <div class="flex flex-col items-center text-center space-y-3">
-              <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
-              <p class="text-base text-muted max-w-xs">
-                Klik op een slide in Figma om de inhoud te bewerken.
-              </p>
+            <div class="flex items-center justify-between gap-2">
+              <img :src="welderLogo" alt="Welder" class="h-9 w-auto" />
               <span class="text-[0.7rem] text-muted/70 tracking-wide">v{{ appVersion }}</span>
-            </div>
-
-            <div
-              v-if="
-                (view.currentSummary && view.currentSummary.isSkipped !== null) ||
-                view.state.general?.theme
-              "
-              class="border-t border-[var(--ui-border)] pt-5 space-y-3"
-            >
-              <div
-                v-if="view.currentSummary && view.currentSummary.isSkipped !== null"
-                class="flex justify-end"
-              >
-                <UButton
-                  :icon="view.currentSummary.isSkipped ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                  variant="ghost"
-                  color="neutral"
-                  size="md"
-                  :title="
-                    view.currentSummary.isSkipped
-                      ? 'Slide is uitgesloten — klik om terug te zetten'
-                      : 'Slide overslaan bij presenteren'
-                  "
-                  @click="toggleSkip"
-                />
-              </div>
-              <UFormField
-                v-if="view.state.general?.theme"
-                name="slide-theme"
-                label="Thema"
-                size="md"
-              >
-                <SlideThemeSwitcher
-                  :theme="view.state.general.theme"
-                  @update:model-value="onThemeChange"
-                />
-              </UFormField>
             </div>
           </section>
 
@@ -388,22 +332,24 @@ onMounted(() => {
             <p class="text-sm text-muted">Geen bewerkbare inhoud op deze slide.</p>
           </section>
 
-          <!-- Stacked panels — wrapped in <fieldset disabled> when the
-               slide is skipped, so all form controls disable + the
-               container gets `opacity-50 pointer-events-none` for
-               feedback. -->
-          <fieldset
-            v-else
-            :disabled="view.isSkipped"
-            :class="
-              view.isSkipped ? 'space-y-3 opacity-50 pointer-events-none' : 'contents space-y-3'
-            "
-            style="border: 0; padding: 0; margin: 0; min-width: 0"
-          >
+          <!-- Stacked panels. GeneralPanel handles its own internal disable
+               state so the Weergave (visibility toggle) stays active even
+               when the slide is hidden — otherwise the user couldn't
+               un-hide. ContentPanel / GraphsPanel sit in a fieldset that
+               disables when the slide is skipped (no editing content). -->
+          <template v-else>
             <GeneralPanel v-if="view.hasGeneral" />
-            <ContentPanel v-if="view.hasContent" />
-            <GraphsPanel v-if="view.hasGraphs" />
-          </fieldset>
+            <fieldset
+              :disabled="view.isSkipped"
+              :class="
+                view.isSkipped ? 'space-y-3 opacity-50 pointer-events-none' : 'contents space-y-3'
+              "
+              style="border: 0; padding: 0; margin: 0; min-width: 0"
+            >
+              <ContentPanel v-if="view.hasContent" />
+              <GraphsPanel v-if="view.hasGraphs" />
+            </fieldset>
+          </template>
 
           <!-- Export — single entry point that opens the picker modal.
                Sits at the bottom of the content (scrolls with it). -->
@@ -411,7 +357,7 @@ onMounted(() => {
             <p class="text-xs text-muted max-w-sm">
               Klik rechtsboven in Figma op het
               <span
-                class="inline-flex items-center justify-center rounded border border-[var(--ui-border)] px-1.5 py-0.5 align-text-bottom text-default"
+                class="inline-flex items-center justify-center rounded border border-default px-1.5 py-0.5 align-text-bottom text-default"
               >
                 <UIcon name="i-lucide-play" class="h-3 w-3" />
               </span>
@@ -450,7 +396,7 @@ onMounted(() => {
                         'flex flex-col items-start gap-2 rounded-[var(--ui-radius)] border p-3 text-left transition-colors',
                         exportTarget === 'slide'
                           ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                          : 'border-[var(--ui-border)] hover:bg-elevated',
+                          : 'border-default hover:bg-elevated',
                         view.state.currentSlideId === null
                           ? 'cursor-not-allowed opacity-50'
                           : 'cursor-pointer',
@@ -477,7 +423,7 @@ onMounted(() => {
                         'flex cursor-pointer flex-col items-start gap-2 rounded-[var(--ui-radius)] border p-3 text-left transition-colors',
                         exportTarget === 'presentation'
                           ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                          : 'border-[var(--ui-border)] hover:bg-elevated',
+                          : 'border-default hover:bg-elevated',
                       ]"
                       @click="exportTarget = 'presentation'"
                     >

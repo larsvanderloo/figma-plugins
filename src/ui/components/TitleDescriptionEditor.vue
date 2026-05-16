@@ -1,45 +1,28 @@
 <!--
-  TitleDescriptionEditor — v-model-gebonden editor voor de
-  General → Title & Description sectie (spec §9 T8 + §13 T30).
+  TitleDescriptionEditor — editor for the General → Title & Description
+  section. Uses BInput / BTextarea so typing doesn't fire a sandbox
+  round-trip per keystroke (commit-on-blur).
 
-  Props:
-    modelValue: {
-      heading: string;
-      paragraph: string | null;
-      headingDim: Array<[number, number]> | null;
-    }
-
-  Emits:
-    update:modelValue — het volledige object, debounced op 200ms
-      sinds de laatste keystroke in één van beide velden.
-    update:headingDim — canonicale char-ranges voor heading-accent
-      (spec §13 T30). Emit na elke chip-toggle; parent post
-      `update-accent` naar main.
-
-  Gedrag:
-    - `<UInput>` voor heading (altijd aanwezig).
-    - `<UTextarea>` voor paragraph — alleen gerenderd als
-      `modelValue.paragraph !== null` (CopyWrap zonder Paragraph).
-    - Inline word-chips onder heading-input (spec §13 T30).
-      Alleen zichtbaar wanneer `headingDim !== null` (library-guard).
-      Paragraph-accent is permanent out-of-scope.
-    - Debounce-timer in een lokale ref; clear + reset bij elke edit
-      zodat we pas na 200ms stilte één emit firen. Zelfde patroon als
-      chart-builder App.vue (manual setTimeout, geen lodash-dep).
-    - Interne `local`-state is reactief gekoppeld aan modelValue via
-      watch(props, ...) zodat externe updates (bv. slide-wissel) de
-      velden resetten zonder de lokale debounce te verstoren.
-    - DIM-FLUSH: wanneer `localHeading.length` verandert t.o.v. de
-      laatst-gescande lengte worden `dimWords` gecleared en een lege
-      ranges-emit gedaan — char-indices zijn niet meer geldig na edit.
+  Accent chips (heading-dim word toggles) operate on the LAST-COMMITTED
+  heading text. While the user is typing, chips stay frozen against the
+  current modelValue.heading; once blur commits the new heading, chips
+  re-derive from it. Length change → char-indices invalid → dim-words
+  flush automatically.
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import BInput from './BInput.vue';
+import BTextarea from './BTextarea.vue';
+import VisibilityPill from './VisibilityPill.vue';
 
 export interface TitleDescriptionValue {
   heading: string;
   paragraph: string | null;
+  headingVisible: boolean;
+  paragraphVisible: boolean | null;
   headingDim: Array<[number, number]> | null;
+  /** CopyWrap heading-size variant; null when master has no Size prop. */
+  size: { current: string; options: ReadonlyArray<string> } | null;
 }
 
 interface Props {
@@ -51,29 +34,66 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   'update:modelValue': [value: TitleDescriptionValue];
   'update:headingDim': [ranges: Array<[number, number]>];
+  'commit:size': [size: string];
+  'commit:visibility': [field: 'heading' | 'paragraph', visible: boolean];
 }>();
 
-// Lokale reactieve kopie zodat de user type-snelheid niet wordt
-// afgeknepen door de 200ms-debounce. De emit gebeurt na debounce.
-const localHeading = ref<string>(props.modelValue.heading);
-const localParagraph = ref<string>(props.modelValue.paragraph ?? '');
+const hasParagraph = computed<boolean>(() => props.modelValue.paragraph !== null);
 
-// Paragraph-aanwezigheid is statisch per CopyWrap; we leiden hem af
-// uit de prop. Wanneer de prop van null → string switcht (slide-wissel)
-// updaten we de lokale ref via de watcher hieronder.
-const hasParagraph = ref<boolean>(props.modelValue.paragraph !== null);
+// ── Heading-size slider (CopyWrap.Size VARIANT) ───────────────────────
+// Slider runs UNCONTROLLED: Reka's SliderRoot in controlled mode snaps
+// to `step` every time the parent re-passes :model-value during drag,
+// which the user reads as a chunky "stepper" feel. Going uncontrolled
+// lets the cursor track 1:1 — we only read the value on @change
+// (release) and round to the nearest integer option index.
+//
+// `sliderKey` forces a remount whenever the external value changes
+// (slide switch / external commit) so the thumb resets to the canonical
+// position without us needing to push a model-value during drag.
+const sizeIndex = computed<number>(function () {
+  const s = props.modelValue.size;
+  if (s === null) return 0;
+  const idx = s.options.indexOf(s.current);
+  return idx >= 0 ? idx : 0;
+});
+const sliderKey = ref<number>(0);
+// Tracks the slider's live value during drag. Populated by
+// `@update:model-value` since USlider's `@change` event ships a
+// synthetic Event whose `target.value` is actually empty (the Nuxt UI
+// source tries to stuff value into Event init, but the Event
+// constructor only accepts bubbles/cancelable/composed there).
+const liveSize = ref<number | null>(null);
+watch(sizeIndex, function () {
+  sliderKey.value += 1;
+  liveSize.value = null;
+});
 
-// ------------------------------------------------------------
-// Accent-state (spec §13 T30) — word-index-gebaseerd.
-// `dimWords` bevat indices van word-tokens (niet char-offsets).
-// `lastScannedLength` bewaart de heading-length op het moment dat
-// we `dimWords` voor het laatst hydrateerden uit char-ranges — zodra
-// de length verandert flushen we (char-indices niet meer geldig).
-// ------------------------------------------------------------
+function onLiveUpdate(value: number | number[] | undefined): void {
+  if (value === undefined) return;
+  const num = Array.isArray(value) ? value[0] : Number(value);
+  if (isFinite(num)) liveSize.value = num;
+}
+
+function onSizeCommit(): void {
+  const s = props.modelValue.size;
+  if (s === null) return;
+  const raw = liveSize.value !== null ? liveSize.value : sizeIndex.value;
+  const idx = Math.max(0, Math.min(s.options.length - 1, Math.round(raw)));
+  const next = s.options[idx];
+  liveSize.value = null;
+  if (typeof next === 'string' && next !== s.current) {
+    emit('commit:size', next);
+  } else {
+    // No-op change → bump the key so the thumb settles back to the
+    // canonical integer rest position rather than lingering at the
+    // user's dropped fractional point.
+    sliderKey.value += 1;
+  }
+}
+
+// ── Accent state (heading word-toggle) ─────────────────────────────────
 const dimWords = ref<Set<number>>(new Set());
-let lastScannedLength = props.modelValue.heading.length;
 
-/** Token-shape uit de tokeniser. Whitespace-tokens hebben geen wordIndex. */
 interface WordToken {
   type: 'word';
   text: string;
@@ -89,9 +109,8 @@ interface SpaceToken {
 }
 type Token = WordToken | SpaceToken;
 
-/** Split de heading op whitespace-runs; behoud char-offsets per token. */
 const tokens = computed<Token[]>(() => {
-  const parts = localHeading.value.split(/(\s+)/);
+  const parts = props.modelValue.heading.split(/(\s+)/);
   const out: Token[] = [];
   let cursor = 0;
   let wordIdx = 0;
@@ -111,7 +130,6 @@ const tokens = computed<Token[]>(() => {
   return out;
 });
 
-/** Overlap-check: is `[tokStart, tokEnd)` geraakt door één van de ranges? */
 function rangesOverlap(ranges: Array<[number, number]>, start: number, end: number): boolean {
   for (let i = 0; i < ranges.length; i++) {
     const r = ranges[i];
@@ -120,11 +138,6 @@ function rangesOverlap(ranges: Array<[number, number]>, start: number, end: numb
   return false;
 }
 
-/**
- * Hydrateer `dimWords` vanuit `headingDim`-char-ranges op de huidige
- * heading-tekst. Elk word-token dat overlap heeft met een range wordt
- * als dimmed gemarkeerd.
- */
 function hydrateDimWords(headingDim: Array<[number, number]> | null): void {
   const next = new Set<number>();
   if (headingDim !== null && headingDim.length > 0) {
@@ -136,16 +149,8 @@ function hydrateDimWords(headingDim: Array<[number, number]> | null): void {
     }
   }
   dimWords.value = next;
-  lastScannedLength = localHeading.value.length;
 }
 
-/**
- * Map `dimWords` (word-indices) terug naar canonical char-ranges.
- * Aaneengesloten dim-words (inclusief whitespace ertussen) worden
- * samengevoegd tot één range; merge-heuristiek: neem elk word-token
- * dat `dimWords` bevat, en als de vorige range eindigt waar deze
- * begint (eventueel met whitespace ertussen) merge we ze.
- */
 function buildCharRanges(): Array<[number, number]> {
   const out: Array<[number, number]> = [];
   for (const tok of tokens.value) {
@@ -161,104 +166,77 @@ function buildCharRanges(): Array<[number, number]> {
   return out;
 }
 
-// Initiële hydratatie op mount (via initial-computed-trigger).
 hydrateDimWords(props.modelValue.headingDim);
-
-// Externe prop-wijzigingen (slide-wissel, main-thread-echo) moeten de
-// lokale refs resetten. Gesplitst in drie granulaire watches zodat een
-// chip-toggle (die alleen headingDim muteert) nooit localHeading
-// overschrijft midden in een user-keystroke (root cause T30-bug).
-
-// Heading — reset alleen wanneer de externe waarde verschilt van onze
-// lokale typ-state (voorkomt dat onze eigen debounce-emit als echo
-// terugkomt en een in-progress edit ongedaan maakt).
-watch(
-  () => props.modelValue.heading,
-  (next) => {
-    if (next !== localHeading.value) {
-      localHeading.value = next;
-      lastScannedLength = next.length;
-    }
-  },
-);
-
-// Paragraph — paragraph-edits lopen niet via de chip-toggle-cycle,
-// simpele sync volstaat.
-watch(
-  () => props.modelValue.paragraph,
-  (next) => {
-    localParagraph.value = next ?? '';
-    hasParagraph.value = next !== null;
-  },
-);
-
-// DimRanges — her-hydrateer chip-state vanuit nieuwe ranges (slide-
-// wissel of main-thread-echo na toggleWord-emit).
 watch(
   () => props.modelValue.headingDim,
-  (next) => {
-    hydrateDimWords(next);
-  },
+  (next) => hydrateDimWords(next),
 );
 
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-function scheduleEmit(): void {
-  if (debounceTimer !== null) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    emit('update:modelValue', {
-      heading: localHeading.value,
-      paragraph: hasParagraph.value ? localParagraph.value : null,
-      // headingDim gaat via z'n eigen emit; we echoën hier de prop-waarde
-      // door zodat de v-model-payload consistent blijft voor parents die
-      // het object één-op-één doorgeven.
-      headingDim: props.modelValue.headingDim,
-    });
-  }, 200);
-}
-
-function onHeadingInput(value: string): void {
-  localHeading.value = value;
-  // DIM-FLUSH: length-mismatch → char-indices niet meer geldig. Clear
-  // lokaal en emit lege ranges naar parent (main-thread schrijft dan
-  // heel de string als Text-fill terug, raw-hex accent wordt gestript).
-  if (localHeading.value.length !== lastScannedLength) {
-    if (dimWords.value.size > 0) {
-      dimWords.value = new Set();
-      emit('update:headingDim', []);
-    }
-    lastScannedLength = localHeading.value.length;
+// ── Commit handlers ────────────────────────────────────────────────────
+function onHeadingCommit(value: string): void {
+  const headingChangedLength = value.length !== props.modelValue.heading.length;
+  emit('update:modelValue', {
+    heading: value,
+    paragraph: props.modelValue.paragraph,
+    headingVisible: props.modelValue.headingVisible,
+    paragraphVisible: props.modelValue.paragraphVisible,
+    headingDim: headingChangedLength ? [] : props.modelValue.headingDim,
+    size: props.modelValue.size,
+  });
+  if (headingChangedLength && dimWords.value.size > 0) {
+    dimWords.value = new Set();
+    emit('update:headingDim', []);
   }
-  scheduleEmit();
 }
 
-function onParagraphInput(value: string): void {
-  localParagraph.value = value;
-  scheduleEmit();
+function onParagraphCommit(value: string): void {
+  emit('update:modelValue', {
+    heading: props.modelValue.heading,
+    paragraph: hasParagraph.value ? value : null,
+    headingVisible: props.modelValue.headingVisible,
+    paragraphVisible: props.modelValue.paragraphVisible,
+    headingDim: props.modelValue.headingDim,
+    size: props.modelValue.size,
+  });
+}
+
+function onHeadingVisibilityToggle(next: boolean): void {
+  emit('commit:visibility', 'heading', next);
+}
+
+function onParagraphVisibilityToggle(next: boolean): void {
+  emit('commit:visibility', 'paragraph', next);
 }
 
 function toggleWord(wordIndex: number): void {
   const next = new Set(dimWords.value);
-  if (next.has(wordIndex)) {
-    next.delete(wordIndex);
-  } else {
-    next.add(wordIndex);
-  }
+  if (next.has(wordIndex)) next.delete(wordIndex);
+  else next.add(wordIndex);
   dimWords.value = next;
   emit('update:headingDim', buildCharRanges());
 }
 </script>
 
 <template>
-  <div class="space-y-3">
-    <UFormField name="heading" label="Koptekst" size="md">
-      <UInput
-        :model-value="localHeading"
-        placeholder="Slidetitel"
+  <div class="space-y-4">
+    <div class="space-y-1.5">
+      <div class="flex items-center justify-between gap-2">
+        <label class="text-xs font-medium text-default">Titel</label>
+        <VisibilityPill
+          :model-value="modelValue.headingVisible"
+          :title="modelValue.headingVisible ? 'Verberg titel' : 'Toon titel'"
+          @update:model-value="onHeadingVisibilityToggle"
+        />
+      </div>
+      <BInput
+        :model-value="modelValue.heading"
+        placeholder="Bijv. Onze missie voor 2026"
+        size="md"
+        :disabled="!modelValue.headingVisible"
         class="w-full"
-        @update:model-value="onHeadingInput"
+        @update:model-value="onHeadingCommit"
       />
-    </UFormField>
+    </div>
 
     <div v-if="modelValue.headingDim !== null" class="space-y-1.5">
       <label class="text-xs font-medium text-default">Accent</label>
@@ -279,15 +257,52 @@ function toggleWord(wordIndex: number): void {
       <p class="text-xs text-muted">Klik op woorden om ze te accentueren.</p>
     </div>
 
-    <UFormField v-if="hasParagraph" name="paragraph" label="Onderschrift" size="md">
-      <UTextarea
-        :model-value="localParagraph"
+    <div v-if="hasParagraph" class="space-y-1.5">
+      <div class="flex items-center justify-between gap-2">
+        <label class="text-xs font-medium text-default">Omschrijving</label>
+        <VisibilityPill
+          v-if="modelValue.paragraphVisible !== null"
+          :model-value="modelValue.paragraphVisible"
+          :disabled="!modelValue.headingVisible"
+          :title="
+            !modelValue.headingVisible
+              ? 'Zet eerst de titel aan'
+              : modelValue.paragraphVisible
+                ? 'Verberg omschrijving'
+                : 'Toon omschrijving'
+          "
+          @update:model-value="onParagraphVisibilityToggle"
+        />
+      </div>
+      <BTextarea
+        :model-value="modelValue.paragraph ?? ''"
         :rows="3"
         :autoresize="true"
-        placeholder="Onderschrifttekst"
+        placeholder="Een korte toelichting onder de titel"
+        size="md"
+        :disabled="modelValue.paragraphVisible === false"
         class="w-full"
-        @update:model-value="onParagraphInput"
+        @update:model-value="onParagraphCommit"
       />
-    </UFormField>
+    </div>
+
+    <div v-if="modelValue.size !== null" class="space-y-1.5 pt-1">
+      <label class="text-xs font-medium text-default">Tekstgrootte</label>
+      <div class="flex items-center gap-3">
+        <span class="text-[10px] font-semibold leading-none text-muted shrink-0">A</span>
+        <USlider
+          :key="sliderKey"
+          :default-value="sizeIndex"
+          :min="0"
+          :max="modelValue.size.options.length - 1"
+          :step="0.0001"
+          size="sm"
+          class="flex-1"
+          @update:model-value="onLiveUpdate"
+          @change="onSizeCommit"
+        />
+        <span class="text-base font-bold leading-none text-muted shrink-0">A</span>
+      </div>
+    </div>
   </div>
 </template>

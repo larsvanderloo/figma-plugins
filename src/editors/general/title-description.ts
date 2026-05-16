@@ -26,6 +26,10 @@ import { setTextCharactersSafe } from '../_shared/fonts';
 export interface TitleDescriptionPayload {
   heading?: string;
   paragraph?: string;
+  /** Explicit heading visibility — toggled by the iframe switch. */
+  headingVisible?: boolean;
+  /** Explicit paragraph visibility — toggled by the iframe switch. */
+  paragraphVisible?: boolean;
 }
 
 /**
@@ -59,21 +63,10 @@ export async function applyTitleDescription(
     const headingNode = findTextByName(copyWrap, 'Heading');
     if (headingNode !== null) {
       await setTextCharactersSafe(headingNode, payload.heading);
-      // T39.4 (revised 2026-05-07): bij lege heading hide we de wrappende
-      // `TypHeading` INSTANCE, niet de inner TEXT. Hiding alleen de inner
-      // TEXT laat de TypHeading-wrapper in de CopyWrap-auto-layout staan
-      // wat de slide-reflow scheef trekt (raakt o.a. de TableWrap-slot-
-      // hoogte). Wrapper-hide collapseert het hele blok schoon. Inner
-      // TEXT blijft visible — Figma's auto-layout cascade negeert hem
-      // dan via de wrapper-state. Fallback op TEXT.visible voor legacy
-      // CopyWraps zonder TypHeading-wrapper.
+      // Visibility is now driven by the explicit `headingVisible` switch
+      // (see below). Keep the inner TEXT visible so the toggle can show
+      // / hide via the wrapper without ever blanking the inner node.
       headingNode.visible = true;
-      const wrapper = findEnclosingInstanceByName(headingNode, 'TypHeading', slide);
-      if (wrapper !== null) {
-        wrapper.visible = payload.heading !== '';
-      } else {
-        headingNode.visible = payload.heading !== '';
-      }
     }
   }
 
@@ -81,15 +74,59 @@ export async function applyTitleDescription(
     const paragraphNode = findTextByName(copyWrap, 'Paragraph');
     if (paragraphNode !== null) {
       await setTextCharactersSafe(paragraphNode, payload.paragraph);
-      // T39.4 (revised 2026-05-07): zelfde fix als heading — wrapper-
-      // hide op TypParagraph zodat de CopyWrap auto-layout het hele
-      // paragraph-blok wegklokt en de Slide reflow schoon doorloopt.
       paragraphNode.visible = true;
-      const wrapper = findEnclosingInstanceByName(paragraphNode, 'TypParagraph', slide);
+    }
+  }
+
+  // Explicit visibility toggles — decoupled from text content so the
+  // user can hide a section without losing what they typed. Heading
+  // toggles the TypHeading wrapper; paragraph routes through the
+  // `showParagraph` BOOLEAN component property on CopyWrap (canonical
+  // Welder mechanism — Slide Machine reflows the rest of the slide
+  // off this signal).
+  if (typeof payload.headingVisible === 'boolean') {
+    const headingNode = findTextByName(copyWrap, 'Heading');
+    if (headingNode !== null) {
+      const wrapper = findEnclosingInstanceByName(headingNode, 'TypHeading', slide);
       if (wrapper !== null) {
-        wrapper.visible = payload.paragraph !== '';
+        wrapper.visible = payload.headingVisible;
       } else {
-        paragraphNode.visible = payload.paragraph !== '';
+        headingNode.visible = payload.headingVisible;
+      }
+    }
+  }
+
+  if (typeof payload.paragraphVisible === 'boolean') {
+    const props = copyWrap.componentProperties;
+    let showKey: string | null = null;
+    if (props !== null && props !== undefined) {
+      const keys = Object.keys(props);
+      for (let i = 0; i < keys.length; i++) {
+        const bare = keys[i].split('#')[0].toLowerCase();
+        if (bare === 'showparagraph' && props[keys[i]].type === 'BOOLEAN') {
+          showKey = keys[i];
+          break;
+        }
+      }
+    }
+    if (showKey !== null) {
+      try {
+        const overrides: { [k: string]: boolean } = {};
+        overrides[showKey] = payload.paragraphVisible;
+        copyWrap.setProperties(overrides);
+      } catch (e) {
+        console.log('[title-description] setProperties showParagraph failed: ' + String(e));
+      }
+    } else {
+      // Legacy fallback: no BOOLEAN prop — toggle the wrapper instance.
+      const paragraphNode = findTextByName(copyWrap, 'Paragraph');
+      if (paragraphNode !== null) {
+        const wrapper = findEnclosingInstanceByName(paragraphNode, 'TypParagraph', slide);
+        if (wrapper !== null) {
+          wrapper.visible = payload.paragraphVisible;
+        } else {
+          paragraphNode.visible = payload.paragraphVisible;
+        }
       }
     }
   }

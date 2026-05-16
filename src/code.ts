@@ -273,14 +273,32 @@ function readVisibleTextByName(scope: SceneNode, name: string, slide: InstanceNo
  * Retourneert '' wanneer de wrapper of icon-kind ontbreekt.
  */
 function readBadgeIcon(badge: InstanceNode): string {
-  if (!('findChild' in badge)) return '';
-  const wrapper = badge.findChild((n: SceneNode) => n.name === 'icon_wrapper');
-  if (wrapper === null || !('children' in wrapper)) return '';
-  const wrapperNode = wrapper as FrameNode | GroupNode | InstanceNode;
-  for (let i = 0; i < wrapperNode.children.length; i++) {
-    const child = wrapperNode.children[i];
-    if (child.type === 'INSTANCE') {
-      return normalizeIconKey(child.name);
+  if (!('findOne' in badge)) return '';
+
+  // Slot-based (new): Badge → icon-slot (SLOT) → first child (INSTANCE or
+  // FRAME after SVG-replace). The slot helper sets the child's name to
+  // the Lucide slug after insertion, so normalising the name is enough.
+  const slot = badge.findOne(function (n: SceneNode) {
+    return n.type === 'SLOT' && n.name === 'icon-slot';
+  });
+  if (slot !== null && slot.type === 'SLOT' && 'children' in slot) {
+    const slotNode = slot as SlotNode;
+    if (slotNode.children.length > 0) {
+      return normalizeIconKey(slotNode.children[0].name);
+    }
+  }
+
+  // Legacy fallback: Badge → icon_wrapper (FRAME) → first INSTANCE-kind.
+  if ('findChild' in badge) {
+    const wrapper = badge.findChild((n: SceneNode) => n.name === 'icon_wrapper');
+    if (wrapper !== null && 'children' in wrapper) {
+      const wrapperNode = wrapper as FrameNode | GroupNode | InstanceNode;
+      for (let i = 0; i < wrapperNode.children.length; i++) {
+        const child = wrapperNode.children[i];
+        if (child.type === 'INSTANCE') {
+          return normalizeIconKey(child.name);
+        }
+      }
     }
   }
   return '';
@@ -301,12 +319,51 @@ function readBadgeIcon(badge: InstanceNode): string {
  * kan worden. Zelfde visibility-pattern als readVisibleTextByName (T19).
  */
 function readCardIcon(card: SceneNode, slide: InstanceNode): string | null {
-  // Strategy A: directe INSTANCE-children
+  // Both INSTANCE (legacy library icon) and FRAME (post-SVG-replace) are
+  // valid icon-node shapes. The frame inserted by replaceCardIconWithSvg
+  // carries the Lucide name as its node name, so the normalize-check is
+  // the only thing the reader needs.
+  const isIconNode = function (n: SceneNode): boolean {
+    return n.type === 'INSTANCE' || n.type === 'FRAME';
+  };
+
+  // Strategy 0: read the ACTIVE icon-slot's first child. Card masters
+  // can carry multiple icon-slots (top vs side variant) with the inactive
+  // one hidden via ancestor visibility. findOne hits tree-order and lands
+  // on the hidden one — by which point isEffectivelyVisible nukes the
+  // result and the picker shows a blank preview. Walk all icon-slots and
+  // pick the one whose ancestor chain is visible.
+  if ('findAll' in card) {
+    const slots = (card as InstanceNode).findAll(function (n: SceneNode) {
+      return n.type === 'SLOT' && n.name === 'icon-slot';
+    });
+    for (let i = 0; i < slots.length; i++) {
+      const candidate = slots[i];
+      if (candidate.type !== 'SLOT') continue;
+      let visible = true;
+      let cursor: BaseNode | null = candidate;
+      while (cursor !== null && cursor.id !== card.id) {
+        if ('visible' in cursor && (cursor as SceneNode).visible === false) {
+          visible = false;
+          break;
+        }
+        cursor = cursor.parent;
+      }
+      if (!visible) continue;
+      const slotNode = candidate as SlotNode;
+      if (slotNode.children.length > 0) {
+        const slug = normalizeIconKey(slotNode.children[0].name);
+        if (slug.length > 0) return slug;
+      }
+    }
+  }
+
+  // Strategy A: directe INSTANCE/FRAME-children met Lucide-slug-naam
   if ('children' in card) {
     const children = (card as FrameNode | GroupNode | InstanceNode).children;
     for (let i = 0; i < children.length; i++) {
       const child = children[i];
-      if (child.type !== 'INSTANCE') continue;
+      if (!isIconNode(child)) continue;
       const normalized = normalizeIconKey(child.name);
       if (LUCIDE_SLUG_RE.test(normalized)) {
         return isEffectivelyVisible(child, slide) ? normalized : null;
@@ -314,27 +371,27 @@ function readCardIcon(card: SceneNode, slide: InstanceNode): string | null {
     }
   }
 
-  // Strategy B: icon_wrapper → eerste INSTANCE-kind
+  // Strategy B: icon_wrapper → eerste icon-kind (INSTANCE of FRAME)
   if ('findChild' in card) {
     const wrapper = (card as InstanceNode).findChild((n: SceneNode) => n.name === 'icon_wrapper');
     if (wrapper !== null && 'children' in wrapper) {
       const wrapperNode = wrapper as FrameNode | GroupNode | InstanceNode;
       for (let i = 0; i < wrapperNode.children.length; i++) {
         const child = wrapperNode.children[i];
-        if (child.type === 'INSTANCE') {
+        if (isIconNode(child)) {
           return isEffectivelyVisible(child, slide) ? normalizeIconKey(child.name) : null;
         }
       }
     }
   }
 
-  // Strategy C: findOne descendant — eerste INSTANCE met Lucide-slug-naam
+  // Strategy C: findOne descendant — eerste icon-node met Lucide-slug-naam
   if ('findOne' in card) {
     const found = (card as InstanceNode).findOne((n: SceneNode) => {
-      if (n.type !== 'INSTANCE') return false;
+      if (!isIconNode(n)) return false;
       return LUCIDE_SLUG_RE.test(normalizeIconKey(n.name));
     });
-    if (found !== null && found.type === 'INSTANCE') {
+    if (found !== null && isIconNode(found)) {
       return isEffectivelyVisible(found, slide) ? normalizeIconKey(found.name) : null;
     }
   }
@@ -364,6 +421,112 @@ function findVisibleTextNodeByName(
   return null;
 }
 
+/**
+ * Heading-size source on CopyWrap is the nested `TypHeading` instance's
+ * VARIANT property (verified via Figma MCP on Welder Templates v0). Some
+ * older library generations may not have a TypHeading wrapper — we fall
+ * back to scanning CopyWrap itself for a size-named VARIANT in case the
+ * property was lifted up. Both reads (current value) and writes
+ * (setProperties) need the same host + key, so the resolver returns both.
+ */
+interface HeadingSizeHost {
+  host: InstanceNode;
+  key: string;
+  value: string;
+  options: ReadonlyArray<string>;
+}
+
+async function resolveTypHeadingSizeHost(
+  copyWrap: InstanceNode,
+): Promise<HeadingSizeHost | null> {
+  const candidates: InstanceNode[] = [];
+  // Prefer TypHeading; fall back to CopyWrap-level scan for legacy masters.
+  if ('findOne' in copyWrap) {
+    const typHeading = copyWrap.findOne(function (n: SceneNode) {
+      return n.type === 'INSTANCE' && n.name === 'TypHeading';
+    });
+    if (typHeading !== null && typHeading.type === 'INSTANCE') {
+      candidates.push(typHeading as InstanceNode);
+    }
+  }
+  candidates.push(copyWrap);
+
+  for (let i = 0; i < candidates.length; i++) {
+    const cand = candidates[i];
+    const props = cand.componentProperties;
+    if (props === null || props === undefined) continue;
+    const keys = Object.keys(props);
+    let key: string | null = null;
+    // Pass 1: exact "size" (case-insensitive). The Figma plugin API
+    // returns variant keys with a `#nodeId:n` suffix in some files; we
+    // strip the suffix before comparing.
+    for (let k = 0; k < keys.length; k++) {
+      const bare = keys[k].split('#')[0].toLowerCase();
+      if (bare === 'size' && props[keys[k]].type === 'VARIANT') {
+        key = keys[k];
+        break;
+      }
+    }
+    // Pass 2: any VARIANT key containing "size" (alnum-stripped).
+    if (key === null) {
+      for (let k = 0; k < keys.length; k++) {
+        const stripped = keys[k].toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (stripped.indexOf('size') >= 0 && props[keys[k]].type === 'VARIANT') {
+          key = keys[k];
+          break;
+        }
+      }
+    }
+    if (key === null) {
+      console.log(
+        '[copywrap-size]   candidate "' + cand.name + '" props=[' + keys.join(', ') + '] — no size key',
+      );
+      continue;
+    }
+    const main = await cand.getMainComponentAsync();
+    const parent = main !== null ? main.parent : null;
+    if (parent === null || parent.type !== 'COMPONENT_SET') {
+      console.log(
+        '[copywrap-size]   candidate "' + cand.name + '" main parent is ' +
+          (parent !== null ? parent.type : 'null') + ', not COMPONENT_SET',
+      );
+      continue;
+    }
+    const defs = (parent as ComponentSetNode).componentPropertyDefinitions;
+    const def = defs !== null && defs !== undefined ? defs[key] : undefined;
+    if (def === undefined || def.type !== 'VARIANT' || !Array.isArray(def.variantOptions)) {
+      console.log(
+        '[copywrap-size]   candidate "' + cand.name + '" def missing variantOptions for key "' +
+          key + '"',
+      );
+      continue;
+    }
+    // H5 is intentionally excluded from the picker — the library exposes
+    // it but Welder's editor only ships Display through H4 as user-facing
+    // sizes. If a slide is currently on H5 the value passes through (no
+    // forced rewrite); the slider just snaps to the nearest allowed
+    // option as soon as the user drags it.
+    const filteredOptions: string[] = [];
+    for (let o = 0; o < def.variantOptions.length; o++) {
+      if (def.variantOptions[o].toLowerCase() !== 'h5') {
+        filteredOptions.push(def.variantOptions[o]);
+      }
+    }
+    // Reverse so the slider goes small → big left → right (H4 on the
+    // left, Display on the right) — matches user expectation that
+    // dragging right means a bigger heading. Figma's variantOptions
+    // are declared big → small in the library.
+    filteredOptions.reverse();
+    return {
+      host: cand,
+      key: key,
+      value: String(props[key].value),
+      options: filteredOptions,
+    };
+  }
+  return null;
+}
+
 async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null> {
   const copyWrap = findCopyWrap(slide);
   const badge = findBadge(slide);
@@ -372,20 +535,39 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
   // Secties opbouwen; elke null wanneer de wrapper niet bestaat.
   let titleDescription: GeneralSections['titleDescription'] = null;
   if (copyWrap !== null) {
+    // Visibility-aware read (used for accent dim-ranges below — those
+    // require the live TextNode reference). Plain characters are read
+    // regardless of visibility so the iframe can preserve text across
+    // toggle-off-then-on without round-tripping to Figma.
     const headingNode = findVisibleTextNodeByName(copyWrap, 'Heading', slide);
-    // Slide Machine's CopyWrap exposes a boolean `showParagraph` component
-    // property; when the designer sets it to false the paragraph subtree is
-    // hidden by the variant render even though the underlying TEXT node may
-    // still have visible=true. Read the property and short-circuit before
-    // the text-node lookup so we don't surface an editor for hidden content.
-    // Read-only — see `docs/architecture/slide-machine.md` §11.0 + §11.2.
     const paragraphHidden = readBooleanProperty(copyWrap, 'showParagraph') === false;
     const paragraphNode = paragraphHidden
       ? null
       : findVisibleTextNodeByName(copyWrap, 'Paragraph', slide);
-    const heading =
-      headingNode !== null ? headingNode.characters : readTextByName(copyWrap, 'Heading') || '';
-    const paragraph = paragraphNode !== null ? paragraphNode.characters : null;
+    const heading = readTextByName(copyWrap, 'Heading') || '';
+    // `paragraph` is null only when the master has no Paragraph TextNode
+    // at all — that's the "section unsupported" signal. When the node
+    // exists but the section is hidden via showParagraph, we still send
+    // the chars so the toggle can preserve them across off/on cycles.
+    const paragraphChars = readTextByName(copyWrap, 'Paragraph');
+    const paragraph = paragraphChars !== null ? paragraphChars : null;
+
+    // Heading visibility — TypHeading wrapper's .visible flag (defaults
+    // to true when the wrapper is missing). Paragraph visibility —
+    // showParagraph BOOLEAN component property (null when the property
+    // doesn't exist OR there's no Paragraph TextNode).
+    let headingVisible = true;
+    const typHeading = copyWrap.findOne(function (n: SceneNode) {
+      return n.type === 'INSTANCE' && n.name === 'TypHeading';
+    });
+    if (typHeading !== null && 'visible' in typHeading) {
+      headingVisible = (typHeading as InstanceNode).visible !== false;
+    }
+    let paragraphVisible: boolean | null = null;
+    if (paragraph !== null) {
+      const showParagraphValue = readBooleanProperty(copyWrap, 'showParagraph');
+      paragraphVisible = showParagraphValue === null ? true : showParagraphValue;
+    }
 
     // Dim-range scan (spec §13 T30) — heading-only, silent-fail naar null
     // wanneer de library onbereikbaar is of het heading-node ontbreekt.
@@ -400,14 +582,58 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
       }
     }
 
+    // Heading-size VARIANT property lives on the nested `TypHeading`
+    // instance inside CopyWrap, not on CopyWrap itself (verified via
+    // Figma MCP — CopyWrap's componentProperties only exposes Badge/
+    // Paragraph toggles; size is a TypHeading-level variant).
+    let size: { current: string; options: ReadonlyArray<string> } | null = null;
+    try {
+      const headingHost = await resolveTypHeadingSizeHost(copyWrap);
+      if (headingHost !== null) {
+        size = {
+          current: headingHost.value,
+          options: headingHost.options,
+        };
+        console.log(
+          '[copywrap-size] options=[' + headingHost.options.join(', ') +
+            '], current=' + headingHost.value,
+        );
+      } else {
+        console.log('[copywrap-size] TypHeading + size property not resolved');
+      }
+    } catch (e) {
+      console.log('[copywrap-size] lookup failed:', e);
+    }
+
     titleDescription = {
       copyWrapId: copyWrap.id,
       heading: heading,
       paragraph: paragraph,
+      headingVisible: headingVisible,
+      paragraphVisible: paragraphVisible,
       headingDim: headingDim,
+      size: size,
     };
   }
 
+  // Badge visibility — the `Badge_wrap` FRAME inside CopyWrap is the
+  // source of truth (verified via Figma MCP on Welder Templates v0).
+  // Toggling its `.visible` cleanly collapses the badge out of CopyWrap's
+  // auto-layout, which is what the audience expects when the badge is
+  // hidden. Fallback to the `showBadge` BOOLEAN for legacy CopyWraps
+  // that predate the wrap-based pattern.
+  let badgeVisible: boolean | null = null;
+  if (badge !== null && copyWrap !== null) {
+    const badgeWrap = copyWrap.findOne(function (n: SceneNode) {
+      return (n.type === 'FRAME' || n.type === 'INSTANCE') && n.name === 'Badge_wrap';
+    });
+    if (badgeWrap !== null && 'visible' in badgeWrap) {
+      badgeVisible = (badgeWrap as SceneNode).visible !== false;
+    } else {
+      const v = readBooleanProperty(copyWrap, 'showBadge');
+      badgeVisible = v === null ? true : v;
+    }
+  }
   const badgeSection =
     badge === null
       ? null
@@ -415,6 +641,7 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
           badgeNodeId: badge.id,
           label: readTextByName(badge, 'Label') || badge.name,
           icon: readBadgeIcon(badge),
+          visible: badgeVisible,
         };
 
   const imageSection =
@@ -1223,6 +1450,76 @@ function postToUI(msg: PluginToUIMessage): void {
 }
 
 // ============================================================
+// Library text-style resolution by name
+//
+// Library-subscribed styles can't be enumerated by name — only local
+// styles can. To resolve one we have to read its id off a TextNode that
+// already references it. We walk every TEXT node on the current page,
+// fetch each distinct textStyleId via getStyleByIdAsync, and cache the
+// resulting name → id map per session. Subsequent lookups are O(1).
+//
+// Returns null when no node in the file uses a style matching `name`
+// (exact match or `<path>/<name>` suffix to allow folder-grouped styles).
+// ============================================================
+const textStyleByName: { [name: string]: string } = {};
+let textStyleMapBuilt = false;
+
+async function buildTextStyleMap(): Promise<void> {
+  if (textStyleMapBuilt) return;
+  const seenIds: { [id: string]: true } = {};
+  const pages = figma.root.children;
+  for (let p = 0; p < pages.length; p++) {
+    const page = pages[p];
+    if (page.type !== 'PAGE') continue;
+    try {
+      await page.loadAsync();
+    } catch (e) {
+      console.log('[text-style-map] page.loadAsync failed: ' + String(e));
+      continue;
+    }
+    const textNodes = page.findAll(function (n: SceneNode) {
+      return n.type === 'TEXT';
+    });
+    for (let i = 0; i < textNodes.length; i++) {
+      const text = textNodes[i] as TextNode;
+      const id = text.textStyleId;
+      if (typeof id !== 'string' || id.length === 0) continue;
+      if (seenIds[id]) continue;
+      seenIds[id] = true;
+      try {
+        const style = await figma.getStyleByIdAsync(id);
+        if (style !== null && typeof style.name === 'string') {
+          textStyleByName[style.name] = id;
+        }
+      } catch (_e) {
+        /* silent — style may have been deleted */
+      }
+    }
+  }
+  textStyleMapBuilt = true;
+  const names = Object.keys(textStyleByName);
+  console.log('[text-style-map] built: ' + String(names.length) + ' entries');
+  for (let i = 0; i < names.length; i++) {
+    console.log('[text-style-map]   "' + names[i] + '"');
+  }
+}
+
+async function resolveTextStyleByName(name: string): Promise<string | null> {
+  await buildTextStyleMap();
+  if (textStyleByName[name] !== undefined) return textStyleByName[name];
+  // Try suffix-match (folder-grouped style names).
+  const suffix = '/' + name;
+  const keys = Object.keys(textStyleByName);
+  for (let i = 0; i < keys.length; i++) {
+    const key = keys[i];
+    if (key.length >= suffix.length && key.lastIndexOf(suffix) === key.length - suffix.length) {
+      return textStyleByName[key];
+    }
+  }
+  return null;
+}
+
+// ============================================================
 // Live current-slide refresh — debounced content + summary posts
 // ============================================================
 
@@ -1621,6 +1918,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       heading: msg.payload.heading,
       paragraph: msg.payload.paragraph,
       icon: msg.payload.icon,
+      iconSvg: msg.payload.iconSvg,
       style: msg.payload.style,
     });
     markSelfWrite();
@@ -1629,6 +1927,265 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       ok: true,
       targetId: msg.cardNodeId,
     });
+    return;
+  }
+
+  if (msg.type === 'set-card-size') {
+    const slide = findSlideById(msg.slideId);
+    if (slide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    // Resolve the heading text-style id once, up front. Library-subscribed
+    // styles aren't enumerable by name — sandbox walks all TEXT nodes on
+    // first use to build a styleName → styleId map (cached for the session).
+    const styleId = await resolveTextStyleByName(msg.headingStyleName);
+    if (styleId === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error:
+          'Text style "' + msg.headingStyleName +
+          '" not found in this file. Apply it once to any text node so the plugin can register it.',
+      });
+      return;
+    }
+    // Side variants are forced to Heading4-xs regardless of which tile the
+    // user picked — the side layout has less horizontal room for text. Soft
+    // fallback to the picker's style if the helper isn't registered yet.
+    const resolvedSideStyleId = await resolveTextStyleByName('Heading4-xs');
+    const sideStyleId = resolvedSideStyleId !== null ? resolvedSideStyleId : styleId;
+    figma.commitUndo();
+    markSelfWrite();
+
+    // Swap the bound variable on every Card's gap-relevant fields to the
+    // named variable in the same Spacing collection. The collection holds
+    // separate variables for each spacing step (named "1".."9", values
+    // 4..36). We re-bind `itemSpacing` (and the other gap-shaped fields
+    // if they're present) so the new spacing flows through Welder's
+    // existing layout system.
+    let targetSpacingVariable: Variable | null = null;
+    let sidePaddingVariable: Variable | null = null;
+    // Side variants always rebind paddingLeft/Right to a Spacing-collection
+    // variable: "7" (28px) for Text-only, "4" (16px) for Compact/Default.
+    // Top variants leave padding alone.
+    const sidePaddingName = msg.iconVisible === false ? '7' : '4';
+    let firstSpacingFields: string[] = [];
+    try {
+      const firstCard = slide.findOne(function (n: SceneNode) {
+        return n.type === 'INSTANCE' && n.name === 'Card';
+      });
+      if (firstCard !== null && firstCard.type === 'INSTANCE') {
+        const bound = (firstCard as InstanceNode).boundVariables;
+        console.log(
+          '[set-card-size] card.boundVariables keys=' +
+            (bound !== null && bound !== undefined ? Object.keys(bound).join(',') : 'NONE'),
+        );
+        // Only true gap fields — paddings on the Card are bound to the
+        // same Spacing collection but shouldn't follow the SM/LG picker.
+        const GAP_FIELDS = ['itemSpacing', 'gridRowGap', 'gridColumnGap'];
+        let templateAlias: VariableAlias | null = null;
+        if (bound !== null && bound !== undefined) {
+          for (let f = 0; f < GAP_FIELDS.length; f++) {
+            const field = GAP_FIELDS[f];
+            const raw = (bound as { [k: string]: unknown })[field];
+            if (raw === undefined || raw === null) continue;
+            const aliases = Array.isArray(raw) ? raw : [raw];
+            for (let a = 0; a < aliases.length; a++) {
+              const alias = aliases[a] as VariableAlias;
+              if (alias.type === 'VARIABLE_ALIAS') {
+                if (templateAlias === null) templateAlias = alias;
+                if (firstSpacingFields.indexOf(field) < 0) firstSpacingFields.push(field);
+                break;
+              }
+            }
+          }
+        }
+        console.log(
+          '[set-card-size] spacing fields=[' + firstSpacingFields.join(', ') +
+            '], template var=' + (templateAlias !== null ? templateAlias.id : 'NONE'),
+        );
+
+        if (templateAlias !== null) {
+          const templateVar = await figma.variables.getVariableByIdAsync(templateAlias.id);
+          if (templateVar !== null) {
+            const collection = await figma.variables.getVariableCollectionByIdAsync(
+              templateVar.variableCollectionId,
+            );
+            if (collection !== null) {
+              const tried: string[] = [];
+              for (let i = 0; i < collection.variableIds.length; i++) {
+                const v = await figma.variables.getVariableByIdAsync(collection.variableIds[i]);
+                if (v === null) continue;
+                tried.push(v.name);
+                // Exact-match or `<group>/<name>` suffix match — handles
+                // both flat ("5") and folder-grouped ("Spacing/5") names.
+                if (
+                  targetSpacingVariable === null &&
+                  (v.name === msg.gapModeName || v.name.endsWith('/' + msg.gapModeName))
+                ) {
+                  targetSpacingVariable = v;
+                }
+                if (
+                  sidePaddingVariable === null &&
+                  (v.name === sidePaddingName || v.name.endsWith('/' + sidePaddingName))
+                ) {
+                  sidePaddingVariable = v;
+                }
+                if (targetSpacingVariable !== null && sidePaddingVariable !== null) {
+                  break;
+                }
+              }
+              if (targetSpacingVariable === null) {
+                console.log(
+                  '[set-card-size] variable "' + msg.gapModeName +
+                    '" not found in collection "' + collection.name + '" — available: [' + tried.join(', ') + ']',
+                );
+              }
+              if (sidePaddingVariable === null) {
+                console.log(
+                  '[set-card-size] side-padding variable "' + sidePaddingName +
+                    '" not found in collection "' + collection.name + '"',
+                );
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      console.log('[set-card-size] spacing-variable lookup failed: ' + String(e));
+    }
+
+    // One walk; resize icon-slot child, swap heading text style, and (when
+    // we resolved a target spacing variable) re-bind every gap-shaped
+    // field on each Card so the new spacing flows through.
+    const cards = slide.findAll(function (n: SceneNode) {
+      return n.type === 'INSTANCE' && n.name === 'Card';
+    });
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i];
+      if (card.type !== 'INSTANCE') continue;
+      const cardInst = card as InstanceNode;
+
+      // Side variants wrap the icon in `icon-border-wrap` to hold a
+      // divider/border. Two things follow from "is this a side variant":
+      //   - in Text-only mode we hide that wrapper too (otherwise an empty
+      //     bordered column lingers);
+      //   - the heading is always Heading4-xs on side variants (less room).
+      // Top variants don't have this node — findOne returns null.
+      const borderWrap = cardInst.findOne(function (n: SceneNode) {
+        return n.name === 'icon-border-wrap';
+      });
+      const isSideVariant = borderWrap !== null;
+      if (borderWrap !== null) {
+        try {
+          borderWrap.visible = msg.iconVisible;
+        } catch (_e) {
+          /* silent */
+        }
+      }
+
+      // Card masters can carry multiple icon-slots (top vs side variant) —
+      // walk all of them and prefer the one whose ancestor chain is visible.
+      // Without this, side variants land on the hidden top slot and the
+      // visibility/resize ops silently no-op on the wrong node.
+      const slotMatches = cardInst.findAll(function (n: SceneNode) {
+        return n.type === 'SLOT' && n.name === 'icon-slot';
+      });
+      let slotNode: SlotNode | null = null;
+      for (let s = 0; s < slotMatches.length; s++) {
+        const candidate = slotMatches[s];
+        if (candidate.type !== 'SLOT') continue;
+        let visible = true;
+        let cursor: BaseNode | null = candidate;
+        while (cursor !== null && cursor.id !== cardInst.id) {
+          if ('visible' in cursor && (cursor as SceneNode).visible === false) {
+            visible = false;
+            break;
+          }
+          cursor = cursor.parent;
+        }
+        if (visible) {
+          slotNode = candidate as SlotNode;
+          break;
+        }
+      }
+      if (slotNode === null && slotMatches.length > 0 && slotMatches[0].type === 'SLOT') {
+        slotNode = slotMatches[0] as SlotNode;
+      }
+      if (slotNode !== null) {
+        // Toggle the slot's own visibility — the entire icon area
+        // collapses out of the auto-layout when hidden, giving the text
+        // more room. The slot's child SVG stays put, so flipping back to
+        // a visible mode restores the previously-picked icon.
+        try {
+          slotNode.visible = msg.iconVisible;
+        } catch (_e) {
+          /* silent */
+        }
+        if (msg.iconVisible && slotNode.children.length > 0) {
+          const child = slotNode.children[0];
+          if ('resize' in child) {
+            try {
+              child.resize(msg.iconSize, msg.iconSize);
+            } catch (_e) {
+              /* silent — auto-layout-locked slots may reject */
+            }
+          }
+        }
+      }
+
+      const headingNode = cardInst.findOne(function (n: SceneNode) {
+        return n.type === 'TEXT' && n.name === 'Heading';
+      });
+      if (headingNode !== null && headingNode.type === 'TEXT') {
+        const targetStyleId = isSideVariant ? sideStyleId : styleId;
+        try {
+          await (headingNode as TextNode).setTextStyleIdAsync(targetStyleId);
+        } catch (e) {
+          console.log('[set-card-size] setTextStyleIdAsync failed: ' + String(e));
+        }
+      }
+
+      if (targetSpacingVariable !== null) {
+        for (let f = 0; f < firstSpacingFields.length; f++) {
+          const field = firstSpacingFields[f] as VariableBindableNodeField;
+          try {
+            cardInst.setBoundVariable(field, targetSpacingVariable);
+          } catch (e) {
+            console.log(
+              '[set-card-size] setBoundVariable ' + field + ' failed: ' + String(e),
+            );
+          }
+        }
+      }
+
+      // Side-variant horizontal padding follows the picker mode:
+      //   - Text-only       → variable "7" (28px)
+      //   - Compact/Default → variable "6" (24px)
+      // sidePaddingVariable was resolved up front from sidePaddingName.
+      // Top variants leave padding alone — no rebind, no clear.
+      if (isSideVariant && sidePaddingVariable !== null) {
+        const paddingFields = ['paddingLeft', 'paddingRight'];
+        for (let f = 0; f < paddingFields.length; f++) {
+          const field = paddingFields[f] as VariableBindableNodeField;
+          try {
+            cardInst.setBoundVariable(field, sidePaddingVariable);
+          } catch (e) {
+            console.log(
+              '[set-card-size] setBoundVariable ' + field + ' side-padding failed: ' + String(e),
+            );
+          }
+        }
+      }
+    }
+
+    markSelfWrite();
+    postToUI({ type: 'target-updated', ok: true });
     return;
   }
 
@@ -1769,7 +2326,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       return;
     }
     figma.commitUndo();
-    await applyJourney(journeySlotNode as SlotNode, msg.desired);
+    await applyJourney(journeySlotNode as SlotNode, msg.desired, msg.iconSvgs);
     postToUI({
       type: 'target-updated',
       ok: true,
@@ -1998,17 +2555,128 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     }
     figma.commitUndo();
     (skipParent as SlideNode).isSkippedSlide = msg.skipped;
-    // Post the refreshed summary so the UI's eye toggle reflects the new
-    // isSkipped state. Cheaper than rescanning the slide's content.
-    postToUI({
-      type: 'slide-summary',
-      summary: summaryForSlide(skipSlide),
-    });
+    // No slide-summary re-emit: the iframe flips its visibility pill
+    // optimistically before posting, so a sandbox echo just forces a
+    // wasted round-trip and can clobber a rapid second click. Same
+    // pattern as set-slide-theme.
     postToUI({
       type: 'target-updated',
       ok: true,
       targetId: skipSlide.id,
     });
+    return;
+  }
+
+  if (msg.type === 'set-typography-visibility') {
+    const visSlide = findSlideById(msg.slideId);
+    if (visSlide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    figma.commitUndo();
+    markSelfWrite();
+    try {
+      if (msg.field === 'badge') {
+        // Badge visibility binds to the `Badge_wrap` FRAME inside
+        // CopyWrap — toggling that wrapper collapses the badge out of
+        // CopyWrap's auto-layout cleanly. Legacy fallback: setProperties
+        // on the `showBadge` BOOLEAN for older masters without the wrap.
+        const cw = findCopyWrap(visSlide);
+        if (cw !== null) {
+          const badgeWrap = cw.findOne(function (n: SceneNode) {
+            return (n.type === 'FRAME' || n.type === 'INSTANCE') && n.name === 'Badge_wrap';
+          });
+          if (badgeWrap !== null && 'visible' in badgeWrap) {
+            (badgeWrap as SceneNode).visible = msg.visible;
+          } else {
+            const props = cw.componentProperties;
+            let showKey: string | null = null;
+            if (props !== null && props !== undefined) {
+              const keys = Object.keys(props);
+              for (let i = 0; i < keys.length; i++) {
+                const bare = keys[i].split('#')[0].toLowerCase();
+                if (bare === 'showbadge' && props[keys[i]].type === 'BOOLEAN') {
+                  showKey = keys[i];
+                  break;
+                }
+              }
+            }
+            if (showKey !== null) {
+              const overrides: { [k: string]: boolean } = {};
+              overrides[showKey] = msg.visible;
+              cw.setProperties(overrides);
+            }
+          }
+        }
+      } else {
+        await applyTitleDescription(visSlide, {
+          headingVisible: msg.field === 'heading' ? msg.visible : undefined,
+          paragraphVisible: msg.field === 'paragraph' ? msg.visible : undefined,
+        });
+      }
+    } catch (e) {
+      console.log('[set-typography-visibility] failed: ' + String(e));
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'apply failed: ' + String(e),
+      });
+      return;
+    }
+    postToUI({ type: 'target-updated', ok: true, targetId: visSlide.id });
+    return;
+  }
+
+  if (msg.type === 'set-copywrap-size') {
+    const sizeSlide = findSlideById(msg.slideId);
+    if (sizeSlide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    const copyWrapForSize = findCopyWrap(sizeSlide);
+    if (copyWrapForSize === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'CopyWrap not found on slide',
+      });
+      return;
+    }
+    // Same resolver as the read-side: the actual VARIANT host is the
+    // nested TypHeading instance (legacy fallback to CopyWrap-level).
+    const sizeHostInfo = await resolveTypHeadingSizeHost(copyWrapForSize);
+    if (sizeHostInfo === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'TypHeading + size variant property not found',
+      });
+      return;
+    }
+    figma.commitUndo();
+    markSelfWrite();
+    try {
+      const overrides: { [k: string]: string } = {};
+      overrides[sizeHostInfo.key] = msg.size;
+      sizeHostInfo.host.setProperties(overrides);
+    } catch (e) {
+      console.log('[set-copywrap-size] setProperties failed: ' + String(e));
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'setProperties failed: ' + String(e),
+      });
+      return;
+    }
+    postToUI({ type: 'target-updated', ok: true, targetId: sizeHostInfo.host.id });
     return;
   }
 

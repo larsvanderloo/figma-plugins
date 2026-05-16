@@ -22,6 +22,7 @@ import { useIconRecents } from '../stores/useIconRecents';
 
 interface Props {
   modelValue: string;
+  disabled?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -67,8 +68,11 @@ const visible = computed<string[]>(function () {
   return filtered.value.slice(0, displayCount.value);
 });
 
+// Placeholder shown when no icon is selected yet. `square-dashed` reads
+// as an empty slot waiting to be filled rather than an actual "circle"
+// icon choice.
 const displayIcon = computed<string>(function () {
-  return props.modelValue.length > 0 ? props.modelValue : 'circle';
+  return props.modelValue.length > 0 ? props.modelValue : 'square-dashed';
 });
 
 function select(name: string): void {
@@ -113,21 +117,24 @@ function onGridScroll(event: Event): void {
 </script>
 
 <template>
-  <UPopover :open="open" @update:open="onOpenChange" :ui="{ content: 'p-4 w-80' }">
-    <!-- Trigger: selector-stijl knop met groot icon-preview + chevron -->
+  <UPopover
+    :open="disabled ? false : open"
+    @update:open="onOpenChange"
+    :ui="{ content: 'p-4 w-80' }"
+  >
+    <!-- Trigger: outline-button met leading icon + trailing chevron. Met
+         `icon`/`trailing-icon`-props past Nuxt UI de juiste icon-grootte
+         (size-5) toe binnen het md-size-token, zodat de knop dezelfde
+         32px-hoogte krijgt als een naastliggende UInput size="md". -->
     <UButton
-      variant="soft"
+      variant="outline"
       color="neutral"
-      class="max-w-[96px] gap-2 p-2"
-      @click="onOpenChange(true)"
-    >
-      <span
-        class="flex items-center justify-center size-8 rounded-md shrink-0 bg-[--ui-bg-elevated]"
-      >
-        <UIcon :name="`i-lucide-${displayIcon}`" class="size-5" />
-      </span>
-      <UIcon name="i-lucide-chevron-down" class="size-4 text-[--ui-text-muted] shrink-0" />
-    </UButton>
+      size="md"
+      :icon="`i-lucide-${displayIcon}`"
+      trailing-icon="i-lucide-chevron-down"
+      :disabled="disabled"
+      :ui="{ trailingIcon: 'text-muted' }"
+    />
 
     <template #content>
       <!-- Zoekbalk met clear-knop -->
@@ -150,7 +157,7 @@ function onGridScroll(event: Event): void {
 
       <!-- Non-blocking loading hint: icons cache nog niet gereed -->
       <div v-if="!iconsReady && open && search.length === 0" class="flex items-center gap-1.5 mb-2">
-        <UIcon name="i-lucide-loader-2" class="size-3 animate-spin text-[--ui-text-muted]" />
+        <UIcon name="i-lucide-loader-2" class="size-3 animate-spin text-muted" />
         <span class="text-xs text-muted">Iconen worden geladen...</span>
       </div>
 
@@ -170,34 +177,34 @@ function onGridScroll(event: Event): void {
           <template v-if="iconRecents.items.length > 0 && search.length === 0">
             <p class="text-xs text-muted mb-1">Recent</p>
             <div class="grid grid-cols-6 gap-1">
-              <button
+              <UButton
                 v-for="name in iconRecents.items"
                 :key="`recent-${name}`"
-                type="button"
-                class="flex items-center justify-center rounded-xl p-2.5 bg-[--ui-bg] ring-1 ring-[--ui-border] transition-colors hover:bg-[--ui-bg-elevated]"
-                :class="{ 'ring-2 ring-[#FF7700] bg-[#FFF4EA]': name === props.modelValue }"
+                :icon="`i-lucide-${name}`"
+                :color="name === props.modelValue ? 'primary' : 'neutral'"
+                :variant="name === props.modelValue ? 'soft' : 'link'"
+                size="md"
+                square
                 :title="name"
                 @click="select(name)"
-              >
-                <UIcon :name="`i-lucide-${name}`" class="size-5" />
-              </button>
+              />
             </div>
-            <div class="border-t border-[var(--ui-border)] my-2" />
+            <div class="border-t border-default my-2" />
           </template>
 
           <!-- Hoofdgrid -->
           <div class="grid grid-cols-6 gap-1">
-            <button
+            <UButton
               v-for="name in visible"
               :key="name"
-              type="button"
-              class="flex items-center justify-center rounded-xl p-2.5 bg-[--ui-bg] ring-1 ring-[--ui-border] transition-colors hover:bg-[--ui-bg-elevated]"
-              :class="{ 'ring-2 ring-[#FF7700] bg-[#FFF4EA]': name === props.modelValue }"
+              :icon="`i-lucide-${name}`"
+              :color="name === props.modelValue ? 'primary' : 'neutral'"
+              :variant="name === props.modelValue ? 'soft' : 'link'"
+              size="md"
+              square
               :title="name"
               @click="select(name)"
-            >
-              <UIcon :name="`i-lucide-${name}`" class="size-5" />
-            </button>
+            />
           </div>
 
           <!-- No-results state -->

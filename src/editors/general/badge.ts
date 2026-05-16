@@ -26,12 +26,20 @@ import {
   trySwapViaInstanceProperty,
   swapComponentByName,
 } from '../_shared/icon-swap';
+import { replaceIconViaSlot } from '../_shared/icon-slot';
 import { setTextCharactersSafe } from '../_shared/fonts';
 
 /** Payload-shape voor `update-general` met section `badge`. */
 export interface BadgePayload {
   label?: string;
   icon?: string;
+  /**
+   * Volledig SVG-document voor het gekozen Lucide-icon. Aanwezig wanneer
+   * de iframe het uit `lucide-svgs.ts` heeft kunnen opzoeken. De sandbox
+   * gebruikt dit voor de slot-based swap; bij afwezigheid valt het
+   * terug op de legacy INSTANCE_SWAP-route.
+   */
+  iconSvg?: string;
 }
 
 // ============================================================
@@ -191,6 +199,12 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
   }
 
   if (typeof payload.icon === 'string' && payload.icon.length > 0) {
-    await applyIconSwap(badge, payload.icon);
+    let handled = false;
+    if (typeof payload.iconSvg === 'string' && payload.iconSvg.length > 0) {
+      handled = replaceIconViaSlot(badge, payload.icon, payload.iconSvg);
+    }
+    if (!handled) {
+      await applyIconSwap(badge, payload.icon);
+    }
   }
 }

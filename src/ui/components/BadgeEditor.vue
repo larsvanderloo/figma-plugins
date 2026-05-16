@@ -1,32 +1,18 @@
 <!--
-  BadgeEditor — v-model-gebonden editor voor de
-  General → Badge sectie (spec §9 T9).
+  BadgeEditor — editor for the General → Badge section.
 
-  Props:
-    modelValue: { label: string; icon: string }
-
-  Emits:
-    update:modelValue — het volledige object, debounced op 200ms
-      sinds de laatste edit in label of icon-picker.
-
-  Gedrag:
-    - `<UInput>` voor label (altijd aanwezig).
-    - `<USelect searchable>` met BADGE_ICON_OPTIONS; trigger toont
-      gekozen icon + naam via `<UIcon :name="'i-lucide-' + icon" />`
-      (zelfde pattern als welder-table BadgeCellInput).
-    - Debounce-timer in een lokale ref; clear + reset bij elke edit
-      zodat we pas na 200ms stilte één emit firen (idem
-      TitleDescriptionEditor).
-    - Externe prop-wijzigingen (slide-wissel / main-echo) resetten
-      de lokale refs via watch(props, ...).
+  Uses BInput (commits on blur / Enter) so the sandbox only sees one
+  update per finished edit — no keystroke debounce.
 -->
 <script setup lang="ts">
-import { ref, watch } from 'vue';
 import IconPicker from './IconPicker.vue';
+import BInput from './BInput.vue';
+import VisibilityPill from './VisibilityPill.vue';
 
 export interface BadgeValue {
   label: string;
   icon: string;
+  visible: boolean | null;
 }
 
 interface Props {
@@ -37,58 +23,55 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
   'update:modelValue': [value: BadgeValue];
+  'commit:visibility': [visible: boolean];
 }>();
 
-// Lokale reactieve kopie zodat de user type-snelheid niet door de
-// 200ms-debounce wordt afgeknepen.
-const localLabel = ref<string>(props.modelValue.label);
-const localIcon = ref<string>(props.modelValue.icon);
-
-// Slide-wissel of main-echo: sync lokale refs met prop.
-watch(
-  () => props.modelValue,
-  (next) => {
-    localLabel.value = next.label;
-    localIcon.value = next.icon;
-  },
-);
-
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-function scheduleEmit(): void {
-  if (debounceTimer !== null) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    emit('update:modelValue', {
-      label: localLabel.value,
-      icon: localIcon.value,
-    });
-  }, 200);
-}
-
-function onLabelInput(value: string): void {
-  localLabel.value = value;
-  scheduleEmit();
+function onLabelCommit(value: string): void {
+  emit('update:modelValue', {
+    label: value,
+    icon: props.modelValue.icon,
+    visible: props.modelValue.visible,
+  });
 }
 
 function onIconChange(value: string): void {
-  localIcon.value = value;
-  scheduleEmit();
+  emit('update:modelValue', {
+    label: props.modelValue.label,
+    icon: value,
+    visible: props.modelValue.visible,
+  });
+}
+
+function onVisibilityToggle(next: boolean): void {
+  emit('commit:visibility', next);
 }
 </script>
 
 <template>
-  <div class="space-y-3">
-    <UFormField name="icon" label="Icoon" size="md">
-      <IconPicker :model-value="localIcon" class="w-full" @update:model-value="onIconChange" />
-    </UFormField>
-
-    <UFormField name="label" label="Label" size="md">
-      <UInput
-        :model-value="localLabel"
-        placeholder="Badge tekst"
-        class="w-full"
-        @update:model-value="onLabelInput"
+  <div class="space-y-1.5">
+    <div class="flex items-center justify-between gap-2">
+      <label class="text-xs font-medium text-default">Badge</label>
+      <VisibilityPill
+        v-if="modelValue.visible !== null"
+        :model-value="modelValue.visible"
+        :title="modelValue.visible ? 'Verberg badge' : 'Toon badge'"
+        @update:model-value="onVisibilityToggle"
       />
-    </UFormField>
+    </div>
+    <div class="flex items-center gap-2">
+      <IconPicker
+        :model-value="modelValue.icon"
+        :disabled="modelValue.visible === false"
+        @update:model-value="onIconChange"
+      />
+      <BInput
+        :model-value="modelValue.label"
+        placeholder="Bijv. Belangrijk"
+        size="md"
+        :disabled="modelValue.visible === false"
+        class="flex-1"
+        @update:model-value="onLabelCommit"
+      />
+    </div>
   </div>
 </template>

@@ -105,8 +105,8 @@ async function onDrop(event: DragEvent): Promise<void> {
       :class="[
         'border-2 border-dashed rounded-xl py-6 px-4 cursor-pointer',
         'flex flex-col items-center gap-3 text-center',
-        'transition-colors hover:border-[--ui-border-accented] hover:bg-[--ui-bg-elevated]',
-        isDragging ? 'border-[--ui-border-accented] bg-[--ui-bg-elevated]' : 'border-[--ui-border]',
+        'transition-colors hover:border-accented hover:bg-elevated',
+        isDragging ? 'border-accented bg-elevated' : 'border-default',
         loading ? 'pointer-events-none opacity-60' : '',
       ]"
       @click="openFilePicker"
@@ -115,7 +115,7 @@ async function onDrop(event: DragEvent): Promise<void> {
       @drop="onDrop"
     >
       <!-- Icoon in grijs cirkeltje -->
-      <span class="flex items-center justify-center size-10 rounded-full bg-[--ui-bg-elevated]">
+      <span class="flex items-center justify-center size-10 rounded-full bg-elevated">
         <UIcon
           :name="loading ? 'i-lucide-loader-circle' : 'i-lucide-upload'"
           :class="['size-5 text-muted', loading ? 'animate-spin' : '']"

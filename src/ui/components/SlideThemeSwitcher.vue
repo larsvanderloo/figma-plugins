@@ -38,35 +38,26 @@ function select(modeId: string): void {
 </script>
 
 <template>
-  <div class="flex items-center gap-3">
+  <div class="flex items-center gap-2">
     <button
       v-for="mode in props.theme.modes"
       :key="mode.id"
       type="button"
-      class="flex flex-col items-center gap-1.5 group focus:outline-none"
+      class="size-8 rounded-full transition ring-2 ring-offset-2 ring-offset-default overflow-hidden focus:outline-none"
       :title="mode.name"
+      :aria-label="mode.name"
+      :class="
+        mode.id === activeId()
+          ? 'ring-primary'
+          : 'ring-transparent hover:ring-default'
+      "
+      :style="{
+        background:
+          mode.swatchPrimary && mode.swatchSecondary
+            ? `linear-gradient(135deg, ${mode.swatchPrimary} 0%, ${mode.swatchPrimary} 50%, ${mode.swatchSecondary} 50%, ${mode.swatchSecondary} 100%)`
+            : mode.swatchPrimary ?? '#e5e7eb',
+      }"
       @click="select(mode.id)"
-    >
-      <span
-        class="size-9 rounded-full transition ring-2 ring-offset-2 ring-offset-default overflow-hidden"
-        :class="
-          mode.id === activeId()
-            ? 'ring-[#FF7700]'
-            : 'ring-transparent group-hover:ring-[--ui-border]'
-        "
-        :style="{
-          background:
-            mode.swatchPrimary && mode.swatchSecondary
-              ? `linear-gradient(135deg, ${mode.swatchPrimary} 0%, ${mode.swatchPrimary} 50%, ${mode.swatchSecondary} 50%, ${mode.swatchSecondary} 100%)`
-              : mode.swatchPrimary ?? '#e5e7eb',
-        }"
-      />
-      <span
-        class="text-xs leading-tight"
-        :class="mode.id === activeId() ? 'text-default font-medium' : 'text-muted'"
-      >
-        {{ mode.name }}
-      </span>
-    </button>
+    />
   </div>
 </template>
