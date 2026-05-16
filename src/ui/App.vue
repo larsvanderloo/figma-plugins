@@ -89,6 +89,85 @@ notifications.init(useToast());
 // true until the first 'init' message arrives from main thread
 const initializing = ref<boolean>(true);
 
+// ── Resize handle ──────────────────────────────────────────────────
+// Drag the bottom-right corner to resize the plugin window. Posts a
+// throttled `resize-ui` on every animation frame so the iframe tracks
+// the cursor 1:1 without flooding the bridge. Sandbox both applies the
+// size AND persists it via clientStorage.
+const MIN_W = 380;
+const MIN_H = 480;
+const resizing = ref<boolean>(false);
+let resizeFrame: number | null = null;
+let resizeOriginX = 0;
+let resizeOriginY = 0;
+let resizeStartW = 0;
+let resizeStartH = 0;
+let pendingW = 0;
+let pendingH = 0;
+
+function onResizePointerDown(event: PointerEvent): void {
+  event.preventDefault();
+  resizing.value = true;
+  resizeOriginX = event.clientX;
+  resizeOriginY = event.clientY;
+  resizeStartW = window.innerWidth;
+  resizeStartH = window.innerHeight;
+  window.addEventListener('pointermove', onResizePointerMove);
+  window.addEventListener('pointerup', onResizePointerUp);
+  window.addEventListener('pointercancel', onResizePointerUp);
+}
+
+function onResizePointerMove(event: PointerEvent): void {
+  pendingW = Math.max(MIN_W, resizeStartW + (event.clientX - resizeOriginX));
+  pendingH = Math.max(MIN_H, resizeStartH + (event.clientY - resizeOriginY));
+  if (resizeFrame !== null) return;
+  resizeFrame = requestAnimationFrame(function () {
+    resizeFrame = null;
+    bridge.post({ type: 'resize-ui', width: pendingW, height: pendingH });
+  });
+}
+
+function onResizePointerUp(): void {
+  resizing.value = false;
+  if (resizeFrame !== null) {
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = null;
+  }
+  // Final post with the latest values so the persisted size matches
+  // exactly what the user sees on release.
+  if (pendingW > 0 && pendingH > 0) {
+    bridge.post({ type: 'resize-ui', width: pendingW, height: pendingH });
+  }
+  window.removeEventListener('pointermove', onResizePointerMove);
+  window.removeEventListener('pointerup', onResizePointerUp);
+  window.removeEventListener('pointercancel', onResizePointerUp);
+}
+
+// Bottom-nav tab state. `general` = title / badge / image / theme;
+// `content` = cards / timeline / journey / graphs. Defaults to general
+// since slide identity edits are the most common entry point.
+type TabId = 'general' | 'content';
+const activeTab = ref<TabId>('general');
+
+const hasContentOrGraphs = computed<boolean>(() => view.hasContent || view.hasGraphs);
+
+// Auto-flip to whichever tab actually has content when switching slides
+// so the user never lands on an empty tab. Watches the panel-presence
+// flags rather than the slide id so it also handles content appearing
+// asynchronously (e.g. after image-preview hydration).
+watch(
+  () => ({ g: view.hasGeneral, c: hasContentOrGraphs.value }),
+  function (next, prev) {
+    if (activeTab.value === 'general' && !next.g && next.c) activeTab.value = 'content';
+    else if (activeTab.value === 'content' && !next.c && next.g) activeTab.value = 'general';
+    // Surface initial choice when a slide is first picked.
+    if (!prev || (!prev.g && !prev.c)) {
+      activeTab.value = next.g ? 'general' : next.c ? 'content' : 'general';
+    }
+  },
+  { immediate: true },
+);
+
 // One-shot guard: when the sandbox hydrates the recents list via
 // `setItems`, the deep watcher below would otherwise echo the
 // just-loaded array back as a save. Flipped on hydration, consumed
@@ -297,24 +376,10 @@ onMounted(() => {
     </div>
 
     <!-- Real UI — shown once 'init' received -->
-    <div v-else class="flex h-full flex-col bg-elevated text-default">
+    <div v-else class="relative flex h-full flex-col bg-elevated text-default">
       <main class="flex-1 overflow-y-auto">
-        <div class="mx-auto max-w-2xl space-y-3 p-3">
-          <!-- Header-card: logo + version + theme/skip controls -->
-          <section
-            class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-5 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
-          >
-            <div class="flex items-center justify-between gap-2">
-              <img :src="welderLogo" alt="Welder" class="h-9 w-auto" />
-              <span class="text-[0.7rem] text-muted/70 tracking-wide">v{{ appVersion }}</span>
-            </div>
-          </section>
-
-          <!-- Content-area: gestapeld — elk panel beheert zijn eigen
-               card-layout. Empty-states worden getoond wanneer er geen
-               slide geselecteerd is of geen bewerkbare inhoud aanwezig is.
-          -->
-          <!-- No slide selected -->
+        <div class="mx-auto max-w-2xl space-y-3 p-3 pb-28">
+          <!-- Empty states first; they pre-empt the tab content. -->
           <section
             v-if="view.noSlide"
             class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
@@ -324,7 +389,6 @@ onMounted(() => {
             </p>
           </section>
 
-          <!-- Slide selected but nothing editable -->
           <section
             v-else-if="view.allEmpty"
             class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
@@ -332,47 +396,50 @@ onMounted(() => {
             <p class="text-sm text-muted">Geen bewerkbare inhoud op deze slide.</p>
           </section>
 
-          <!-- Stacked panels. GeneralPanel handles its own internal disable
-               state so the Weergave (visibility toggle) stays active even
-               when the slide is hidden — otherwise the user couldn't
-               un-hide. ContentPanel / GraphsPanel sit in a fieldset that
-               disables when the slide is skipped (no editing content). -->
+          <!-- Tab-based content. Only one panel renders at a time so the
+               page stays focused. GeneralPanel handles its own internal
+               disable state; ContentPanel + GraphsPanel sit in a fieldset
+               that disables when the slide is skipped. -->
           <template v-else>
-            <GeneralPanel v-if="view.hasGeneral" />
-            <fieldset
-              :disabled="view.isSkipped"
-              :class="
-                view.isSkipped ? 'space-y-3 opacity-50 pointer-events-none' : 'contents space-y-3'
-              "
-              style="border: 0; padding: 0; margin: 0; min-width: 0"
+            <Transition
+              mode="out-in"
+              enter-active-class="transition duration-150 ease-out"
+              enter-from-class="opacity-0 translate-y-1"
+              leave-active-class="transition duration-100 ease-in"
+              leave-to-class="opacity-0 translate-y-1"
             >
-              <ContentPanel v-if="view.hasContent" />
-              <GraphsPanel v-if="view.hasGraphs" />
-            </fieldset>
-          </template>
-
-          <!-- Export — single entry point that opens the picker modal.
-               Sits at the bottom of the content (scrolls with it). -->
-          <div class="flex flex-col items-center gap-2 pt-2 text-center">
-            <p class="text-xs text-muted max-w-sm">
-              Klik rechtsboven in Figma op het
-              <span
-                class="inline-flex items-center justify-center rounded border border-default px-1.5 py-0.5 align-text-bottom text-default"
+              <div v-if="activeTab === 'general' && view.hasGeneral" key="general">
+                <GeneralPanel />
+              </div>
+              <fieldset
+                v-else-if="activeTab === 'content' && hasContentOrGraphs"
+                key="content"
+                :disabled="view.isSkipped"
+                :class="
+                  view.isSkipped
+                    ? 'space-y-3 opacity-50 pointer-events-none'
+                    : 'space-y-3'
+                "
+                style="border: 0; padding: 0; margin: 0; min-width: 0"
               >
-                <UIcon name="i-lucide-play" class="h-3 w-3" />
-              </span>
-              play-icoon voor animaties en altijd actuele content. Een export is handig om te delen of printen.
-            </p>
-            <UButton
-              icon="i-lucide-download"
-              color="neutral"
-              variant="outline"
-              size="md"
-              @click="openExportModal"
-            >
-              Exporteer
-            </UButton>
-          </div>
+                <ContentPanel v-if="view.hasContent" />
+                <GraphsPanel v-if="view.hasGraphs" />
+              </fieldset>
+              <section
+                v-else
+                key="empty-tab"
+                class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
+              >
+                <p class="text-sm text-muted">
+                  {{
+                    activeTab === 'general'
+                      ? 'Geen algemene instellingen voor deze slide.'
+                      : 'Geen kaarten of grafieken op deze slide.'
+                  }}
+                </p>
+              </section>
+            </Transition>
+          </template>
 
           <!-- Export modal: kies wat (huidige slide / hele presentatie)
                en welk formaat (PDF / PNG). PNG van een hele presentatie
@@ -464,6 +531,139 @@ onMounted(() => {
           </UModal>
         </div>
       </main>
+
+      <!--
+        Bottom scrim — gradient fade from page background up into
+        transparent, so the scrolling content visually tucks beneath
+        the floating navbar instead of clashing through it. Same iOS
+        pattern Music / Files / Health use under their tab bars.
+      -->
+      <div
+        class="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-linear-to-t from-elevated from-30% to-transparent"
+        aria-hidden="true"
+      />
+
+      <!--
+        Floating bottom navbar — brand on the left, tab segments on the
+        right. Sits over the scrim + scrolling content; `pb-28` on the
+        main gutter keeps the last bits of content above the navbar.
+      -->
+      <nav
+        class="pointer-events-none absolute inset-x-0 bottom-4 flex items-center justify-center gap-2 px-3"
+        aria-label="Welder-navigatie"
+      >
+        <div
+          class="pointer-events-auto flex items-center gap-3 rounded-full bg-default/65 backdrop-blur-xl pl-4 pr-3 py-3 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.22)] ring-1 ring-default/40"
+        >
+          <!--
+            Inline W-only mark — same paths as the full Welder logo
+            without the wordmark, so the navbar reads as a brand icon
+            instead of a logo card. Fill is the Welder brand orange.
+          -->
+          <svg
+            viewBox="100 100 720 540"
+            class="h-7 w-auto shrink-0"
+            fill="#f70"
+            aria-label="Welder"
+            role="img"
+          >
+            <circle cx="721.4" cy="233.6" r="88.5" />
+            <path
+              d="M278,155.5c-6-10.1-19-13.4-29.1-7.4l-42.6,25.3c-50.5,29.9-67.1,95.1-37.2,145.5l166.3,280.4c6,10.1,19,13.4,29.1,7.4l42.6-25.3c50.5-29.9,67.1-95.1,37.2-145.6l-166.3-280.4Z"
+            />
+            <path
+              d="M528.4,155.5c-6-10.1-19-13.4-29.1-7.4l-42.6,25.3c-50.5,29.9-67.1,95.1-37.2,145.5l166.3,280.4c6,10.1,19,13.4,29.1,7.4l42.6-25.3c50.5-29.9,67.1-95.1,37.2-145.6l-166.3-280.4Z"
+            />
+          </svg>
+          <span class="h-7 w-px bg-border" aria-hidden="true" />
+          <!--
+            Grid-cols-2 ensures both tabs claim equal width, so the
+            sliding pill (50% - 4px wide, jumping between left:4px and
+            left:50%) lines up with each button regardless of label
+            length. Flex + gap-1 looked off because "Algemeen" is 2
+            characters longer than "Inhoud".
+          -->
+          <div class="relative grid grid-cols-2 items-center bg-elevated rounded-full p-1 min-w-56">
+            <div
+              class="absolute inset-y-1 rounded-full bg-default shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition-all duration-200 ease-out pointer-events-none"
+              :style="{
+                width: 'calc(50% - 4px)',
+                left: activeTab === 'general' ? '4px' : '50%',
+              }"
+              aria-hidden="true"
+            />
+            <button
+              type="button"
+              class="relative z-10 h-8 rounded-full text-sm font-medium transition-colors focus:outline-none flex items-center justify-center gap-2"
+              :class="activeTab === 'general' ? 'text-default' : 'text-muted hover:text-default'"
+              :aria-pressed="activeTab === 'general'"
+              @click="activeTab = 'general'"
+            >
+              <UIcon name="i-lucide-square-pen" class="size-4" />
+              Algemeen
+            </button>
+            <button
+              type="button"
+              class="relative z-10 h-8 rounded-full text-sm font-medium transition-colors focus:outline-none flex items-center justify-center gap-2"
+              :class="activeTab === 'content' ? 'text-default' : 'text-muted hover:text-default'"
+              :aria-pressed="activeTab === 'content'"
+              @click="activeTab = 'content'"
+            >
+              <UIcon name="i-lucide-layers" class="size-4" />
+              Inhoud
+            </button>
+          </div>
+        </div>
+
+        <!--
+          Floating export button — same height + glass treatment as the
+          nav pill. Sits to the right of the tab picker so the existing
+          export entry at the bottom of the scroll area can be retired.
+        -->
+        <button
+          type="button"
+          class="pointer-events-auto size-12 rounded-full bg-default/65 backdrop-blur-xl shadow-[0_12px_32px_-12px_rgba(0,0,0,0.18)] ring-1 ring-default/40 text-muted hover:text-primary hover:bg-default/70 transition-colors flex items-center justify-center"
+          :title="'Exporteer · v' + appVersion"
+          aria-label="Exporteer"
+          @click="openExportModal"
+        >
+          <UIcon name="i-lucide-download" class="size-5" />
+        </button>
+      </nav>
+
+      <!--
+        Resize handle — drag the bottom-right corner to resize the plugin
+        window. Sandbox persists the size via clientStorage so reopening
+        the plugin restores the last picked dimensions. While dragging,
+        `cursor-nwse-resize` is forced on the whole page so the cursor
+        doesn't flicker as it crosses over child elements.
+      -->
+      <div
+        :class="[
+          'absolute bottom-0 right-0 size-6 cursor-nwse-resize select-none flex items-end justify-end p-1.5 text-muted/60 hover:text-muted transition-colors',
+          resizing ? '[&]:text-default' : '',
+        ]"
+        role="separator"
+        aria-label="Plugin-grootte aanpassen"
+        @pointerdown="onResizePointerDown"
+      >
+        <svg viewBox="0 0 10 10" class="h-3 w-3" aria-hidden="true">
+          <path
+            d="M9 1 L1 9 M9 5 L5 9 M9 9 L9 9"
+            stroke="currentColor"
+            stroke-width="1.4"
+            stroke-linecap="round"
+            fill="none"
+          />
+        </svg>
+      </div>
+      <!-- Lock cursor + disable selection globally while dragging so the
+           pointer doesn't flicker over inputs / buttons. -->
+      <div
+        v-if="resizing"
+        class="fixed inset-0 z-9999 cursor-nwse-resize select-none"
+        aria-hidden="true"
+      />
     </div>
   </UApp>
 </template>

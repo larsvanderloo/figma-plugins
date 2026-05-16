@@ -13,7 +13,6 @@
 import { computed, ref, watch } from 'vue';
 import BInput from './BInput.vue';
 import BTextarea from './BTextarea.vue';
-import VisibilityPill from './VisibilityPill.vue';
 
 export interface TitleDescriptionValue {
   heading: string;
@@ -56,38 +55,26 @@ const sizeIndex = computed<number>(function () {
   const idx = s.options.indexOf(s.current);
   return idx >= 0 ? idx : 0;
 });
-const sliderKey = ref<number>(0);
-// Tracks the slider's live value during drag. Populated by
-// `@update:model-value` since USlider's `@change` event ships a
-// synthetic Event whose `target.value` is actually empty (the Nuxt UI
-// source tries to stuff value into Event init, but the Event
-// constructor only accepts bubbles/cancelable/composed there).
-const liveSize = ref<number | null>(null);
-watch(sizeIndex, function () {
-  sliderKey.value += 1;
-  liveSize.value = null;
-});
 
-function onLiveUpdate(value: number | number[] | undefined): void {
-  if (value === undefined) return;
-  const num = Array.isArray(value) ? value[0] : Number(value);
-  if (isFinite(num)) liveSize.value = num;
+// Per-segment "A" font-size — linearly interpolated across the option
+// range so the leftmost segment is small and the rightmost reads large.
+// Apple's iOS Settings → Text Size picker uses the same per-segment "A"
+// scaling, which is more legible than abstract size names for non-
+// designers.
+const SEGMENT_MIN_PX = 11;
+const SEGMENT_MAX_PX = 20;
+function segmentSizePx(idx: number, total: number): number {
+  if (total <= 1) return SEGMENT_MAX_PX;
+  const t = idx / (total - 1);
+  return SEGMENT_MIN_PX + (SEGMENT_MAX_PX - SEGMENT_MIN_PX) * t;
 }
 
-function onSizeCommit(): void {
+function onSizePick(idx: number): void {
   const s = props.modelValue.size;
   if (s === null) return;
-  const raw = liveSize.value !== null ? liveSize.value : sizeIndex.value;
-  const idx = Math.max(0, Math.min(s.options.length - 1, Math.round(raw)));
   const next = s.options[idx];
-  liveSize.value = null;
   if (typeof next === 'string' && next !== s.current) {
     emit('commit:size', next);
-  } else {
-    // No-op change → bump the key so the thumb settles back to the
-    // canonical integer rest position rather than lingering at the
-    // user's dropped fractional point.
-    sliderKey.value += 1;
   }
 }
 
@@ -219,14 +206,60 @@ function toggleWord(wordIndex: number): void {
 
 <template>
   <div class="space-y-4">
-    <div class="space-y-1.5">
-      <div class="flex items-center justify-between gap-2">
-        <label class="text-xs font-medium text-default">Titel</label>
-        <VisibilityPill
-          :model-value="modelValue.headingVisible"
-          :title="modelValue.headingVisible ? 'Verberg titel' : 'Toon titel'"
-          @update:model-value="onHeadingVisibilityToggle"
+    <div v-if="modelValue.size !== null" class="space-y-1.5">
+      <div class="flex items-center justify-between gap-2 h-6">
+        <label class="text-sm font-medium text-default">Tekstgrootte</label>
+      </div>
+      <!--
+        Single absolutely-positioned pill animates between segments via
+        `transform: translateX(100% * idx)`. Each button is flex-1 so the
+        pill (which mirrors that width via `calc((100% - 4px) / N)`)
+        lines up segment-for-segment. p-0.5 = 2px ring around the track,
+        deducted twice in the width calc.
+      -->
+      <div class="relative flex items-stretch bg-elevated rounded-lg p-0.5">
+        <div
+          class="absolute inset-y-0.5 left-0.5 rounded-md bg-default shadow-sm ring-1 ring-accented transition-transform duration-200 ease-out pointer-events-none"
+          :style="{
+            width: `calc((100% - 4px) / ${modelValue.size.options.length})`,
+            transform: `translateX(calc(100% * ${sizeIndex}))`,
+          }"
+          aria-hidden="true"
         />
+        <button
+          v-for="(option, idx) in modelValue.size.options"
+          :key="option"
+          type="button"
+          class="relative z-10 flex-1 flex items-center justify-center h-9 rounded-md transition-colors focus:outline-none"
+          :class="
+            idx === sizeIndex
+              ? 'text-default'
+              : 'text-muted hover:text-default'
+          "
+          :title="option"
+          :aria-label="option"
+          :aria-pressed="idx === sizeIndex"
+          @click="onSizePick(idx)"
+        >
+          <span
+            class="font-semibold leading-none"
+            :style="{ fontSize: segmentSizePx(idx, modelValue.size.options.length) + 'px' }"
+          >A</span>
+        </button>
+      </div>
+    </div>
+
+    <div class="space-y-1.5">
+      <div class="flex items-center justify-between gap-2 h-6">
+        <span class="text-sm font-medium text-default">Titel</span>
+        <label class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
+          <span>Tonen</span>
+          <USwitch
+            :model-value="modelValue.headingVisible"
+            size="xs"
+            @update:model-value="onHeadingVisibilityToggle"
+          />
+        </label>
       </div>
       <BInput
         :model-value="modelValue.heading"
@@ -239,7 +272,9 @@ function toggleWord(wordIndex: number): void {
     </div>
 
     <div v-if="modelValue.headingDim !== null" class="space-y-1.5">
-      <label class="text-xs font-medium text-default">Accent</label>
+      <div class="flex items-center justify-between gap-2 h-6">
+        <label class="text-sm font-medium text-default">Accent</label>
+      </div>
       <div class="flex flex-wrap gap-2">
         <template v-for="(tok, i) in tokens" :key="i">
           <UButton
@@ -258,21 +293,21 @@ function toggleWord(wordIndex: number): void {
     </div>
 
     <div v-if="hasParagraph" class="space-y-1.5">
-      <div class="flex items-center justify-between gap-2">
-        <label class="text-xs font-medium text-default">Omschrijving</label>
-        <VisibilityPill
+      <div class="flex items-center justify-between gap-2 h-6">
+        <span class="text-sm font-medium text-default">Omschrijving</span>
+        <label
           v-if="modelValue.paragraphVisible !== null"
-          :model-value="modelValue.paragraphVisible"
-          :disabled="!modelValue.headingVisible"
-          :title="
-            !modelValue.headingVisible
-              ? 'Zet eerst de titel aan'
-              : modelValue.paragraphVisible
-                ? 'Verberg omschrijving'
-                : 'Toon omschrijving'
-          "
-          @update:model-value="onParagraphVisibilityToggle"
-        />
+          class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none"
+          :class="!modelValue.headingVisible ? 'opacity-50 cursor-not-allowed' : ''"
+        >
+          <span>Tonen</span>
+          <USwitch
+            :model-value="modelValue.paragraphVisible"
+            :disabled="!modelValue.headingVisible"
+            size="xs"
+            @update:model-value="onParagraphVisibilityToggle"
+          />
+        </label>
       </div>
       <BTextarea
         :model-value="modelValue.paragraph ?? ''"
@@ -286,23 +321,5 @@ function toggleWord(wordIndex: number): void {
       />
     </div>
 
-    <div v-if="modelValue.size !== null" class="space-y-1.5 pt-1">
-      <label class="text-xs font-medium text-default">Tekstgrootte</label>
-      <div class="flex items-center gap-3">
-        <span class="text-[10px] font-semibold leading-none text-muted shrink-0">A</span>
-        <USlider
-          :key="sliderKey"
-          :default-value="sizeIndex"
-          :min="0"
-          :max="modelValue.size.options.length - 1"
-          :step="0.0001"
-          size="sm"
-          class="flex-1"
-          @update:model-value="onLiveUpdate"
-          @change="onSizeCommit"
-        />
-        <span class="text-base font-bold leading-none text-muted shrink-0">A</span>
-      </div>
-    </div>
   </div>
 </template>

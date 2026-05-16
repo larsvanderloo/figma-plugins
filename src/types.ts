@@ -596,6 +596,13 @@ export type UIToPluginMessage =
    */
   | { type: 'set-icon-recents'; items: string[] }
   /**
+   * Resize the plugin iframe. Fired continuously while the user drags
+   * the resize handle; sandbox calls `figma.ui.resize` and persists the
+   * final size via `figma.clientStorage` so subsequent plugin opens
+   * restore the last picked dimensions.
+   */
+  | { type: 'resize-ui'; width: number; height: number }
+  /**
    * Pin (or clear) a slide's explicit Theme-collection mode. `modeId =
    * null` clears the explicit binding so the slide inherits the page-
    * level mode. Sandbox calls `setExplicitVariableModeForCollection`

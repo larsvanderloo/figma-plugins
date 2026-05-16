@@ -68,6 +68,30 @@ import type {
 
 figma.showUI(uiHtml, { width: 520, height: 760, themeColors: true });
 
+// Restore last-saved iframe size (clientStorage, per-user). Async so the
+// UI shows immediately at the default; the resize is a no-op flicker if
+// the saved values match the defaults.
+(function restoreUiSize(): void {
+  figma.clientStorage
+    .getAsync('welder-ui-size')
+    .then(function (stored: unknown) {
+      if (stored === null || stored === undefined || typeof stored !== 'object') return;
+      const s = stored as { width?: unknown; height?: unknown };
+      const w = typeof s.width === 'number' ? s.width : null;
+      const h = typeof s.height === 'number' ? s.height : null;
+      if (w !== null && h !== null && w >= 320 && h >= 400) {
+        try {
+          figma.ui.resize(w, h);
+        } catch (_e) {
+          /* silent — resize can reject on detached UI */
+        }
+      }
+    })
+    .catch(function () {
+      /* silent — clientStorage may be unavailable */
+    });
+})();
+
 // ============================================================
 // Accent (Text Dimmer) — library-variable helpers (spec §13 T30)
 //
@@ -1817,6 +1841,28 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     figma.clientStorage.setAsync(ICON_RECENTS_KEY, msg.items).catch((err: unknown) => {
       console.log('[welder-slide-editor] icon-recents save failed:', err);
     });
+    return;
+  }
+
+  if (msg.type === 'resize-ui') {
+    // Apply the new size on every drag event so the iframe tracks the
+    // user's pointer 1:1; persist asynchronously so a write storm
+    // during drag doesn't block UI updates. clientStorage drops
+    // intermediate writes naturally — only the latest in-flight value
+    // matters for restore.
+    const w = Math.max(320, Math.min(2000, Math.round(msg.width)));
+    const h = Math.max(400, Math.min(2000, Math.round(msg.height)));
+    try {
+      figma.ui.resize(w, h);
+    } catch (e) {
+      console.log('[welder-slide-editor] resize failed:', e);
+      return;
+    }
+    figma.clientStorage
+      .setAsync('welder-ui-size', { width: w, height: h })
+      .catch(function () {
+        /* silent */
+      });
     return;
   }
 

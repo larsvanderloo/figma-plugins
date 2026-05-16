@@ -11,6 +11,7 @@
   model exposeert (de composable wikkelt store + bridge).
 -->
 <script setup lang="ts">
+import { computed } from 'vue';
 import TitleDescriptionEditor from './TitleDescriptionEditor.vue';
 import BadgeEditor from './BadgeEditor.vue';
 import ImageEditor from './ImageEditor.vue';
@@ -26,6 +27,29 @@ const badgeEditor = useBadgeEditor();
 const imageEditor = useImageEditor();
 const view = usePluginView();
 const settings = useSlideSettings();
+
+// Per-section visibility flags — the inset separators between
+// sections are rendered only when BOTH the previous and the next
+// section are present, so the divider count tracks the section count.
+const hasTheme = computed<boolean>(() => view.state.general?.theme !== null && view.state.general?.theme !== undefined);
+const hasSkip = computed<boolean>(
+  () => view.currentSummary !== null && view.currentSummary.isSkipped !== null,
+);
+const hasTitleDesc = computed<boolean>(
+  () => titleDescriptionEditor.model !== null && titleDescriptionEditor.model !== undefined,
+);
+const hasBadge = computed<boolean>(
+  () => badgeEditor.model !== null && badgeEditor.model !== undefined,
+);
+const hasImage = computed<boolean>(
+  () => imageEditor.model !== null && imageEditor.model !== undefined,
+);
+
+const anyBeforeTitleDesc = computed<boolean>(() => hasTheme.value || hasSkip.value);
+const anyBeforeBadge = computed<boolean>(
+  () => anyBeforeTitleDesc.value || hasTitleDesc.value,
+);
+const anyBeforeImage = computed<boolean>(() => anyBeforeBadge.value || hasBadge.value);
 
 function toggleSkip(): void {
   const summary = view.currentSummary;
@@ -45,101 +69,47 @@ function onThemeChange(modeId: string | null): void {
   <section class="space-y-2">
     <h2 class="text-base font-semibold text-highlighted px-1">Algemeen</h2>
     <div
-      class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
+      class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden"
     >
-      <section
-        v-if="
-          view.state.general?.theme ||
-          (view.currentSummary && view.currentSummary.isSkipped !== null)
-        "
-        class="space-y-4 px-5 py-6"
-      >
-        <h3 class="text-sm font-medium text-default">Weergave</h3>
-        <div class="flex items-center gap-2">
-          <SlideThemeSwitcher
-            v-if="view.state.general?.theme"
-            :theme="view.state.general.theme"
-            @update:model-value="onThemeChange"
+      <section v-if="hasTheme" class="px-5 py-4">
+        <SlideThemeSwitcher
+          :theme="view.state.general!.theme!"
+          @update:model-value="onThemeChange"
+        />
+      </section>
+
+      <div v-if="hasTheme && hasSkip" class="px-5"><USeparator /></div>
+
+      <section v-if="hasSkip" class="px-5 py-4">
+        <div class="flex items-center justify-between gap-3">
+          <span class="text-sm font-medium text-default">In presentatie tonen</span>
+          <USwitch
+            :model-value="!view.currentSummary!.isSkipped"
+            size="xs"
+            @update:model-value="toggleSkip"
           />
-          <span
-            v-if="
-              view.state.general?.theme &&
-              view.currentSummary &&
-              view.currentSummary.isSkipped !== null
-            "
-            class="h-6 w-px bg-border mx-1"
-            aria-hidden="true"
-          />
-          <button
-            v-if="view.currentSummary && view.currentSummary.isSkipped !== null"
-            type="button"
-            class="relative h-8 rounded-full transition-colors flex items-center gap-1.5 px-3 text-sm focus:outline-none overflow-hidden"
-            :class="
-              view.currentSummary.isSkipped
-                ? 'bg-primary/10 text-primary ring-2 ring-primary'
-                : 'bg-elevated text-default hover:bg-accented/60'
-            "
-            :title="
-              view.currentSummary.isSkipped
-                ? 'Slide is uitgesloten — klik om terug te zetten'
-                : 'Slide overslaan bij presenteren'
-            "
-            :aria-label="
-              view.currentSummary.isSkipped ? 'Slide tonen' : 'Slide overslaan'
-            "
-            :aria-pressed="view.currentSummary.isSkipped"
-            @click="toggleSkip"
-          >
-            <Transition
-              mode="out-in"
-              enter-active-class="transition duration-200 ease-out"
-              enter-from-class="opacity-0 -translate-x-2"
-              leave-active-class="transition duration-200 ease-in"
-              leave-to-class="opacity-0 translate-x-2"
-            >
-              <UIcon
-                :key="view.currentSummary.isSkipped ? 'off' : 'on'"
-                :name="view.currentSummary.isSkipped ? 'i-lucide-eye-off' : 'i-lucide-eye'"
-                class="size-4"
-              />
-            </Transition>
-            <Transition
-              mode="out-in"
-              enter-active-class="transition-opacity duration-150"
-              enter-from-class="opacity-0"
-              leave-active-class="transition-opacity duration-150"
-              leave-to-class="opacity-0"
-            >
-              <span
-                :key="view.currentSummary.isSkipped ? 'hidden' : 'visible'"
-                class="text-xs font-medium"
-              >
-                {{ view.currentSummary.isSkipped ? 'Verborgen' : 'Zichtbaar' }}
-              </span>
-            </Transition>
-          </button>
         </div>
       </section>
 
       <!--
         Editing sections disable when the slide is skipped — but the
-        Weergave section above stays interactive so the user can
+        Weergave/skip rows above stay interactive so the user can
         un-hide. `contents` keeps the fieldset transparent so the
-        divide-y siblings still get borders between them.
+        sections inside flow as siblings of the rest of the card.
       -->
       <fieldset
         :disabled="view.currentSummary?.isSkipped === true"
         :class="
           view.currentSummary?.isSkipped === true
-            ? 'opacity-50 pointer-events-none divide-y divide-default'
+            ? 'opacity-50 pointer-events-none'
             : 'contents'
         "
         style="border: 0; padding: 0; margin: 0; min-width: 0"
       >
-        <section v-if="titleDescriptionEditor.model" class="space-y-4 px-5 py-6">
-          <h3 class="text-sm font-medium text-default">Titel & omschrijving</h3>
+        <div v-if="anyBeforeTitleDesc && hasTitleDesc" class="px-5"><USeparator /></div>
+        <section v-if="hasTitleDesc" class="px-5 py-4">
           <TitleDescriptionEditor
-            :model-value="titleDescriptionEditor.model"
+            :model-value="titleDescriptionEditor.model!"
             @update:model-value="titleDescriptionEditor.update"
             @update:heading-dim="titleDescriptionEditor.updateHeadingDim"
             @commit:size="titleDescriptionEditor.commitSize"
@@ -147,19 +117,19 @@ function onThemeChange(modeId: string | null): void {
           />
         </section>
 
-        <section v-if="badgeEditor.model" class="space-y-4 px-5 py-6">
-          <h3 class="text-sm font-medium text-default">Badge</h3>
+        <div v-if="anyBeforeBadge && hasBadge" class="px-5"><USeparator /></div>
+        <section v-if="hasBadge" class="px-5 py-4">
           <BadgeEditor
-            :model-value="badgeEditor.model"
+            :model-value="badgeEditor.model!"
             @update:model-value="badgeEditor.update"
             @commit:visibility="badgeEditor.commitVisibility"
           />
         </section>
 
-        <section v-if="imageEditor.model" class="space-y-4 px-5 py-6">
-          <h3 class="text-sm font-medium text-default">Afbeelding</h3>
+        <div v-if="anyBeforeImage && hasImage" class="px-5"><USeparator /></div>
+        <section v-if="hasImage" class="px-5 py-4">
           <ImageEditor
-            :model-value="imageEditor.model"
+            :model-value="imageEditor.model!"
             :preview-url="imageEditor.previewUrl"
             :fill-w="imageEditor.fillW"
             :fill-h="imageEditor.fillH"

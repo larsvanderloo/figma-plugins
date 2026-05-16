@@ -7,7 +7,6 @@
 <script setup lang="ts">
 import IconPicker from './IconPicker.vue';
 import BInput from './BInput.vue';
-import VisibilityPill from './VisibilityPill.vue';
 
 export interface BadgeValue {
   label: string;
@@ -49,14 +48,19 @@ function onVisibilityToggle(next: boolean): void {
 
 <template>
   <div class="space-y-1.5">
-    <div class="flex items-center justify-between gap-2">
-      <label class="text-xs font-medium text-default">Badge</label>
-      <VisibilityPill
+    <div class="flex items-center justify-between gap-2 h-6">
+      <span class="text-sm font-medium text-default">Badge</span>
+      <label
         v-if="modelValue.visible !== null"
-        :model-value="modelValue.visible"
-        :title="modelValue.visible ? 'Verberg badge' : 'Toon badge'"
-        @update:model-value="onVisibilityToggle"
-      />
+        class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none"
+      >
+        <span>Tonen</span>
+        <USwitch
+          :model-value="modelValue.visible"
+          size="xs"
+          @update:model-value="onVisibilityToggle"
+        />
+      </label>
     </div>
     <div class="flex items-center gap-2">
       <IconPicker
