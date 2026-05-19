@@ -27,6 +27,7 @@ async function readJson(relativePath) {
 }
 
 const manifest = await readJson('manifest.json');
+const pkg = await readJson('package.json');
 const code = await readText('dist/code.js');
 const ui = await readText('dist/ui.html');
 
@@ -45,6 +46,17 @@ if (SOURCE_MAP_PATTERN.test(code) || SOURCE_MAP_PATTERN.test(ui)) {
 
 if (DEBUG_ENDPOINT_PATTERN.test(code) || DEBUG_ENDPOINT_PATTERN.test(ui)) {
   fail('dist contains the localhost debug endpoint; run a clean production build before release');
+}
+
+if (typeof pkg.version !== 'string' || pkg.version.length === 0) {
+  fail('package.json must contain a non-empty version string');
+} else {
+  if (!code.includes(pkg.version)) {
+    fail(`dist/code.js does not contain package version ${pkg.version}`);
+  }
+  if (!ui.includes(pkg.version)) {
+    fail(`dist/ui.html does not contain package version ${pkg.version}`);
+  }
 }
 
 if (code.length > MAX_EXPECTED_CODE_BYTES) {

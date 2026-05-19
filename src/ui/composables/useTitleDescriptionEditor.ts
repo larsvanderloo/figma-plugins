@@ -7,6 +7,7 @@ import { computed, reactive, ref } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { TitleDescriptionValue } from '../components/TitleDescriptionEditor.vue';
+import { debugLog } from '../../debug';
 
 export function useTitleDescriptionEditor() {
   const view = usePluginView();
@@ -126,15 +127,37 @@ export function useTitleDescriptionEditor() {
   let accentInFlight = 0;
   const accentPending = ref<boolean>(false);
 
+  function scheduleAccentFlush(): void {
+    if (accentTimer !== null) clearTimeout(accentTimer);
+    accentTimer = setTimeout(flushAccent, ACCENT_DEBOUNCE_MS);
+  }
+
+  function clearAccentPendingIfIdle(): void {
+    if (accentInFlight === 0 && accentPendingPost === null && accentTimer === null) {
+      accentPending.value = false;
+    }
+  }
+
   function flushAccent(): void {
     if (accentTimer !== null) {
       clearTimeout(accentTimer);
       accentTimer = null;
     }
     if (accentPendingPost === null) return;
+    if (accentInFlight > 0) {
+      debugLog('accent', 'flush-deferred', {
+        inFlight: accentInFlight,
+        rangeCount: accentPendingPost.ranges.length,
+      });
+      return;
+    }
     const p = accentPendingPost;
     accentPendingPost = null;
     accentInFlight += 1;
+    debugLog('accent', 'flush', {
+      slideId: p.slideId,
+      rangeCount: p.ranges.length,
+    });
     tracker.register();
     bridge.post({
       type: 'update-accent',
@@ -152,8 +175,12 @@ export function useTitleDescriptionEditor() {
 
     accentPendingPost = { slideId: slideId, ranges: ranges };
     accentPending.value = true;
-    if (accentTimer !== null) clearTimeout(accentTimer);
-    accentTimer = setTimeout(flushAccent, ACCENT_DEBOUNCE_MS);
+    debugLog('accent', 'queue', {
+      slideId: slideId,
+      rangeCount: ranges.length,
+      inFlight: accentInFlight,
+    });
+    scheduleAccentFlush();
   }
 
   // Clear the "saving" dot as each in-flight accent post is acked.
@@ -164,8 +191,16 @@ export function useTitleDescriptionEditor() {
     if (msg.type !== 'target-updated') return;
     if (accentInFlight > 0) {
       accentInFlight -= 1;
-      if (accentInFlight === 0 && accentPendingPost === null && accentTimer === null) {
-        accentPending.value = false;
+      debugLog('accent', 'ack', {
+        ok: msg.ok,
+        targetId: msg.targetId,
+        inFlight: accentInFlight,
+        hasPendingPost: accentPendingPost !== null,
+      });
+      if (accentInFlight === 0 && accentPendingPost !== null) {
+        scheduleAccentFlush();
+      } else {
+        clearAccentPendingIfIdle();
       }
     }
   });

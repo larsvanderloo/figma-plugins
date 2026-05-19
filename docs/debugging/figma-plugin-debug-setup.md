@@ -72,12 +72,14 @@ The debug setup keeps that split intact:
 
 - `package.json`
   - Added:
+    - `build:version`: writes the iframe version badge module from `package.json`.
+    - `version:assert`: verifies generated bundles contain the current package version and no stale `0.5.x` tag.
     - `debug:build`: runs the normal build with `PLUGIN_DEBUG=1` and injects the local log endpoint.
     - `debug:watch`: runs the normal watch pipeline with `PLUGIN_DEBUG=1`, injects the local log endpoint, and keeps generated manifest bundle copies synced.
     - `debug:manifests`: writes Figma-importable `manifest-cache/*/manifest.json` files from the debug templates and copies the current bundle.
     - `debug:logs`: starts the local log collector.
     - `debug:session`: runs `debug:logs` and `debug:watch` together.
-  - Existing production scripts remain unchanged.
+  - Production scripts also run version sync/assertions so release builds cannot ship with a stale UI tag.
 
 - `vite.config.ts`
   - Reads `process.env.PLUGIN_DEBUG === "1"`.
@@ -279,6 +281,7 @@ Run these after code changes:
 npm run typecheck
 node -e "for (const f of ['package.json','manifest.json','manifest.debug.json','manifest.dev.json','.vscode/tasks.json']) JSON.parse(require('fs').readFileSync(f,'utf8')); console.log('json ok')"
 npm run debug:manifests
+npm run version:assert
 node -e "for (const f of ['manifest-cache/debug/manifest.json','manifest-cache/dev/manifest.json']) JSON.parse(require('fs').readFileSync(f,'utf8')); console.log('generated manifests ok')"
 git diff --check
 npm run debug:build

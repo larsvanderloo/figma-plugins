@@ -14,9 +14,12 @@
 // beter bij de grotere discriminated-union (4 inbound / 7 outbound
 // types) zonder N callback-slots te hoeven bijhouden.
 //
-// Auto-unsubscribe: wanneer de composable binnen een Vue `setup()`
-// wordt aangeroepen registreert elke `onMessage` zich automatisch in
-// `onUnmounted` zodat we geen listeners lekken bij component-teardown.
+// Inbound messages are handled by one window-level listener and fanned out
+// to composable subscribers. This keeps debug logging and message unwrapping
+// O(1) per plugin message even when several stores/editors subscribe.
+//
+// Auto-unsubscribe: wanneer de composable binnen een Vue `setup()` wordt
+// aangeroepen registreert elke `onMessage` zich automatisch in `onUnmounted`.
 // Buiten een setup-context (bv. unit-test) retourneert onMessage de
 // unsubscribe-fn die de caller zelf aanroept.
 // ============================================================
@@ -45,6 +48,40 @@ export interface PluginBridge {
    * draaien wordt die ook automatisch in onUnmounted aangeroepen.
    */
   onMessage: (handler: PluginMessageHandler) => Unsubscribe;
+}
+
+const pluginMessageHandlers = new Set<PluginMessageHandler>();
+let isWindowMessageListenerAttached = false;
+
+function unwrapPluginMessage(event: MessageEvent): PluginToUIMessage | null {
+  // Edge-case: Vite HMR en andere iframe-messages hebben geen
+  // pluginMessage-envelope. Stil negeren, niet throwen.
+  const envelope = event.data as PluginMessageEnvelope | undefined;
+  if (envelope === undefined || envelope === null) return null;
+  const raw = envelope.pluginMessage;
+  if (raw === undefined || raw === null || typeof raw !== 'object') return null;
+
+  debugMessage('plugin->ui', raw);
+  return raw as PluginToUIMessage;
+}
+
+function handleWindowMessage(event: MessageEvent): void {
+  const msg = unwrapPluginMessage(event);
+  if (msg === null) return;
+
+  for (const handler of Array.from(pluginMessageHandlers)) {
+    try {
+      handler(msg);
+    } catch (err: unknown) {
+      console.error('[welder-slide-editor] plugin bridge handler failed:', err);
+    }
+  }
+}
+
+function ensureWindowMessageListener(): void {
+  if (isWindowMessageListenerAttached) return;
+  window.addEventListener('message', handleWindowMessage);
+  isWindowMessageListenerAttached = true;
 }
 
 function post(msg: UIToPluginMessage): void {
@@ -90,22 +127,11 @@ export function usePluginBridge(): PluginBridge {
   const inSetup = getCurrentInstance() !== null;
 
   function onMessage(handler: PluginMessageHandler): Unsubscribe {
-    const listener = (event: MessageEvent): void => {
-      // Edge-case: Vite HMR en andere iframe-messages hebben geen
-      // pluginMessage-envelope. Stil negeren, niet throwen.
-      const envelope = event.data as PluginMessageEnvelope | undefined;
-      if (envelope === undefined || envelope === null) return;
-      const raw = envelope.pluginMessage;
-      if (raw === undefined || raw === null || typeof raw !== 'object') return;
-
-      debugMessage('plugin->ui', raw);
-      handler(raw as PluginToUIMessage);
-    };
-
-    window.addEventListener('message', listener);
+    ensureWindowMessageListener();
+    pluginMessageHandlers.add(handler);
 
     const unsubscribe: Unsubscribe = () => {
-      window.removeEventListener('message', listener);
+      pluginMessageHandlers.delete(handler);
     };
 
     if (inSetup) {

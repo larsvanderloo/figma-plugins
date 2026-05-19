@@ -16,6 +16,14 @@ const manifests = [
   },
 ];
 
+async function readPackageVersion() {
+  const pkg = JSON.parse(await readFile(path.resolve(rootDir, 'package.json'), 'utf8'));
+  if (typeof pkg.version !== 'string' || pkg.version.length === 0) {
+    throw new Error('package.json must contain a non-empty version string');
+  }
+  return pkg.version;
+}
+
 function assertLocalManifestPath(manifestPath, field) {
   if (!manifestPath || typeof manifestPath !== 'string') {
     throw new Error(`Manifest field "${field}" must be a string`);
@@ -42,8 +50,16 @@ async function copyManifestAsset(targetDir, manifestPath, field) {
   return sourcePath;
 }
 
+async function assertCopiedBundleVersion(relativePath, version) {
+  const text = await readFile(path.resolve(rootDir, relativePath), 'utf8');
+  if (!text.includes(version)) {
+    throw new Error(`${relativePath} does not contain package version ${version}`);
+  }
+}
+
 async function writeDebugManifests() {
   const watchedSources = new Set();
+  const version = await readPackageVersion();
 
   for (const { source, target } of manifests) {
     const sourcePath = path.resolve(rootDir, source);
@@ -58,6 +74,8 @@ async function writeDebugManifests() {
     await writeFile(targetPath, `${JSON.stringify(manifest, null, 2)}\n`);
     watchedSources.add(await copyManifestAsset(targetDir, manifest.main, 'main'));
     watchedSources.add(await copyManifestAsset(targetDir, manifest.ui, 'ui'));
+    await assertCopiedBundleVersion(path.relative(rootDir, path.resolve(targetDir, manifest.main)), version);
+    await assertCopiedBundleVersion(path.relative(rootDir, path.resolve(targetDir, manifest.ui)), version);
     console.log(`[debug-manifest] wrote ${target}`);
   }
 

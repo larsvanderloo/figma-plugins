@@ -23,6 +23,7 @@ That command:
 - runs a normal production `npm run build`
 - verifies `dist/code.js` and `dist/ui.html` do not contain inline sourcemaps
 - verifies the local debug endpoint `http://localhost:4789` is not present in `dist/`
+- verifies the UI badge version embedded in `dist/` matches `package.json`
 - verifies the release manifest still has `networkAccess.allowedDomains: ["none"]`
 - runs `git diff --check`
 
@@ -34,6 +35,7 @@ For a normal release, commit:
 - production build output in `dist/code.js` and `dist/ui.html`
 - root `manifest.json`
 - docs and package script changes when relevant
+- `src/ui/generated/app-version.ts` when `package.json` version changes
 
 Do not commit:
 
@@ -71,8 +73,19 @@ manifest.json
 
 The debug manifest intentionally allows `http://localhost:4789` for local log mirroring. The release manifest intentionally keeps `networkAccess.allowedDomains: ["none"]`.
 
+## Version Badge
+
+The UI header/splash version tag is generated from `package.json`.
+
+- `npm run build:version` writes `src/ui/generated/app-version.ts`
+- `npm run build`, `npm run build:ui`, and `npm run watch` run that sync automatically
+- `npm run watch` also keeps watching `package.json`, so a version bump updates the generated module and triggers the UI watcher
+- `npm run debug:manifests` refuses to copy bundles whose embedded version does not match `package.json`
+- `npm run release:assert` and `npm run version:assert` fail if `dist/` or generated debug bundles contain a stale `0.5.x` version
+
 ## If A Release Check Fails
 
 - Active debug/watch processes: stop the VS Code debug task or terminal running `npm run debug:session`, then rerun `npm run release:check`.
 - Sourcemaps or localhost endpoint in `dist/`: stop debug/watch tasks, run `npm run build`, then run `npm run release:assert`.
+- Stale UI version tag: run `npm run build:ui`, then `npm run build:widget`, then `npm run version:assert`. In normal debug/release flows this is automatic.
 - `manifest.json` network access changed: restore `networkAccess.allowedDomains` to `["none"]` unless the release intentionally requires network access and has gone through review.

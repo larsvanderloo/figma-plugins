@@ -71,16 +71,15 @@ import { usePluginView } from './stores/usePluginView';
 import { useIconRecents } from './stores/useIconRecents';
 import { useNotifications } from './stores/useNotifications';
 import welderLogo from './assets/welder-logo.svg';
+import { APP_VERSION } from './generated/app-version';
 
 const bridge = usePluginBridge();
 const view = usePluginView();
 const exporter = useExport();
 
-// Vite injects this from package.json at build time — see vite.config.ts
-// `define` block. Surfaced as a "v0.x.y" UBadge in the splash and header
-// so plugin users (and beta testers reporting bugs) can identify which
-// release they're running without inspecting the manifest.
-const appVersion = __APP_VERSION__;
+// Surfaced as a "v0.x.y" UBadge in the splash and header so plugin users
+// and beta testers reporting bugs can identify the package build.
+const appVersion = APP_VERSION;
 const iconRecents = useIconRecents();
 const notifications = useNotifications();
 // Hand the Nuxt UI toast handle to the notifications store. Resolves

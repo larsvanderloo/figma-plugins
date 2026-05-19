@@ -7,17 +7,10 @@
 
 import { defineConfig, type Plugin } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
-import { readFileSync } from 'node:fs';
 import vue from '@vitejs/plugin-vue';
 import ui from '@nuxt/ui/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
-// Read the plugin's version from package.json at build time so the iframe
-// can render a small "v0.x.y" badge in the UI without having to know about
-// the manifest. Updated whenever you bump package.json before tagging.
-const pkg = JSON.parse(
-  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'),
-) as { version: string };
 const isDebug = process.env.PLUGIN_DEBUG === '1';
 const debugLogEndpoint = isDebug ? (process.env.PLUGIN_DEBUG_LOG_ENDPOINT ?? '') : '';
 
@@ -54,7 +47,6 @@ export default defineConfig({
   root: fileURLToPath(new URL('./src/ui', import.meta.url)),
   define: {
     // Replaced verbatim at bundle-time. Type declared in ui/env.d.ts.
-    __APP_VERSION__: JSON.stringify(pkg.version),
     __PLUGIN_DEBUG__: JSON.stringify(isDebug),
     __PLUGIN_DEBUG_SOURCE__: JSON.stringify('ui'),
     __PLUGIN_DEBUG_LOG_ENDPOINT__: JSON.stringify(debugLogEndpoint),

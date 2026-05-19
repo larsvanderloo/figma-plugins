@@ -17,6 +17,7 @@ npm run debug:logs     # local Figma runtime log collector only
 npm run dev:ui         # vite dev server for UI iteration
 npm run typecheck      # plugin sandbox + UI type checks
 npm run typecheck:ui   # vue-tsc strict
+npm run version:assert # verify built bundles contain package.json version
 npm run release:check  # typecheck, production build, and debug-leak assertions
 ```
 
@@ -39,6 +40,8 @@ npm run release:check
 ```
 
 In VS Code, run the `Figma: release check` task. This gate type-checks, builds a production `dist/`, and fails if sourcemaps or the localhost debug endpoint are present. See [`docs/release/figma-plugin-release.md`](./docs/release/figma-plugin-release.md) for the full release checklist.
+
+The UI version badge is generated from `package.json` by `npm run build:version`, which is called automatically by `npm run build`, `npm run build:ui`, and `npm run watch`. `npm run version:assert`, `npm run debug:manifests`, and `npm run release:assert` fail if `dist/` or generated debug bundles contain a stale `0.5.x` tag.
 
 ## Architecture
 

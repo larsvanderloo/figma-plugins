@@ -2244,11 +2244,26 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       postToUI({ type: 'target-updated', ok: false, error: 'Heading node not found' });
       return;
     }
+    const startedAt = Date.now();
+    debugLog('accent', 'sandbox:start', {
+      slideId: msg.slideId,
+      rangeCount: msg.dimRanges.length,
+    });
     figma.commitUndo();
     markSelfWrite();
+    const applyStartedAt = Date.now();
     await applyAccentRanges(headingNode, msg.dimRanges);
-    await refreshTablesOnSlide(slide); // T39.3: heading-fill mutatie kan line-wrap reflowen
+    const applyMs = Date.now() - applyStartedAt;
+    // Fill-only accent writes do not alter CopyWrap geometry; table refresh is
+    // reserved for text/size mutations that can actually reflow layout.
     markSelfWrite();
+    debugLog('accent', 'sandbox:done', {
+      slideId: msg.slideId,
+      targetId: headingNode.id,
+      rangeCount: msg.dimRanges.length,
+      applyMs: applyMs,
+      totalMs: Date.now() - startedAt,
+    });
     postToUI({ type: 'target-updated', ok: true, targetId: headingNode.id });
     return;
   }
