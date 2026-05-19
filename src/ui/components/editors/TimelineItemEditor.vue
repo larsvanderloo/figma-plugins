@@ -1,12 +1,13 @@
 <!--
   TimelineItemEditor — editor for one timeline item (heading + paragraph).
-  Uses BInput / BTextarea so typing doesn't fire a sandbox round-trip per
+  Uses WInput / WTextarea so typing doesn't fire a sandbox round-trip per
   keystroke (commit-on-blur).
 -->
 <script setup lang="ts">
-import type { TimelineItem } from '../../types';
-import BInput from './BInput.vue';
-import BTextarea from './BTextarea.vue';
+import type { TimelineItem } from '../../../types';
+import WInput from '../ui/WInput.vue';
+import WTextarea from '../ui/WTextarea.vue';
+import WCard from '../ui/WCard.vue';
 
 interface Props {
   modelValue: TimelineItem;
@@ -29,31 +30,29 @@ function onParagraphCommit(value: string): void {
 </script>
 
 <template>
-  <section class="space-y-4 px-5 py-5">
-    <h3 class="text-sm font-semibold text-highlighted">Item {{ index }}</h3>
+  <WCard :title="`Item ${index}`">
+    <div class="space-y-4">
+      <UFormField label="Titel">
+        <WInput
+          :model-value="modelValue.heading"
+          placeholder="Koptekst"
+          size="md"
+          class="w-full"
+          @update:model-value="onHeadingCommit"
+        />
+      </UFormField>
 
-    <div class="space-y-1.5">
-      <label class="text-sm font-medium text-default">Titel</label>
-      <BInput
-        :model-value="modelValue.heading"
-        placeholder="Koptekst"
-        size="md"
-        class="w-full"
-        @update:model-value="onHeadingCommit"
-      />
+      <UFormField label="Omschrijving">
+        <WTextarea
+          :model-value="modelValue.paragraph"
+          :rows="3"
+          :autoresize="true"
+          placeholder="Alineatekst"
+          size="md"
+          class="w-full"
+          @update:model-value="onParagraphCommit"
+        />
+      </UFormField>
     </div>
-
-    <div class="space-y-1.5">
-      <label class="text-sm font-medium text-default">Omschrijving</label>
-      <BTextarea
-        :model-value="modelValue.paragraph"
-        :rows="3"
-        :autoresize="true"
-        placeholder="Alineatekst"
-        size="md"
-        class="w-full"
-        @update:model-value="onParagraphCommit"
-      />
-    </div>
-  </section>
+  </WCard>
 </template>

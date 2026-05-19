@@ -12,15 +12,18 @@
 -->
 <script setup lang="ts">
 import { computed } from 'vue';
-import TitleDescriptionEditor from './TitleDescriptionEditor.vue';
-import BadgeEditor from './BadgeEditor.vue';
-import ImageEditor from './ImageEditor.vue';
-import SlideThemeSwitcher from './SlideThemeSwitcher.vue';
-import { useTitleDescriptionEditor } from '../composables/useTitleDescriptionEditor';
-import { useBadgeEditor } from '../composables/useBadgeEditor';
-import { useImageEditor } from '../composables/useImageEditor';
-import { useSlideSettings } from '../composables/useSlideSettings';
-import { usePluginView } from '../stores/usePluginView';
+import TitleDescriptionEditor from '../editors/TitleDescriptionEditor.vue';
+import BadgeEditor from '../editors/BadgeEditor.vue';
+import ImageEditor from '../editors/ImageEditor.vue';
+import SlideThemeSwitcher from '../editors/SlideThemeSwitcher.vue';
+import WCard from '../ui/WCard.vue';
+import WCardSection from '../ui/WCardSection.vue';
+import WCardSectionGroup from '../ui/WCardSectionGroup.vue';
+import { useTitleDescriptionEditor } from '../../composables/useTitleDescriptionEditor';
+import { useBadgeEditor } from '../../composables/useBadgeEditor';
+import { useImageEditor } from '../../composables/useImageEditor';
+import { useSlideSettings } from '../../composables/useSlideSettings';
+import { usePluginView } from '../../stores/usePluginView';
 
 const titleDescriptionEditor = useTitleDescriptionEditor();
 const badgeEditor = useBadgeEditor();
@@ -28,20 +31,25 @@ const imageEditor = useImageEditor();
 const view = usePluginView();
 const settings = useSlideSettings();
 
-const hasTheme = computed<boolean>(() => view.state.general?.theme !== null && view.state.general?.theme !== undefined);
-const hasSkip = computed<boolean>(
+const showThemeSection = computed<boolean>(() => view.state.general?.theme !== null && view.state.general?.theme !== undefined);
+const showPresentationVisibilitySection = computed<boolean>(
   () => view.currentSummary !== null && view.currentSummary.isSkipped !== null,
 );
-const hasPresentation = computed<boolean>(() => hasTheme.value || hasSkip.value);
-const hasTitleDesc = computed<boolean>(
+const showPresentationSections = computed<boolean>(() => showThemeSection.value || showPresentationVisibilitySection.value);
+const showTextSection = computed<boolean>(
   () => titleDescriptionEditor.model !== null && titleDescriptionEditor.model !== undefined,
 );
-const hasBadge = computed<boolean>(
+const showBadgeSection = computed<boolean>(
   () => badgeEditor.model !== null && badgeEditor.model !== undefined,
 );
-const hasImage = computed<boolean>(
+const showImageSection = computed<boolean>(
   () => imageEditor.model !== null && imageEditor.model !== undefined,
 );
+const showEditingSections = computed<boolean>(
+  () => showTextSection.value || showBadgeSection.value || showImageSection.value,
+);
+const showAnySection = computed<boolean>(() => showPresentationSections.value || showEditingSections.value);
+const editingSectionsDisabled = computed<boolean>(() => view.currentSummary?.isSkipped === true);
 
 function toggleSkip(visibleInPresentation: boolean): void {
   const summary = view.currentSummary;
@@ -58,57 +66,36 @@ function onThemeChange(modeId: string | null): void {
 </script>
 
 <template>
-  <section class="space-y-3">
-    <h2 class="text-base font-semibold text-highlighted px-1">Basis</h2>
-    <div
-      v-if="hasPresentation"
-      class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
-    >
-      <div class="px-5 py-3">
-        <h3 class="text-sm font-semibold text-highlighted">Presentatie</h3>
-      </div>
+  <section v-if="showAnySection" class="space-y-3">
+    <WCard title="Basis" title-tag="h2" segmented>
+      <WCardSectionGroup>
+        <WCardSection v-if="showThemeSection">
+          <SlideThemeSwitcher
+            :theme="view.state.general!.theme!"
+            @update:model-value="onThemeChange"
+          />
+        </WCardSection>
 
-      <section v-if="hasTheme" class="px-5 py-4">
-        <SlideThemeSwitcher
-          :theme="view.state.general!.theme!"
-          @update:model-value="onThemeChange"
-        />
-      </section>
-
-      <section v-if="hasSkip" class="px-5 py-4">
-        <div class="flex items-center justify-between gap-3">
-          <span class="text-sm font-medium text-default">In presentatie tonen</span>
+        <WCardSection v-if="showPresentationVisibilitySection">
           <USwitch
             :model-value="!view.currentSummary!.isSkipped"
+            label="In presentatie tonen"
             size="xs"
+            :ui="{
+              root: 'w-full flex-row-reverse items-center justify-between',
+              wrapper: 'ms-0',
+              label: 'text-sm font-medium text-default',
+            }"
             @update:model-value="toggleSkip"
           />
-        </div>
-      </section>
-    </div>
+        </WCardSection>
 
-    <!--
-      Editing sections disable when the slide is skipped — but the
-      Presentatie/skip rows above stay interactive so the user can
-      un-hide the slide.
-    -->
-    <fieldset
-      :disabled="view.currentSummary?.isSkipped === true"
-      :class="
-        view.currentSummary?.isSkipped === true
-          ? 'space-y-3 opacity-50 pointer-events-none'
-          : 'space-y-3'
-      "
-      style="border: 0; padding: 0; margin: 0; min-width: 0"
-    >
-      <div
-        v-if="hasTitleDesc"
-        class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
-      >
-        <div class="px-5 py-3">
-          <h3 class="text-sm font-semibold text-highlighted">Tekst</h3>
-        </div>
-        <section class="px-5 py-4">
+        <WCardSection
+          v-if="showTextSection"
+          :disabled="editingSectionsDisabled"
+          spacious
+        >
+          <h3 class="text-sm font-medium text-highlighted">Tekst</h3>
           <TitleDescriptionEditor
             :model-value="titleDescriptionEditor.model!"
             :accent-pending="titleDescriptionEditor.accentPending"
@@ -118,33 +105,27 @@ function onThemeChange(modeId: string | null): void {
             @commit:size="titleDescriptionEditor.commitSize"
             @commit:visibility="titleDescriptionEditor.commitVisibility"
           />
-        </section>
-      </div>
+        </WCardSection>
 
-      <div
-        v-if="hasBadge"
-        class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
-      >
-        <div class="px-5 py-3">
-          <h3 class="text-sm font-semibold text-highlighted">Badge</h3>
-        </div>
-        <section class="px-5 py-4">
+        <WCardSection
+          v-if="showBadgeSection"
+          :disabled="editingSectionsDisabled"
+          spacious
+        >
+          <h3 class="text-sm font-medium text-highlighted">Badge</h3>
           <BadgeEditor
             :model-value="badgeEditor.model!"
             @update:model-value="badgeEditor.update"
             @commit:visibility="badgeEditor.commitVisibility"
           />
-        </section>
-      </div>
+        </WCardSection>
 
-      <div
-        v-if="hasImage"
-        class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
-      >
-        <div class="px-5 py-3">
-          <h3 class="text-sm font-semibold text-highlighted">Afbeelding</h3>
-        </div>
-        <section class="px-5 py-4">
+        <WCardSection
+          v-if="showImageSection"
+          :disabled="editingSectionsDisabled"
+          spacious
+        >
+          <h3 class="text-sm font-medium text-highlighted">Afbeelding</h3>
           <ImageEditor
             :model-value="imageEditor.model!"
             :preview-url="imageEditor.previewUrl"
@@ -153,8 +134,8 @@ function onThemeChange(modeId: string | null): void {
             :size-bytes="imageEditor.sizeBytes"
             @upload="imageEditor.upload"
           />
-        </section>
-      </div>
-    </fieldset>
+        </WCardSection>
+      </WCardSectionGroup>
+    </WCard>
   </section>
 </template>

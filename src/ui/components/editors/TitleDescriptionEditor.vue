@@ -1,6 +1,6 @@
 <!--
   TitleDescriptionEditor — editor for the General → Title & Description
-  section. Uses BInput / BTextarea so typing doesn't fire a sandbox
+  section. Uses WInput / WTextarea so typing doesn't fire a sandbox
   round-trip per keystroke (commit-on-blur).
 
   Accent markers (heading-dim word toggles) operate on the LAST-COMMITTED
@@ -11,8 +11,8 @@
 -->
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
-import BInput from './BInput.vue';
-import BTextarea from './BTextarea.vue';
+import WInput from '../ui/WInput.vue';
+import WTextarea from '../ui/WTextarea.vue';
 
 export interface TitleDescriptionValue {
   heading: string;
@@ -52,21 +52,11 @@ const showParagraphInput = computed<boolean>(
   () => showParagraphSection.value && props.modelValue.paragraphVisible !== false,
 );
 
-// ── Heading-size slider (CopyWrap.Size VARIANT) ───────────────────────
-// Slider runs UNCONTROLLED: Reka's SliderRoot in controlled mode snaps
-// to `step` every time the parent re-passes :model-value during drag,
-// which the user reads as a chunky "stepper" feel. Going uncontrolled
-// lets the cursor track 1:1 — we only read the value on @change
-// (release) and round to the nearest integer option index.
-//
-// `sliderKey` forces a remount whenever the external value changes
-// (slide switch / external commit) so the thumb resets to the canonical
-// position without us needing to push a model-value during drag.
-const sizeIndex = computed<number>(function () {
+// ── Heading-size picker (CopyWrap.Size VARIANT) ────────────────────────
+const sizeRadioItems = computed<Array<{ value: string; label: string }>>(() => {
   const s = props.modelValue.size;
-  if (s === null) return 0;
-  const idx = s.options.indexOf(s.current);
-  return idx >= 0 ? idx : 0;
+  if (s === null) return [];
+  return s.options.map((option) => ({ value: option, label: option }));
 });
 
 // Per-segment "A" font-size — linearly interpolated across the option
@@ -89,6 +79,20 @@ function onSizePick(idx: number): void {
   if (typeof next === 'string' && next !== s.current) {
     emit('commit:size', next);
   }
+}
+
+function onSizeChange(value: string | number | undefined): void {
+  const s = props.modelValue.size;
+  if (s === null || typeof value !== 'string') return;
+  const idx = s.options.indexOf(value);
+  if (idx >= 0) onSizePick(idx);
+}
+
+function sizeLabelPx(value: string): number {
+  const s = props.modelValue.size;
+  if (s === null) return SEGMENT_MAX_PX;
+  const idx = s.options.indexOf(value);
+  return segmentSizePx(idx >= 0 ? idx : 0, s.options.length);
 }
 
 // ── Accent state (heading inline word-toggle) ──────────────────────────
@@ -225,62 +229,55 @@ function onAccentFocusOut(event: FocusEvent): void {
 
 <template>
   <div class="space-y-4">
-    <div v-if="modelValue.size !== null" class="space-y-1.5">
-      <div class="flex items-center justify-between gap-2 h-6">
-        <label class="text-sm font-medium text-default">Grootte</label>
-      </div>
-      <!--
-        Single absolutely-positioned pill animates between segments via
-        `transform: translateX(100% * idx)`. Each button is flex-1 so the
-        pill (which mirrors that width via `calc((100% - 4px) / N)`)
-        lines up segment-for-segment. p-0.5 = 2px ring around the track,
-        deducted twice in the width calc.
-      -->
-      <div class="relative flex items-stretch bg-elevated rounded-lg p-0.5">
-        <div
-          class="absolute inset-y-0.5 left-0.5 rounded-md bg-default shadow-sm ring-1 ring-accented transition-transform duration-200 ease-out pointer-events-none"
-          :style="{
-            width: `calc((100% - 4px) / ${modelValue.size.options.length})`,
-            transform: `translateX(calc(100% * ${sizeIndex}))`,
-          }"
-          aria-hidden="true"
-        />
-        <button
-          v-for="(option, idx) in modelValue.size.options"
-          :key="option"
-          type="button"
-          class="relative z-10 flex-1 flex items-center justify-center h-9 rounded-md transition-colors focus:outline-none"
-          :class="
-            idx === sizeIndex
-              ? 'text-default'
-              : 'text-muted hover:text-default'
-          "
-          :title="option"
-          :aria-label="option"
-          :aria-pressed="idx === sizeIndex"
-          @click="onSizePick(idx)"
-        >
+    <UFormField v-if="modelValue.size !== null" label="Grootte">
+      <URadioGroup
+        :model-value="modelValue.size.current"
+        :items="sizeRadioItems"
+        value-key="value"
+        variant="table"
+        orientation="horizontal"
+        indicator="hidden"
+        size="sm"
+        :ui="{
+          fieldset: 'grid [grid-template-columns:repeat(var(--size-count),minmax(0,1fr))]',
+          item: 'justify-center p-0 overflow-hidden',
+          wrapper: 'w-full',
+          label: 'w-full cursor-pointer',
+        }"
+        :style="{ '--size-count': modelValue.size.options.length }"
+        @update:model-value="onSizeChange"
+      >
+        <template #label="{ item }">
           <span
-            class="font-semibold leading-none"
-            :style="{ fontSize: segmentSizePx(idx, modelValue.size.options.length) + 'px' }"
-          >A</span>
-        </button>
-      </div>
-    </div>
+            class="flex h-9 items-center justify-center transition-colors"
+            :class="item.value === modelValue.size.current ? 'bg-default text-default' : 'text-muted hover:text-default'"
+            :title="item.label"
+            :aria-label="item.label"
+          >
+            <span
+              class="font-semibold leading-none"
+              :style="{ fontSize: sizeLabelPx(item.value) + 'px' }"
+            >A</span>
+          </span>
+        </template>
+      </URadioGroup>
+    </UFormField>
 
-    <div class="space-y-1.5">
-      <div class="flex items-center justify-between gap-2 h-6">
-        <span class="text-sm font-medium text-default">Titel</span>
-        <label class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
-          <span>Tonen</span>
-          <USwitch
-            :model-value="modelValue.headingVisible"
-            size="xs"
-            @update:model-value="onHeadingVisibilityToggle"
-          />
-        </label>
-      </div>
-      <BInput
+    <UFormField label="Titel">
+      <template #hint>
+        <USwitch
+          :model-value="modelValue.headingVisible"
+          label="Tonen"
+          size="xs"
+          :ui="{
+            root: 'flex-row-reverse items-center',
+            wrapper: 'me-2 ms-0',
+            label: 'text-xs font-medium text-muted',
+          }"
+          @update:model-value="onHeadingVisibilityToggle"
+        />
+      </template>
+      <WInput
         v-if="showHeadingFields"
         :model-value="modelValue.heading"
         placeholder="Bijv. Onze missie voor 2026"
@@ -288,13 +285,10 @@ function onAccentFocusOut(event: FocusEvent): void {
         class="w-full"
         @update:model-value="onHeadingCommit"
       />
-    </div>
+    </UFormField>
 
-    <div v-if="showAccentFields" class="space-y-1.5">
-      <div class="flex items-center justify-between gap-2 h-6">
-        <label class="text-sm font-medium text-default">
-          Accenten
-        </label>
+    <UFormField v-if="showAccentFields" label="Accenten">
+      <template #hint>
         <div class="h-5 min-w-20 flex justify-end">
           <Transition
             enter-active-class="transition-opacity duration-150"
@@ -317,7 +311,7 @@ function onAccentFocusOut(event: FocusEvent): void {
             </span>
           </Transition>
         </div>
-      </div>
+      </template>
       <div
         class="-m-1 rounded-md p-1 ring-1 ring-transparent transition-[background-color,box-shadow]"
         :class="accentPending ? 'bg-elevated/60 ring-primary/30' : ''"
@@ -360,26 +354,24 @@ function onAccentFocusOut(event: FocusEvent): void {
           </Transition>
         </div>
       </div>
-    </div>
+    </UFormField>
 
-    <div v-if="showParagraphSection" class="space-y-1.5">
-      <div class="flex items-center justify-between gap-2 h-6">
-        <span class="text-sm font-medium text-default">Omschrijving</span>
-        <label
-          v-if="modelValue.paragraphVisible !== null"
-          class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none"
-          :class="!modelValue.headingVisible ? 'opacity-50 cursor-not-allowed' : ''"
-        >
-          <span>Tonen</span>
-          <USwitch
-            :model-value="modelValue.paragraphVisible"
-            :disabled="!modelValue.headingVisible"
-            size="xs"
-            @update:model-value="onParagraphVisibilityToggle"
-          />
-        </label>
-      </div>
-      <BTextarea
+    <UFormField v-if="showParagraphSection" label="Omschrijving">
+      <template v-if="modelValue.paragraphVisible !== null" #hint>
+        <USwitch
+          :model-value="modelValue.paragraphVisible"
+          :disabled="!modelValue.headingVisible"
+          label="Tonen"
+          size="xs"
+          :ui="{
+            root: 'flex-row-reverse items-center',
+            wrapper: 'me-2 ms-0',
+            label: 'text-xs font-medium text-muted',
+          }"
+          @update:model-value="onParagraphVisibilityToggle"
+        />
+      </template>
+      <WTextarea
         v-if="showParagraphInput"
         :model-value="modelValue.paragraph ?? ''"
         :rows="3"
@@ -389,7 +381,7 @@ function onAccentFocusOut(event: FocusEvent): void {
         class="w-full"
         @update:model-value="onParagraphCommit"
       />
-    </div>
+    </UFormField>
 
   </div>
 </template>

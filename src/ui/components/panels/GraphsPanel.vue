@@ -9,9 +9,10 @@
 -->
 <script setup lang="ts">
 import { computed } from 'vue';
-import TableEditor from './TableEditor.vue';
-import { usePluginView } from '../stores/usePluginView';
-import { useTableEditor } from '../composables/useTableEditor';
+import TableEditor from '../editors/TableEditor.vue';
+import WCard from '../ui/WCard.vue';
+import { usePluginView } from '../../stores/usePluginView';
+import { useTableEditor } from '../../composables/useTableEditor';
 
 const view = usePluginView();
 const tableEditor = useTableEditor();
@@ -34,16 +35,17 @@ const selectorItems = computed(() => {
     </h2>
 
     <!-- Empty-state defensief (App.vue filtert deze component normaal weg). -->
-    <p v-if="tableEditor.instances.length === 0" class="text-sm text-muted">
-      Geen tabellen op deze slide.
-    </p>
+    <UEmpty
+      v-if="tableEditor.instances.length === 0"
+      icon="i-lucide-table"
+      description="Geen tabellen op deze slide."
+      variant="naked"
+      size="sm"
+    />
 
     <!-- Instance-selector: alleen bij 2+ instances -->
     <div class="space-y-3">
-      <div
-        v-if="showSelector"
-        class="rounded-[calc(var(--ui-radius)*4)] bg-default px-5 py-4 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
-      >
+      <WCard v-if="showSelector">
         <UFormField name="graph-instance" label="Tabel" size="lg">
           <USelectMenu
             v-model="tableEditor.selectedId"
@@ -53,7 +55,7 @@ const selectorItems = computed(() => {
             class="w-full"
           />
         </UFormField>
-      </div>
+      </WCard>
 
       <TableEditor
         v-if="

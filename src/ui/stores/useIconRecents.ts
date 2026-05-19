@@ -8,8 +8,8 @@
 // On every `record(name)` mutation, App.vue's watcher posts
 // `set-icon-recents` so the sandbox can persist verbatim.
 //
-// Why a store and not a composable: shared across three IconPicker
-// consumers (BadgeEditor, CardItemEditor, JourneyEditor). Picking an
+// Why a store and not a composable: shared across IconPicker
+// consumers (BadgeEditor, CardItemEditor). Picking an
 // icon in one picker should immediately reflect in the others'
 // "Recent" rows — a module-level ref would do this too, but the
 // store gives us devtools observability and a documented surface

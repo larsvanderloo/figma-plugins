@@ -4,7 +4,7 @@
 // Pure synchrone helpers die (a) Slide Machine-slides op de huidige
 // pagina vinden en (b) binnen zo'n slide de verschillende wrapper-
 // instances lokaliseren (CopyWrap / Badge / ImageWrap / CardWrap /
-// ChartWrap / TableWrap / JourneyWrap).
+// ChartWrap / TableWrap).
 //
 // Zie spec.md §7 voor de naam-conventies en §9-T3 voor de exit-criteria.
 //
@@ -348,7 +348,6 @@ export function getPropertyKey(instance: InstanceNode, logicalName: string): str
   }
   return null;
 }
-
 /**
  * Zet een instance-property op een logische naam.
  * Retourneert true bij succes, false wanneer de key niet bestond (caller
@@ -414,35 +413,4 @@ export function findEnclosingInstanceByName(
     cur = 'parent' in cur ? (cur as SceneNode).parent : null;
   }
   return null;
-}
-
-// ============================================================
-// JourneyWrap-helpers (T45)
-// ============================================================
-
-/**
- * JourneyWrap: INSTANCE met name 'JourneyWrap'.
- * Analoog aan findTableWrap.
- */
-export function findJourneyWrap(slide: InstanceNode): InstanceNode | null {
-  return findFirstInstance(slide, function (n) {
-    return n.name === 'JourneyWrap';
-  });
-}
-
-/**
- * Locate the SlotNode binnen de JourneyWrap-INSTANCE van een slide.
- *
- * Wandelt: slide → JourneyWrap-INSTANCE → Slot. Retourneert null wanneer
- * geen JourneyWrap of geen Slot binnen de JourneyWrap gevonden wordt.
- */
-export function findJourneySlot(slide: InstanceNode): SlotNode | null {
-  const journeyWrap = findJourneyWrap(slide);
-  if (journeyWrap === null) return null;
-  const slot = journeyWrap.findOne(function (n: SceneNode) {
-    return n.type === 'SLOT';
-  });
-  if (slot === null) return null;
-  if (slot.type !== 'SLOT') return null;
-  return slot as SlotNode;
 }

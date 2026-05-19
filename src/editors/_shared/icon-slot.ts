@@ -1,7 +1,7 @@
 // ============================================================
 // editors/_shared/icon-slot.ts
 //
-// Slot-based icon-swap (gedeeld door Card / Badge / JourneyItem).
+// Slot-based icon-swap (gedeeld door Card / Badge).
 //
 // Welder-componenten declareren een `SlotNode` met name `icon-slot`
 // op de positie waar het Lucide-icon moet komen. SlotNodes accepteren

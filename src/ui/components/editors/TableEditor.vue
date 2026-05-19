@@ -21,11 +21,13 @@
 -->
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
-import type { TableWrapModel, TableRowModel, TableCellModel } from '../../types';
-import { TABLE_MAX_ROWS, TABLE_MAX_COLS, TABLE_WIDTHS } from '../../constants';
-import { tokenize } from '../../csv';
-import { useNotifications } from '../stores/useNotifications';
-import BInput from './BInput.vue';
+import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../types';
+import { TABLE_MAX_ROWS, TABLE_MAX_COLS, TABLE_WIDTHS } from '../../../constants';
+import { tokenize } from '../../../csv';
+import { useNotifications } from '../../stores/useNotifications';
+import WInput from '../ui/WInput.vue';
+import WCard from '../ui/WCard.vue';
+import WInsetPanel from '../ui/WInsetPanel.vue';
 
 const notifications = useNotifications();
 
@@ -250,6 +252,14 @@ function setTextSize(s: SizeKey): void {
   scheduleEmit();
 }
 
+function onWidthChange(value: string | number | undefined): void {
+  if (value === 'sm' || value === 'md' || value === 'lg') setWidth(value);
+}
+
+function onTextSizeChange(value: string | number | undefined): void {
+  if (value === 'sm' || value === 'md' || value === 'lg') setTextSize(value);
+}
+
 function addRow(): void {
   if (!canAddRow.value) return;
   // Nieuwe rij matcht huidige kolom-count (geclampt op maxCols); 1 cel
@@ -299,11 +309,7 @@ function updateCell(i: number, j: number, value: string): void {
 
 // CSV-import — client-side validate + emit (in modal sinds T39.3)
 const csvText = ref<string>('');
-const csvFileInput = ref<HTMLInputElement | null>(null);
-
-function openFilePicker(): void {
-  if (csvFileInput.value !== null) csvFileInput.value.click();
-}
+const csvUploadFile = ref<File | null>(null);
 const csvError = ref<string>('');
 
 function validateCSV(text: string): string {
@@ -372,31 +378,14 @@ function applyCSV(fileName: string | null = null): void {
   csvText.value = '';
 }
 
-function onFile(e: Event): void {
-  const target = e.target as HTMLInputElement;
-  const file = target.files !== null && target.files.length > 0 ? target.files[0] : undefined;
-  if (file === undefined) return;
+function onCsvFileChange(file: File | null | undefined): void {
+  if (file === null || file === undefined) return;
   clearLastImport();
   const reader = new FileReader();
   reader.onload = () => {
     csvText.value = String(reader.result !== null ? reader.result : '');
     applyCSV(file.name);
-  };
-  reader.readAsText(file);
-  // Reset the input so picking the SAME file again still re-triggers
-  // change. Without this the second pick is a silent no-op.
-  target.value = '';
-}
-
-function onDrop(e: DragEvent): void {
-  const files = e.dataTransfer !== null ? e.dataTransfer.files : null;
-  const file = files !== null && files.length > 0 ? files[0] : undefined;
-  if (file === undefined) return;
-  clearLastImport();
-  const reader = new FileReader();
-  reader.onload = () => {
-    csvText.value = String(reader.result !== null ? reader.result : '');
-    applyCSV(file.name);
+    csvUploadFile.value = null;
   };
   reader.readAsText(file);
 }
@@ -415,66 +404,85 @@ watch(csvText, () => {
 </script>
 
 <template>
-  <div
-    class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
-  >
-    <section class="space-y-4 px-5 py-6">
-      <h3 class="text-sm font-semibold text-highlighted">Weergave</h3>
+  <WCard title="Weergave">
+    <div class="space-y-4">
       <UFormField name="table-width" label="Breedte" size="md">
-        <div class="flex gap-2">
-          <UButton
-            v-for="opt in SIZE_OPTIONS"
-            :key="'w-' + opt.value"
-            color="neutral"
-            size="md"
-            :variant="localWidth === opt.value ? 'solid' : 'subtle'"
-            @click="setWidth(opt.value)"
-            >{{ opt.label }}</UButton
-          >
-        </div>
+        <URadioGroup
+          :model-value="localWidth"
+          :items="SIZE_OPTIONS"
+          value-key="value"
+          variant="table"
+          orientation="horizontal"
+          indicator="hidden"
+          size="sm"
+          :ui="{
+            fieldset: 'grid grid-cols-3',
+            item: 'justify-center',
+            label: 'w-full text-center',
+          }"
+          @update:model-value="onWidthChange"
+        />
       </UFormField>
       <UFormField name="table-text-size" label="Tekstgrootte" size="md">
-        <div class="grid grid-cols-3 gap-2">
-          <button
-            v-for="opt in SIZE_OPTIONS"
-            :key="'ts-' + opt.value"
-            type="button"
-            class="flex flex-col items-center gap-1 rounded-[calc(var(--ui-radius)*2)] border-2 px-3 py-2 transition-colors"
-            :class="
-              localTextSize === opt.value
-                ? 'border-primary bg-primary/5'
-                : 'border-default bg-default hover:bg-elevated'
-            "
-            @click="setTextSize(opt.value)"
-          >
+        <URadioGroup
+          :model-value="localTextSize"
+          :items="SIZE_OPTIONS"
+          value-key="value"
+          variant="card"
+          orientation="horizontal"
+          indicator="hidden"
+          size="sm"
+          :ui="{
+            fieldset: 'grid grid-cols-3 gap-2',
+            item: 'p-0 overflow-hidden',
+            wrapper: 'w-full',
+            label: 'w-full cursor-pointer',
+          }"
+          @update:model-value="onTextSizeChange"
+        >
+          <template #label="{ item }">
             <span
-              class="font-semibold text-default"
-              :class="opt.value === 'sm' ? 'text-xs' : opt.value === 'lg' ? 'text-xl' : 'text-base'"
-              >Aa</span
+              class="flex flex-col items-center gap-1 px-3 py-2 transition-colors"
+              :class="
+                localTextSize === item.value
+                  ? 'bg-primary/5 text-primary'
+                  : 'bg-default text-default hover:bg-elevated'
+              "
             >
-            <span class="text-xs text-muted">{{ opt.label }}</span>
-          </button>
-        </div>
+              <span
+                class="font-semibold"
+                :class="item.value === 'sm' ? 'text-xs' : item.value === 'lg' ? 'text-xl' : 'text-base'"
+              >Aa</span>
+              <span class="text-xs text-muted">{{ item.label }}</span>
+            </span>
+          </template>
+        </URadioGroup>
       </UFormField>
-    </section>
+    </div>
+  </WCard>
 
-    <section class="space-y-3 px-5 py-6">
-      <div class="flex items-center justify-between gap-2">
-        <h3 class="text-sm font-semibold text-highlighted">Rijen & kolommen</h3>
-        <div class="flex items-center gap-3">
-          <span class="text-xs text-muted"
-            >{{ localRows.length }} / {{ TABLE_MAX_ROWS }} rijen</span
-          >
-          <span class="text-xs text-muted">{{ currentCols }} / {{ maxCols }} kolommen</span>
-        </div>
+  <WCard title="Rijen &amp; kolommen">
+    <template #actions>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-muted">{{ localRows.length }} / {{ TABLE_MAX_ROWS }} rijen</span>
+        <span class="text-xs text-muted">{{ currentCols }} / {{ maxCols }} kolommen</span>
       </div>
+    </template>
 
-      <div v-if="localRows.length === 0" class="space-y-3 py-4 text-center">
-        <p class="text-sm text-muted">Tabel is leeg — voeg een rij toe om te starten.</p>
-        <UButton color="neutral" variant="soft" icon="i-lucide-plus" size="md" @click="addRow">
-          Eerste rij toevoegen
-        </UButton>
-      </div>
+    <div class="space-y-3">
+      <UEmpty
+        v-if="localRows.length === 0"
+        icon="i-lucide-table"
+        description="Tabel is leeg — voeg een rij toe om te starten."
+        variant="naked"
+        size="sm"
+      >
+        <template #actions>
+          <UButton color="neutral" variant="soft" icon="i-lucide-plus" size="md" @click="addRow">
+            Eerste rij toevoegen
+          </UButton>
+        </template>
+      </UEmpty>
 
       <template v-else>
         <div class="space-y-2">
@@ -507,10 +515,11 @@ watch(csvText, () => {
           <!-- Kolomkop-sectie (T44.2): aparte collapsible card boven body-rijen.
                Toggle aan = cells expanded; uit = enkel banner zichtbaar.
                Visueel identiek aan body-rijen — toggle is de enige ON-indicator. -->
-          <div
-            class="rounded-[calc(var(--ui-radius)*2)] border border-default overflow-hidden"
+          <WInsetPanel
+            :body-separated="false"
+            :body-padded="false"
           >
-            <div class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated">
+            <template #title>
               <div class="flex items-center gap-2">
                 <span class="text-sm font-semibold text-default">Koprij</span>
                 <UBadge
@@ -522,35 +531,42 @@ watch(csvText, () => {
                   aria-label="Tekst afgebroken"
                 />
               </div>
+            </template>
+
+            <template #actions>
               <USwitch
                 :model-value="localHasColumnHeader"
                 size="xs"
                 @update:model-value="(v: boolean) => setHasColumnHeader(v)"
               />
-            </div>
+            </template>
+
             <UCollapsible :open="localHasColumnHeader">
               <template #content>
                 <div
                   v-if="localRows.length > 0"
-                  class="space-y-2 px-4 py-3 bg-elevated border-t border-default"
+                  class="bg-elevated"
                 >
-                  <div
-                    v-for="(cell, j) in localRows[0].cells"
-                    :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'kolomkop-' + j"
-                    class="grid grid-cols-[80px_1fr] items-center gap-3"
-                  >
-                    <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-                    <BInput
-                      :model-value="cell.value"
-                      :placeholder="`Waarde voor kolom ${j + 1}`"
-                      size="sm"
-                      @update:model-value="(v: string) => updateCell(0, j, v)"
-                    />
+                  <USeparator />
+                  <div class="space-y-2 px-4 py-3">
+                    <div
+                      v-for="(cell, j) in localRows[0].cells"
+                      :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'kolomkop-' + j"
+                      class="grid grid-cols-[80px_1fr] items-center gap-3"
+                    >
+                      <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
+                      <WInput
+                        :model-value="cell.value"
+                        :placeholder="`Waarde voor kolom ${j + 1}`"
+                        size="sm"
+                        @update:model-value="(v: string) => updateCell(0, j, v)"
+                      />
+                    </div>
                   </div>
                 </div>
               </template>
             </UCollapsible>
-          </div>
+          </WInsetPanel>
 
           <!-- Body-rijen: altijd genummerd "Rij 1, Rij 2, ..." onafhankelijk van toggle.
                T44.11: itereert over localRows direct (geen slice → stabiele array-ref).
@@ -559,13 +575,10 @@ watch(csvText, () => {
             v-for="(row, idx) in localRows"
             :key="row.rowNodeId !== '' ? row.rowNodeId : 'row-' + idx"
           >
-            <div
+            <WInsetPanel
               v-if="idx >= bodyRowOffset"
-              class="rounded-[calc(var(--ui-radius)*2)] border border-default overflow-hidden"
             >
-              <div
-                class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated border-b border-default"
-              >
+              <template #title>
                 <div class="flex items-center gap-2">
                   <span class="text-sm font-semibold text-default"
                     >Rij {{ idx + 1 - bodyRowOffset }}</span
@@ -579,6 +592,9 @@ watch(csvText, () => {
                     aria-label="Tekst afgebroken"
                   />
                 </div>
+              </template>
+
+              <template #actions>
                 <UButton
                   color="neutral"
                   variant="ghost"
@@ -587,23 +603,22 @@ watch(csvText, () => {
                   :aria-label="`Verwijder rij ${idx + 1 - bodyRowOffset}`"
                   @click="removeRow(idx)"
                 />
+              </template>
+
+              <div
+                v-for="(cell, j) in row.cells"
+                :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'row-' + idx + '-' + j"
+                class="grid grid-cols-[80px_1fr] items-center gap-3"
+              >
+                <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
+                <WInput
+                  :model-value="cell.value"
+                  :placeholder="`Waarde voor kolom ${j + 1}`"
+                  size="sm"
+                  @update:model-value="(v: string) => updateCell(idx, j, v)"
+                />
               </div>
-              <div class="space-y-2 px-4 py-3 bg-elevated">
-                <div
-                  v-for="(cell, j) in row.cells"
-                  :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'row-' + idx + '-' + j"
-                  class="grid grid-cols-[80px_1fr] items-center gap-3"
-                >
-                  <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-                  <BInput
-                    :model-value="cell.value"
-                    :placeholder="`Waarde voor kolom ${j + 1}`"
-                    size="sm"
-                    @update:model-value="(v: string) => updateCell(idx, j, v)"
-                  />
-                </div>
-              </div>
-            </div>
+            </WInsetPanel>
           </template>
           <UButton
             color="neutral"
@@ -617,28 +632,30 @@ watch(csvText, () => {
           >
         </div>
       </template>
-    </section>
+    </div>
+  </WCard>
 
-    <section class="space-y-3 px-5 py-6">
-      <h3 class="text-sm font-semibold text-highlighted">CSV importeren</h3>
-      <label
-        class="flex flex-col items-center gap-3 rounded-[calc(var(--ui-radius)*2)] border-2 border-dashed border-default p-6 cursor-pointer hover:bg-elevated transition-colors"
-        @drop.prevent="onDrop"
-        @dragover.prevent
+  <WCard title="CSV importeren">
+    <div class="space-y-3">
+      <UFileUpload
+        v-model="csvUploadFile"
+        accept=".csv,text/csv"
+        icon="i-lucide-folder-plus"
+        label="Sleep je CSV hier of klik om te bladeren"
+        :description="`Max ${TABLE_MAX_ROWS} rijen · ${maxCols} kolommen bij breedte ${localWidth}.`"
+        color="neutral"
+        size="md"
+        :preview="false"
+        reset
+        :ui="{ base: 'py-6' }"
+        @update:model-value="onCsvFileChange"
       >
-        <UIcon name="i-lucide-folder-plus" class="size-7 text-muted" />
-        <span class="text-sm text-muted">Sleep je CSV hier of klik om te bladeren</span>
-        <input
-          ref="csvFileInput"
-          type="file"
-          accept=".csv,text/csv"
-          class="hidden"
-          @change="onFile"
-        />
-        <UButton color="neutral" variant="outline" size="sm" @click.stop.prevent="openFilePicker"
-          >Bestand kiezen</UButton
-        >
-      </label>
+        <template #actions="{ open }">
+          <UButton color="neutral" variant="outline" size="sm" @click.stop.prevent="open()">
+            Bestand kiezen
+          </UButton>
+        </template>
+      </UFileUpload>
 
       <div v-if="csvError !== ''" class="text-xs text-error">{{ csvError }}</div>
       <div v-else-if="lastImport !== null" class="flex items-center gap-1.5 text-xs text-success">
@@ -652,6 +669,6 @@ watch(csvText, () => {
       <div v-else class="text-xs text-muted">
         Max {{ TABLE_MAX_ROWS }} rijen · {{ maxCols }} kolommen bij breedte {{ localWidth }}.
       </div>
-    </section>
-  </div>
+    </div>
+  </WCard>
 </template>

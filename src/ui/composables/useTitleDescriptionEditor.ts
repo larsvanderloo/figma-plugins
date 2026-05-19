@@ -6,7 +6,7 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
-import type { TitleDescriptionValue } from '../components/TitleDescriptionEditor.vue';
+import type { TitleDescriptionValue } from '../components/editors/TitleDescriptionEditor.vue';
 import { debugLog } from '../../debug';
 
 export function useTitleDescriptionEditor() {

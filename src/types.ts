@@ -342,11 +342,6 @@ export interface ContentItems {
    * `cards`-array en een niet-lege `timelineItems`-array.
    */
   timelineItems: TimelineItem[];
-  /**
-   * JourneyWrap-model (T45). Null wanneer de slide geen JourneyWrap heeft.
-   * JourneyEditor leest dit veld in T45 in.
-   */
-  journeyModel: JourneyWrapModel | null;
 }
 
 // ============================================================
@@ -387,63 +382,6 @@ export interface GraphItems {
    * welke instance open staat.
    */
   selectedGraphId: string;
-}
-
-// ============================================================
-// JourneyWrap-editor types (T45 — Slot-based JourneyWrap v1)
-// ============================================================
-
-/**
- * Eén pill-rij binnen een JourneyWrap.
- * `startPct` en `endPct` zijn percentages 0-100 van container-innerWidth.
- * Pill-breedte = (endPct - startPct) / 100 × contentWidth (Gantt-style).
- *
- * T45.6: endPct hersteld. UI gebruikt USlider in range-mode (twee thumbs)
- * met `min-steps-between-thumbs = JOURNEY_POS_MIN_SPAN`. Pill-content
- * (icon + label) kan door auto-layout truncated worden als pillWidth
- * kleiner is dan de natuurlijke content-min-width.
- */
-export interface JourneyItemModel {
-  /** Figma-node-ID, leeg voor nieuwe items vanaf scan/UI. */
-  itemNodeId: string;
-  /** Lucide icon-name uit ICON_OPTIONS. */
-  icon: string;
-  /** Pill-tekst. */
-  label: string;
-  /** Start-positie als percentage 0-95. */
-  startPct: number;
-  /** Eind-positie als percentage; ≥ startPct + JOURNEY_POS_MIN_SPAN, ≤ 100. */
-  endPct: number;
-}
-
-/**
- * Eén kolom-header binnen een JourneyWrap (T46).
- * Twee tekstvelden, allemaal optioneel ingevuld (lege strings toegestaan).
- * Kolommen worden boven de pills gerenderd als grid-headers.
- * T46.6: body-veld verwijderd — header-sectie evenredig korter.
- */
-export interface JourneyColumnModel {
-  /** Bovenste regel — groot, theme-color, gecentreerd. Bv. "Besef". */
-  header: string;
-  /** Middelste regel — klein, theme-color, gecentreerd. Bv. "Prospect". */
-  subheader: string;
-}
-
-/**
- * Top-level model voor een bewerkbare JourneyWrap-instance.
- * `slotId` verwijst naar de SlotNode binnen de JourneyWrap-INSTANCE.
- */
-export interface JourneyWrapModel {
-  /** Figma SlotNode ID binnen de JourneyWrap-INSTANCE. */
-  slotId: string;
-  /**
-   * T46 — kolom-headers boven de pills (4-7 kolommen, default 6).
-   * Backward-compat: scanJourneySlot defaultet naar 6 lege kolommen
-   * wanneer pluginData v < 7 is (geen WelderJourneyHeader-FRAME aanwezig).
-   */
-  columns: JourneyColumnModel[];
-  /** 0..JOURNEY_MAX_ITEMS pills. */
-  items: JourneyItemModel[];
 }
 
 // ============================================================
@@ -545,23 +483,6 @@ export type UIToPluginMessage =
       slideId: string;
       slotId: string;
       csv: string;
-    }
-  | {
-      /**
-       * Full-state PUT van een JourneyWrap (T45). `slotId` identificeert
-       * de SlotNode binnen de JourneyWrap-INSTANCE; `desired` is het complete
-       * gewenste model inclusief alle items.
-       *
-       * `iconSvgs` is een `{ lucideName: svgString }` map die de iframe
-       * meelevert zodat de sandbox elk distinct icon via de pill-slot kan
-       * renderen zonder INSTANCE_SWAP + library-import. Optioneel; sandbox
-       * valt terug op legacy swap wanneer een naam ontbreekt in de map.
-       */
-      type: 'update-journey';
-      slideId: string;
-      slotId: string;
-      desired: JourneyWrapModel;
-      iconSvgs?: { [name: string]: string };
     }
   | {
       type: 'upload-image';

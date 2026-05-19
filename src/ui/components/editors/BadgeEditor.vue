@@ -1,12 +1,12 @@
 <!--
   BadgeEditor — editor for the General → Badge section.
 
-  Uses BInput (commits on blur / Enter) so the sandbox only sees one
+  Uses WInput (commits on blur / Enter) so the sandbox only sees one
   update per finished edit — no keystroke debounce.
 -->
 <script setup lang="ts">
-import IconPicker from './IconPicker.vue';
-import BInput from './BInput.vue';
+import IconPicker from '../ui/IconPicker.vue';
+import WInput from '../ui/WInput.vue';
 
 export interface BadgeValue {
   label: string;
@@ -47,28 +47,27 @@ function onVisibilityToggle(next: boolean): void {
 </script>
 
 <template>
-  <div class="space-y-1.5">
-    <div class="flex items-center justify-between gap-2 h-6">
-      <span class="text-sm font-medium text-default">Label</span>
-      <label
-        v-if="modelValue.visible !== null"
-        class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none"
-      >
-        <span>Tonen</span>
-        <USwitch
-          :model-value="modelValue.visible"
-          size="xs"
-          @update:model-value="onVisibilityToggle"
-        />
-      </label>
-    </div>
+  <UFormField label="Label">
+    <template v-if="modelValue.visible !== null" #hint>
+      <USwitch
+        :model-value="modelValue.visible"
+        label="Tonen"
+        size="xs"
+        :ui="{
+          root: 'flex-row-reverse items-center',
+          wrapper: 'me-2 ms-0',
+          label: 'text-xs font-medium text-muted',
+        }"
+        @update:model-value="onVisibilityToggle"
+      />
+    </template>
     <div class="flex items-center gap-2">
       <IconPicker
         :model-value="modelValue.icon"
         :disabled="modelValue.visible === false"
         @update:model-value="onIconChange"
       />
-      <BInput
+      <WInput
         :model-value="modelValue.label"
         placeholder="Bijv. Belangrijk"
         size="md"
@@ -77,5 +76,5 @@ function onVisibilityToggle(next: boolean): void {
         @update:model-value="onLabelCommit"
       />
     </div>
-  </div>
+  </UFormField>
 </template>

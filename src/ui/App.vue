@@ -60,9 +60,9 @@ function downloadBlob(bytes: Uint8Array, filename: string, mime: string): void {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
-import GeneralPanel from './components/GeneralPanel.vue';
-import ContentPanel from './components/ContentPanel.vue';
-import GraphsPanel from './components/GraphsPanel.vue';
+import GeneralPanel from './components/panels/GeneralPanel.vue';
+import ContentPanel from './components/panels/ContentPanel.vue';
+import GraphsPanel from './components/panels/GraphsPanel.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
 import { useIconReconcile } from './composables/useIconReconcile';
 import { getLucideSvg } from './lucide-svgs';
@@ -185,7 +185,7 @@ function onResizePointerUp(): void {
 }
 
 // Bottom-nav tab state. `general` = title / badge / image / theme;
-// `content` = cards / timeline / journey / graphs. Defaults to general
+// `content` = cards / timeline / graphs. Defaults to general
 // since slide identity edits are the most common entry point.
 type TabId = 'general' | 'content';
 const activeTab = ref<TabId>('general');
@@ -240,6 +240,36 @@ const formatItems = computed(() => [
     disabled: exportTarget.value === 'presentation',
   },
 ]);
+
+const exportTargetItems = computed(() => [
+  {
+    label: 'Huidige slide',
+    description:
+      view.state.currentSlideId === null ? 'Selecteer eerst een slide' : 'Alleen deze slide',
+    value: 'slide',
+    icon: 'i-lucide-file-text',
+    disabled: view.state.currentSlideId === null,
+  },
+  {
+    label: 'Hele presentatie',
+    description: 'Alle slides op deze pagina',
+    value: 'presentation',
+    icon: 'i-lucide-presentation',
+  },
+]);
+
+const bottomTabItems = [
+  { label: 'Basis', value: 'general', icon: 'i-lucide-square-pen' },
+  { label: 'Onderdelen', value: 'content', icon: 'i-lucide-layers' },
+];
+
+function onActiveTabChange(value: string | number): void {
+  if (value === 'general' || value === 'content') activeTab.value = value;
+}
+
+function onExportTargetChange(value: string | number | undefined): void {
+  if (value === 'slide' || value === 'presentation') exportTarget.value = value;
+}
 
 function openExportModal(): void {
   // Default naar 'presentation' als er geen actieve slide is — anders
@@ -471,21 +501,21 @@ onMounted(() => {
       <main class="flex-1 overflow-y-auto">
         <div class="mx-auto max-w-2xl space-y-3 p-3 pb-28">
           <!-- Empty states first; they pre-empt the tab content. -->
-          <section
+          <UEmpty
             v-if="view.noSlide"
-            class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
-          >
-            <p class="text-sm text-muted">
-              Klik op een slide in Figma om te beginnen met bewerken.
-            </p>
-          </section>
+            icon="i-lucide-mouse-pointer-click"
+            description="Klik op een slide in Figma om te beginnen met bewerken."
+            variant="subtle"
+            size="sm"
+          />
 
-          <section
+          <UEmpty
             v-else-if="view.allEmpty"
-            class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
-          >
-            <p class="text-sm text-muted">Geen bewerkbare inhoud op deze slide.</p>
-          </section>
+            icon="i-lucide-file-x"
+            description="Geen bewerkbare inhoud op deze slide."
+            variant="subtle"
+            size="sm"
+          />
 
           <!-- Tab-based content. Only one panel renders at a time so the
                page stays focused. GeneralPanel handles its own internal
@@ -516,19 +546,18 @@ onMounted(() => {
                 <ContentPanel v-if="view.hasContent" />
                 <GraphsPanel v-if="view.hasGraphs" />
               </fieldset>
-              <section
+              <UEmpty
                 v-else
                 key="empty-tab"
-                class="bg-default rounded-[calc(var(--ui-radius)*4)] px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
-              >
-                <p class="text-sm text-muted">
-                  {{
-                    activeTab === 'general'
-                      ? 'Geen algemene instellingen voor deze slide.'
-                      : 'Geen kaarten of grafieken op deze slide.'
-                  }}
-                </p>
-              </section>
+                icon="i-lucide-circle-off"
+                :description="
+                  activeTab === 'general'
+                    ? 'Geen algemene instellingen voor deze slide.'
+                    : 'Geen kaarten of grafieken op deze slide.'
+                "
+                variant="subtle"
+                size="sm"
+              />
             </Transition>
           </template>
 
@@ -546,52 +575,39 @@ onMounted(() => {
             <template #body>
               <div class="space-y-4">
                 <UFormField label="Wat wil je exporteren?" name="export-target">
-                  <div class="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      :disabled="view.state.currentSlideId === null"
-                      :class="[
-                        'flex flex-col items-start gap-2 rounded-[var(--ui-radius)] border p-3 text-left transition-colors',
-                        exportTarget === 'slide'
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                          : 'border-default hover:bg-elevated',
-                        view.state.currentSlideId === null
-                          ? 'cursor-not-allowed opacity-50'
-                          : 'cursor-pointer',
-                      ]"
-                      @click="
-                        view.state.currentSlideId !== null && (exportTarget = 'slide')
-                      "
-                    >
-                      <UIcon name="i-lucide-file-text" class="h-5 w-5 text-default" />
-                      <div>
-                        <div class="text-sm font-medium text-default">Huidige slide</div>
-                        <div class="text-xs text-muted">
-                          {{
-                            view.state.currentSlideId === null
-                              ? 'Selecteer eerst een slide'
-                              : 'Alleen deze slide'
-                          }}
-                        </div>
-                      </div>
-                    </button>
-                    <button
-                      type="button"
-                      :class="[
-                        'flex cursor-pointer flex-col items-start gap-2 rounded-[var(--ui-radius)] border p-3 text-left transition-colors',
-                        exportTarget === 'presentation'
-                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
-                          : 'border-default hover:bg-elevated',
-                      ]"
-                      @click="exportTarget = 'presentation'"
-                    >
-                      <UIcon name="i-lucide-presentation" class="h-5 w-5 text-default" />
-                      <div>
-                        <div class="text-sm font-medium text-default">Hele presentatie</div>
-                        <div class="text-xs text-muted">Alle slides op deze pagina</div>
-                      </div>
-                    </button>
-                  </div>
+                  <URadioGroup
+                    :model-value="exportTarget"
+                    :items="exportTargetItems"
+                    value-key="value"
+                    variant="card"
+                    orientation="horizontal"
+                    indicator="hidden"
+                    size="sm"
+                    :ui="{
+                      fieldset: 'grid grid-cols-2 gap-2',
+                      item: 'p-0 overflow-hidden',
+                      wrapper: 'w-full',
+                      label: 'w-full cursor-pointer',
+                    }"
+                    @update:model-value="onExportTargetChange"
+                  >
+                    <template #label="{ item }">
+                      <span
+                        class="flex flex-col items-start gap-2 p-3 text-left transition-colors"
+                        :class="
+                          exportTarget === item.value
+                            ? 'bg-primary/5 text-primary'
+                            : 'bg-default text-default hover:bg-elevated'
+                        "
+                      >
+                        <UIcon :name="item.icon" class="h-5 w-5" />
+                        <span>
+                          <span class="block text-sm font-medium">{{ item.label }}</span>
+                          <span class="block text-xs text-muted">{{ item.description }}</span>
+                        </span>
+                      </span>
+                    </template>
+                  </URadioGroup>
                 </UFormField>
                 <UFormField label="Formaat" name="export-format">
                   <USelect
@@ -666,39 +682,22 @@ onMounted(() => {
               d="M528.4,155.5c-6-10.1-19-13.4-29.1-7.4l-42.6,25.3c-50.5,29.9-67.1,95.1-37.2,145.5l166.3,280.4c6,10.1,19,13.4,29.1,7.4l42.6-25.3c50.5-29.9,67.1-95.1,37.2-145.6l-166.3-280.4Z"
             />
           </svg>
-          <span class="h-6 w-px bg-border" aria-hidden="true" />
-          <!--
-            Fixed columns keep the segmented control visually balanced:
-            "Basis" gets the smaller column, while "Onderdelen" gets the
-            extra width it needs without making the whole control feel loose.
-          -->
-          <div class="relative grid grid-cols-[6rem_8rem] items-center bg-elevated rounded-full p-1">
-            <div
-              class="absolute inset-y-1 rounded-full bg-default shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition-all duration-200 ease-out pointer-events-none"
-              :class="activeTab === 'general' ? 'left-1 w-24' : 'left-[6.25rem] w-32'"
-              aria-hidden="true"
-            />
-            <button
-              type="button"
-              class="relative z-10 h-8 rounded-full text-sm font-medium transition-colors focus:outline-none flex items-center justify-center gap-2"
-              :class="activeTab === 'general' ? 'text-default' : 'text-muted hover:text-default'"
-              :aria-pressed="activeTab === 'general'"
-              @click="activeTab = 'general'"
-            >
-              <UIcon name="i-lucide-square-pen" class="size-4" />
-              Basis
-            </button>
-            <button
-              type="button"
-              class="relative z-10 h-8 rounded-full text-sm font-medium transition-colors focus:outline-none flex items-center justify-center gap-2"
-              :class="activeTab === 'content' ? 'text-default' : 'text-muted hover:text-default'"
-              :aria-pressed="activeTab === 'content'"
-              @click="activeTab = 'content'"
-            >
-              <UIcon name="i-lucide-layers" class="size-4" />
-              Onderdelen
-            </button>
-          </div>
+          <USeparator orientation="vertical" class="h-6" />
+          <UTabs
+            :model-value="activeTab"
+            :items="bottomTabItems"
+            :content="false"
+            variant="pill"
+            size="lg"
+            :ui="{
+              root: 'w-[14rem]',
+              list: 'grid grid-cols-[6rem_8rem] rounded-full bg-elevated p-1',
+              indicator: 'rounded-full bg-default shadow-[0_1px_2px_rgba(0,0,0,0.06)]',
+              trigger: 'h-8 rounded-full px-0 data-[state=active]:text-default',
+              leadingIcon: 'size-4',
+            }"
+            @update:model-value="onActiveTabChange"
+          />
         </div>
 
         <!--
@@ -706,15 +705,17 @@ onMounted(() => {
           nav pill. Sits to the right of the tab picker so the existing
           export entry at the bottom of the scroll area can be retired.
         -->
-        <button
-          type="button"
+        <UButton
+          color="neutral"
+          variant="ghost"
+          square
+          icon="i-lucide-download"
           class="pointer-events-auto size-12 rounded-full bg-default/65 backdrop-blur-xl shadow-[0_12px_32px_-12px_rgba(0,0,0,0.18)] ring-1 ring-default/40 text-muted hover:text-primary hover:bg-default/70 transition-colors flex items-center justify-center"
           :title="'Exporteer · v' + appVersion"
           aria-label="Exporteer"
+          :ui="{ leadingIcon: 'size-5' }"
           @click="openExportModal"
-        >
-          <UIcon name="i-lucide-download" class="size-5" />
-        </button>
+        />
       </nav>
 
       <!--

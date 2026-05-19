@@ -5,7 +5,7 @@
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
-import type { ImageValue } from '../components/ImageEditor.vue';
+import type { ImageValue } from '../components/editors/ImageEditor.vue';
 
 /** Uint8Array → data-URL. JPEG sniff via magic bytes; PNG default.
  *  Chunked btoa avoids stack-overflow on large fill bytes (≥2 MB). */

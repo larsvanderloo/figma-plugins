@@ -16,9 +16,9 @@
 -->
 <script setup lang="ts">
 import { ref, computed, watch, onUnmounted } from 'vue';
-import { ALL_LUCIDE_ICONS } from '../lucide-icon-names';
-import { usePluginBridge } from '../composables/usePluginBridge';
-import { useIconRecents } from '../stores/useIconRecents';
+import { ALL_LUCIDE_ICONS } from '../../lucide-icon-names';
+import { usePluginBridge } from '../../composables/usePluginBridge';
+import { useIconRecents } from '../../stores/useIconRecents';
 
 interface Props {
   modelValue: string;
@@ -165,10 +165,10 @@ function onGridScroll(event: Event): void {
       <div class="max-h-64 overflow-y-auto" @scroll.passive="onGridScroll">
         <!-- Skeleton terwijl het eerste frame nog niet klaar is -->
         <div v-if="!ready" class="grid grid-cols-6 gap-1">
-          <div
+          <USkeleton
             v-for="n in CHUNK"
             :key="n"
-            class="aspect-square rounded bg-gray-100 dark:bg-gray-800 animate-pulse"
+            class="aspect-square rounded"
           />
         </div>
 
@@ -189,7 +189,7 @@ function onGridScroll(event: Event): void {
                 @click="select(name)"
               />
             </div>
-            <div class="border-t border-default my-2" />
+            <USeparator class="my-2" />
           </template>
 
           <!-- Hoofdgrid -->

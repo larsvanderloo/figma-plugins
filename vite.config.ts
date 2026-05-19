@@ -10,6 +10,7 @@ import { fileURLToPath, URL } from 'node:url';
 import vue from '@vitejs/plugin-vue';
 import ui from '@nuxt/ui/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
+import { welderNuxtUiTheme } from './src/ui/theme/nuxt-ui';
 
 const isDebug = process.env.PLUGIN_DEBUG === '1';
 const debugLogEndpoint = isDebug ? (process.env.PLUGIN_DEBUG_LOG_ENDPOINT ?? '') : '';
@@ -61,13 +62,7 @@ export default defineConfig({
       // Forceer lichte modus: Figma-iframe volgt normaal `prefers-color-scheme`
       // van de user, maar we willen altijd Welder-branding in licht tonen.
       colorMode: false,
-      ui: {
-        colors: {
-          primary: 'orange',
-          secondary: 'blue',
-          neutral: 'neutral',
-        },
-      },
+      ui: welderNuxtUiTheme,
     }),
     viteSingleFile(),
     renameIndexToUi(),

@@ -22,8 +22,8 @@
 import { ref, computed } from 'vue';
 import { useCropper } from 'vue-picture-cropper';
 import 'cropperjs/dist/cropper.css';
-import { compressImageForUpload } from '../utils/image-compress';
-import { formatBytes } from '../utils/format-bytes';
+import { compressImageForUpload } from '../../utils/image-compress';
+import { formatBytes } from '../../utils/format-bytes';
 
 export interface ImageValue {
   hasImage: boolean;
@@ -63,7 +63,7 @@ const emit = defineEmits<{
   upload: [bytes: Uint8Array];
 }>();
 
-const fileInput = ref<HTMLInputElement | null>(null);
+const selectedImageFile = ref<File | null>(null);
 const isUploading = ref<boolean>(false);
 const sizeWarning = ref<string | null>(null);
 
@@ -132,16 +132,8 @@ const statusLabel = computed<string>(() => {
   return 'Nog geen afbeelding';
 });
 
-function triggerFileInput(): void {
-  if (fileInput.value !== null) fileInput.value.click();
-}
-
-async function onFileSelected(event: Event): Promise<void> {
-  const input = event.target as HTMLInputElement;
-  const files = input.files;
-  if (files === null || files.length === 0) return;
-
-  const file = files[0];
+async function onImageFileChange(file: File | null | undefined): Promise<void> {
+  if (file === null || file === undefined) return;
   sizeWarning.value = null;
   if (file.size > SOFT_MAX_BYTES) {
     const mb = (file.size / (1024 * 1024)).toFixed(1);
@@ -156,7 +148,7 @@ async function onFileSelected(event: Event): Promise<void> {
     emit('upload', bytes);
   } finally {
     isUploading.value = false;
-    input.value = '';
+    selectedImageFile.value = null;
   }
 }
 
@@ -258,30 +250,34 @@ async function applyCrop(): Promise<void> {
         >
           Bijsnijden
         </UButton>
-        <UButton
-          size="md"
-          color="neutral"
-          variant="outline"
-          icon="i-lucide-upload"
-          :loading="isUploading"
-          :disabled="isUploading"
-          @click="triggerFileInput"
+        <UFileUpload
+          v-model="selectedImageFile"
+          as="div"
+          accept="image/*"
+          :dropzone="false"
+          :preview="false"
+          reset
+          @update:model-value="onImageFileChange"
         >
-          {{ modelValue.hasImage ? 'Vervangen' : 'Uploaden' }}
-        </UButton>
+          <template #default="{ open }">
+            <UButton
+              size="md"
+              color="neutral"
+              variant="outline"
+              icon="i-lucide-upload"
+              :loading="isUploading"
+              :disabled="isUploading"
+              @click="open()"
+            >
+              {{ modelValue.hasImage ? 'Vervangen' : 'Uploaden' }}
+            </UButton>
+          </template>
+        </UFileUpload>
       </div>
     </div>
 
     <p v-if="sizeWarning" class="text-xs text-warning">
       {{ sizeWarning }}
     </p>
-
-    <input
-      ref="fileInput"
-      type="file"
-      accept="image/*"
-      style="display: none"
-      @change="onFileSelected"
-    />
   </div>
 </template>

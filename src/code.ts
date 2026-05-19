@@ -30,8 +30,6 @@ import {
   findTableWrap,
   findTableSlot,
   findTimelineWrap,
-  findJourneyWrap,
-  findJourneySlot,
   isSlide,
   isEffectivelyVisible,
   readBooleanProperty,
@@ -45,7 +43,6 @@ import { applyImage, findImageSlot } from './editors/general/image';
 import { applyCard, applyCardVisual } from './editors/content/card';
 import { normalizeIconKey, LUCIDE_SLUG_RE, primeIconCache } from './editors/_shared/icon-swap';
 import { applyTable, scanTableSlot } from './editors/table/renderer';
-import { applyJourney, scanJourneySlot } from './editors/journey/renderer';
 import { importCSV } from './editors/table/csv';
 import { setTextCharactersSafe } from './editors/_shared/fonts';
 import { loadAccentVars } from './editors/_shared/accent-vars';
@@ -59,7 +56,6 @@ import type {
   CardItem,
   TimelineItem,
   TableWrapModel,
-  JourneyWrapModel,
   UIToPluginMessage,
   PluginToUIMessage,
   PluginRuntimeInfo,
@@ -1181,12 +1177,9 @@ function extractCopyWrapItems(scope: InstanceNode): TimelineItem[] {
 function scanContent(slide: InstanceNode): ContentItems | null {
   const cardWrap = findCardWrap(slide);
   const timelineWrap = findTimelineWrap(slide);
-  const journeySlot = findJourneySlot(slide);
-  const journeyModel: JourneyWrapModel | null =
-    journeySlot !== null ? scanJourneySlot(journeySlot) : null;
 
   // Retourneer null wanneer geen van alle wrappers aanwezig is.
-  if (cardWrap === null && timelineWrap === null && journeyModel === null) return null;
+  if (cardWrap === null && timelineWrap === null) return null;
 
   const cards: CardItem[] = [];
   const timelineItems: TimelineItem[] = [];
@@ -1221,18 +1214,15 @@ function scanContent(slide: InstanceNode): ContentItems | null {
     );
   }
 
-  if (cards.length === 0 && timelineItems.length === 0 && journeyModel === null) return null;
+  if (cards.length === 0 && timelineItems.length === 0) return null;
 
   // `cardWrapId` blijft semantisch gebonden aan CardWrap wanneer aanwezig;
   // bij slide-met-alleen-TimelineWrap vallen we terug op de TimelineWrap-id.
-  // Bij slide-met-alleen-JourneyWrap vallen we terug op de JourneySlot-id.
   var wrapId: string;
   if (cardWrap !== null) {
     wrapId = cardWrap.id;
   } else if (timelineWrap !== null) {
     wrapId = (timelineWrap as InstanceNode).id;
-  } else if (journeySlot !== null) {
-    wrapId = journeySlot.id;
   } else {
     wrapId = '';
   }
@@ -1241,7 +1231,6 @@ function scanContent(slide: InstanceNode): ContentItems | null {
     cardWrapId: wrapId,
     cards: cards,
     timelineItems: timelineItems,
-    journeyModel: journeyModel,
   };
 }
 
@@ -2929,36 +2918,6 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     }
     figma.commitUndo();
     await importCSV(slotNode as SlotNode, msg.csv);
-    postToUI({
-      type: 'target-updated',
-      ok: true,
-      targetId: msg.slotId,
-    });
-    return;
-  }
-
-  if (msg.type === 'update-journey') {
-    // T45: Slot-based full-state PUT voor JourneyWrap.
-    const journeySlide = findSlideById(msg.slideId);
-    if (journeySlide === null) {
-      postToUI({
-        type: 'target-updated',
-        ok: false,
-        error: 'Slide not found: ' + msg.slideId,
-      });
-      return;
-    }
-    const journeySlotNode = await figma.getNodeByIdAsync(msg.slotId);
-    if (journeySlotNode === null || journeySlotNode.type !== 'SLOT') {
-      postToUI({
-        type: 'target-updated',
-        ok: false,
-        error: 'Journey slot not found: ' + msg.slotId,
-      });
-      return;
-    }
-    figma.commitUndo();
-    await applyJourney(journeySlotNode as SlotNode, msg.desired, msg.iconSvgs);
     postToUI({
       type: 'target-updated',
       ok: true,

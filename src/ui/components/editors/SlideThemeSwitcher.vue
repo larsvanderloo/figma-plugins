@@ -10,7 +10,7 @@
 -->
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { ThemeSection, ThemeMode } from '../../types';
+import type { ThemeSection, ThemeMode } from '../../../types';
 
 interface Props {
   theme: ThemeSection;
@@ -36,6 +36,10 @@ const activeMode = computed<ThemeMode | null>(function () {
   }
   return props.theme.modes.length > 0 ? props.theme.modes[0] : null;
 });
+
+const themeModeItems = computed<Array<{ value: string; label: string; mode: ThemeMode }>>(() =>
+  props.theme.modes.map((mode) => ({ value: mode.id, label: mode.name, mode })),
+);
 
 function swatchBackground(mode: ThemeMode): string {
   if (mode.swatchPrimary !== null && mode.swatchSecondary !== null) {
@@ -68,6 +72,10 @@ function select(modeId: string): void {
   emit('update:modelValue', modeId);
   open.value = false;
 }
+
+function onThemeChange(value: string | number | undefined): void {
+  if (typeof value === 'string') select(value);
+}
 </script>
 
 <template>
@@ -75,10 +83,14 @@ function select(modeId: string): void {
     <!--
       Trigger row — looks like an iOS settings cell. Whole row tappable.
     -->
-    <button
+    <UButton
       type="button"
-      class="w-full flex items-center justify-between gap-3 -mx-2 px-2 py-1 rounded-md hover:bg-elevated/60 transition-colors focus:outline-none"
+      color="neutral"
+      variant="ghost"
+      block
+      class="-mx-2 w-[calc(100%+1rem)] px-2 py-1"
       :aria-label="activeMode ? 'Kleurthema: ' + activeMode.name + ' — wijzigen' : 'Kleurthema kiezen'"
+      :ui="{ base: 'justify-between gap-3' }"
     >
       <span class="text-sm font-medium text-default">Kleurthema</span>
       <span class="flex items-center gap-2 min-w-0 text-muted">
@@ -92,75 +104,83 @@ function select(modeId: string): void {
         </span>
         <UIcon name="i-lucide-chevron-right" class="size-4 shrink-0" />
       </span>
-    </button>
+    </UButton>
 
     <template #content>
       <div class="p-5 space-y-4">
         <div class="flex items-center justify-between">
-          <h3 class="text-sm font-semibold text-default">Kleurthema</h3>
-          <button
-            type="button"
-            class="size-7 rounded-full text-muted hover:bg-elevated transition-colors flex items-center justify-center"
+          <h3 class="text-sm font-medium text-default">Kleurthema</h3>
+          <UButton
+            color="neutral"
+            variant="ghost"
+            size="xs"
+            square
+            icon="i-lucide-x"
             aria-label="Sluiten"
             @click="open = false"
-          >
-            <UIcon name="i-lucide-x" class="size-4" />
-          </button>
+          />
         </div>
-        <div class="grid grid-cols-2 gap-3">
-          <button
-            v-for="mode in props.theme.modes"
-            :key="mode.id"
-            type="button"
-            class="relative flex flex-col items-stretch gap-2.5 p-3 rounded-xl bg-muted/30 transition-colors focus:outline-none"
-            :class="
-              mode.id === activeId
-                ? 'ring-1 ring-primary bg-primary/5'
-                : 'hover:bg-muted/60'
-            "
-            :aria-label="mode.name"
-            :aria-pressed="mode.id === activeId"
-            @click="select(mode.id)"
-          >
-            <!--
-              Inner "page" preview — subtle frame with the theme color
-              softened by a low-opacity wireframe. Tile wrapper provides
-              the breathing room; the preview itself is calm, not loud.
-            -->
-            <div
-              class="relative aspect-5/4 rounded-md overflow-hidden ring-1 ring-black/4"
-              :style="{ background: previewBg(mode) }"
+          <URadioGroup
+            :model-value="activeId"
+            :items="themeModeItems"
+            value-key="value"
+            variant="card"
+          orientation="horizontal"
+          indicator="hidden"
+          size="sm"
+          :ui="{
+            fieldset: 'grid grid-cols-2 gap-3',
+            item: 'p-0 overflow-hidden',
+            wrapper: 'w-full',
+            label: 'w-full cursor-pointer',
+          }"
+          @update:model-value="onThemeChange"
+        >
+          <template #label="{ item }">
+            <span
+              class="relative flex flex-col items-stretch gap-2.5 p-3 transition-colors"
+              :class="
+                item.value === activeId
+                  ? 'bg-primary/5 text-primary'
+                  : 'bg-muted/30 text-default hover:bg-muted/60'
+              "
+              :aria-label="item.label"
             >
-              <div
-                class="absolute left-2.5 right-3 top-2.5 h-1.5 rounded-full"
-                :style="{ background: previewLine(mode), opacity: 0.35 }"
-              />
-              <div
-                class="absolute left-2.5 w-3/5 top-5 h-1 rounded-full"
-                :style="{ background: previewLine(mode), opacity: 0.22 }"
-              />
-              <div
-                class="absolute left-2.5 w-2/5 top-7 h-1 rounded-full"
-                :style="{ background: previewLine(mode), opacity: 0.22 }"
-              />
-            </div>
-            <div class="flex items-center justify-between gap-2">
               <span
-                class="text-xs font-medium leading-none truncate"
-                :class="mode.id === activeId ? 'text-primary' : 'text-default'"
+                class="relative aspect-5/4 rounded-md overflow-hidden ring-1 ring-black/4"
+                :style="{ background: previewBg(item.mode) }"
               >
-                {{ mode.name }}
+                <span
+                  class="absolute left-2.5 right-3 top-2.5 h-1.5 rounded-full"
+                  :style="{ background: previewLine(item.mode), opacity: 0.35 }"
+                />
+                <span
+                  class="absolute left-2.5 w-3/5 top-5 h-1 rounded-full"
+                  :style="{ background: previewLine(item.mode), opacity: 0.22 }"
+                />
+                <span
+                  class="absolute left-2.5 w-2/5 top-7 h-1 rounded-full"
+                  :style="{ background: previewLine(item.mode), opacity: 0.22 }"
+                />
               </span>
-              <span
-                v-if="mode.id === activeId"
-                class="size-4 rounded-full bg-primary text-inverted flex items-center justify-center shrink-0"
-                aria-hidden="true"
-              >
-                <UIcon name="i-lucide-check" class="size-2.5" />
+              <span class="flex items-center justify-between gap-2">
+                <span
+                  class="text-xs font-medium leading-none truncate"
+                  :class="item.value === activeId ? 'text-primary' : 'text-default'"
+                >
+                  {{ item.label }}
+                </span>
+                <span
+                  v-if="item.value === activeId"
+                  class="size-4 rounded-full bg-primary text-inverted flex items-center justify-center shrink-0"
+                  aria-hidden="true"
+                >
+                  <UIcon name="i-lucide-check" class="size-2.5" />
+                </span>
               </span>
-            </div>
-          </button>
-        </div>
+            </span>
+          </template>
+        </URadioGroup>
       </div>
     </template>
   </UModal>
