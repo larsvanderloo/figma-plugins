@@ -11,7 +11,6 @@ import path from 'node:path';
 import vue from '@vitejs/plugin-vue';
 import ui from '@nuxt/ui/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
-import { welderNuxtUiTheme } from './src/ui/theme/nuxt-ui';
 
 const isDebug = process.env.PLUGIN_DEBUG === '1';
 const debugLogEndpoint = isDebug ? (process.env.PLUGIN_DEBUG_LOG_ENDPOINT ?? '') : '';
@@ -55,6 +54,25 @@ function renameIndexToUi(): Plugin {
   };
 }
 
+function serveUiIndexAtRoot(): Plugin {
+  return {
+    name: 'serve-ui-index-at-root',
+    apply: 'serve',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url === '/' || req.url === '/index.html') {
+          res.statusCode = 302;
+          res.setHeader('Location', '/src/ui/index.html');
+          res.end();
+          return;
+        }
+
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
   root: projectRoot,
   define: {
@@ -64,10 +82,9 @@ export default defineConfig({
     __PLUGIN_DEBUG_LOG_ENDPOINT__: JSON.stringify(debugLogEndpoint),
   },
   plugins: [
+    serveUiIndexAtRoot(),
     vue(),
     ui({
-      // Forceer lichte modus: Figma-iframe volgt normaal `prefers-color-scheme`
-      // van de user, maar we willen altijd Welder-branding in licht tonen.
       colorMode: false,
       autoImport: {
         dts: uiAutoImportsDts,
@@ -75,7 +92,6 @@ export default defineConfig({
       components: {
         dts: uiComponentsDts,
       },
-      ui: welderNuxtUiTheme,
     }),
     viteSingleFile(),
     renameIndexToUi(),

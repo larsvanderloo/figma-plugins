@@ -26,11 +26,10 @@ The iframe uses Nuxt UI v4 through `@nuxt/ui/vite` and
 - Use `W*` wrappers only when Welder adds behavior, layout semantics, or a
   reusable product surface.
 - Current Welder primitives live in `src/ui/components/ui/`.
-- Global Nuxt UI theme overrides live in `src/ui/theme/nuxt-ui.ts`.
 - The app root must stay wrapped in `UApp`.
 
 Do not create wrapper components just to rename Nuxt UI components. Prefer
-theme configuration, semantic Nuxt UI tokens, and direct `U*` composition.
+semantic Nuxt UI tokens and direct `U*` composition.
 
 ## Generated Files And Caches
 

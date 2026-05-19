@@ -1,13 +1,3 @@
-<!--
-  SlideThemeSwitcher — slide-level Theme-collection mode picker. The
-  panel-level affordance is a compact "drill-down row" showing the
-  current theme as a swatch + name + chevron; clicking opens a modal
-  with the full preview-tile grid. iOS Settings → Wallpaper pattern:
-  everyday view stays compact, the rich picker is one tap away.
-
-  No "Auto" option: every selection pins an explicit mode. Hidden
-  entirely (by parent v-if) when no Theme collection exists.
--->
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { ThemeSection, ThemeMode } from '../../../types';
@@ -79,10 +69,7 @@ function onThemeChange(value: string | number | undefined): void {
 </script>
 
 <template>
-  <UModal v-model:open="open" :ui="{ content: 'sm:max-w-md' }">
-    <!--
-      Trigger row — looks like an iOS settings cell. Whole row tappable.
-    -->
+  <UModal v-model:open="open">
     <UButton
       type="button"
       color="neutral"
@@ -90,10 +77,9 @@ function onThemeChange(value: string | number | undefined): void {
       block
       class="-mx-2 w-[calc(100%+1rem)] px-2 py-1"
       :aria-label="activeMode ? 'Kleurthema: ' + activeMode.name + ' — wijzigen' : 'Kleurthema kiezen'"
-      :ui="{ base: 'justify-between gap-3' }"
     >
       <span class="text-sm font-medium text-default">Kleurthema</span>
-      <span class="flex items-center gap-2 min-w-0 text-muted">
+      <span class="flex min-w-0 items-center gap-2 text-muted">
         <span
           v-if="activeMode"
           class="size-4 rounded-full ring-1 ring-black/5 shrink-0"
@@ -107,33 +93,25 @@ function onThemeChange(value: string | number | undefined): void {
     </UButton>
 
     <template #content>
-      <div class="p-5 space-y-4">
+      <div class="space-y-4 p-5">
         <div class="flex items-center justify-between">
           <h3 class="text-sm font-medium text-default">Kleurthema</h3>
           <UButton
             color="neutral"
             variant="ghost"
-            size="xs"
             square
             icon="i-lucide-x"
             aria-label="Sluiten"
             @click="open = false"
           />
         </div>
-          <URadioGroup
-            :model-value="activeId"
-            :items="themeModeItems"
-            value-key="value"
-            variant="card"
+        <URadioGroup
+          :model-value="activeId"
+          :items="themeModeItems"
+          value-key="value"
+          variant="card"
           orientation="horizontal"
           indicator="hidden"
-          size="sm"
-          :ui="{
-            fieldset: 'grid grid-cols-2 gap-3',
-            item: 'p-0 overflow-hidden',
-            wrapper: 'w-full',
-            label: 'w-full cursor-pointer',
-          }"
           @update:model-value="onThemeChange"
         >
           <template #label="{ item }">
@@ -172,7 +150,7 @@ function onThemeChange(value: string | number | undefined): void {
                 </span>
                 <span
                   v-if="item.value === activeId"
-                  class="size-4 rounded-full bg-primary text-inverted flex items-center justify-center shrink-0"
+                  class="flex size-4 shrink-0 items-center justify-center rounded-full bg-primary text-inverted"
                   aria-hidden="true"
                 >
                   <UIcon name="i-lucide-check" class="size-2.5" />

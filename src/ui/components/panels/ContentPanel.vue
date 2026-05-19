@@ -1,24 +1,12 @@
-<!--
-  ContentPanel — orkestrator voor de Content-tab (spec §9 T11 + §13 T31).
-
-  Twee show-only-if-present-secties:
-    1. Cards (v-for over `useCardEditor().cards`).
-    2. Timeline (v-for over `useTimelineEditor().items`).
-
-  Elke composable wikkelt store + bridge (incl. card-visual previews).
--->
 <script setup lang="ts">
 import CardItemEditor from '../editors/CardItemEditor.vue';
 import TimelineItemEditor from '../editors/TimelineItemEditor.vue';
-import WCard from '../ui/WCard.vue';
 import type { TimelineItem } from '../../../types';
 import { useCardEditor } from '../../composables/useCardEditor';
 import { useTimelineEditor } from '../../composables/useTimelineEditor';
 
 const cardEditor = useCardEditor();
 const timelineEditor = useTimelineEditor();
-
-// Card-size tile picker options. Order: text only → compact → default.
 type CardSize = 'NO_ICON' | 'SM' | 'LG';
 
 const sizeOptions: Array<{ value: CardSize; label: string; icon: string }> = [
@@ -35,7 +23,7 @@ function onCardSizeChange(value: string | number | undefined): void {
 </script>
 
 <template>
-  <div class="space-y-5">
+  <div class="space-y-4">
     <UEmpty
       v-if="
         cardEditor.cards.length === 0 &&
@@ -44,12 +32,11 @@ function onCardSizeChange(value: string | number | undefined): void {
       icon="i-lucide-layers"
       description="Geen onderdelen op deze slide."
       variant="naked"
-      size="sm"
     />
 
-    <section v-if="cardEditor.cards.length > 0" class="space-y-2">
+    <section v-if="cardEditor.cards.length > 0" class="space-y-4">
       <h2 class="text-base font-semibold text-highlighted px-1">Kaarten</h2>
-      <WCard title="Kaartweergave">
+      <UCard title="Kaartweergave">
         <URadioGroup
           :model-value="cardEditor.cardSize"
           :items="sizeOptions"
@@ -57,13 +44,6 @@ function onCardSizeChange(value: string | number | undefined): void {
           variant="card"
           orientation="horizontal"
           indicator="hidden"
-          size="md"
-          :ui="{
-            fieldset: 'grid grid-cols-3 gap-2',
-            item: 'relative overflow-hidden p-0',
-            wrapper: 'w-full',
-            label: 'w-full cursor-pointer',
-          }"
           @update:model-value="onCardSizeChange"
         >
           <template #label="{ item }">
@@ -96,7 +76,7 @@ function onCardSizeChange(value: string | number | undefined): void {
             </span>
           </template>
         </URadioGroup>
-      </WCard>
+      </UCard>
       <CardItemEditor
         v-for="(card, idx) in cardEditor.cards"
         :key="card.cardNodeId"
@@ -110,7 +90,7 @@ function onCardSizeChange(value: string | number | undefined): void {
       />
     </section>
 
-    <section v-if="timelineEditor.items.length > 0" class="space-y-2">
+    <section v-if="timelineEditor.items.length > 0" class="space-y-4">
       <h2 class="text-base font-semibold text-highlighted px-1">Tijdlijn</h2>
       <TimelineItemEditor
         v-for="(item, idx) in timelineEditor.items"

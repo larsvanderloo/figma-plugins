@@ -1,9 +1,3 @@
-<!--
-  BadgeEditor — editor for the General → Badge section.
-
-  Uses WInput (commits on blur / Enter) so the sandbox only sees one
-  update per finished edit — no keystroke debounce.
--->
 <script setup lang="ts">
 import IconPicker from '../ui/IconPicker.vue';
 import WInput from '../ui/WInput.vue';
@@ -52,12 +46,6 @@ function onVisibilityToggle(next: boolean): void {
       <USwitch
         :model-value="modelValue.visible"
         label="Tonen"
-        size="xs"
-        :ui="{
-          root: 'flex-row-reverse items-center',
-          wrapper: 'me-2 ms-0',
-          label: 'text-xs font-medium text-muted',
-        }"
         @update:model-value="onVisibilityToggle"
       />
     </template>
@@ -70,7 +58,6 @@ function onVisibilityToggle(next: boolean): void {
       <WInput
         :model-value="modelValue.label"
         placeholder="Bijv. Belangrijk"
-        size="md"
         :disabled="modelValue.visible === false"
         class="flex-1"
         @update:model-value="onLabelCommit"

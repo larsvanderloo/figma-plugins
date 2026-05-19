@@ -1,16 +1,6 @@
-<!--
-  GraphsPanel — host for TableEditor.
-
-  Render-matrix:
-    - `view.state.graphs === null`              → empty-state (already filtered by App.vue, this component does not render then)
-    - 1 instance                                → TableEditor direct (no selector)
-    - 2+ instances                              → USelectMenu + TableEditor for the selected one
-    - 0 instances                               → defensieve fallback met empty-copy
--->
 <script setup lang="ts">
 import { computed } from 'vue';
 import TableEditor from '../editors/TableEditor.vue';
-import WCard from '../ui/WCard.vue';
 import { usePluginView } from '../../stores/usePluginView';
 import { useTableEditor } from '../../composables/useTableEditor';
 
@@ -18,8 +8,6 @@ const view = usePluginView();
 const tableEditor = useTableEditor();
 
 const showSelector = computed<boolean>(() => tableEditor.instances.length >= 2);
-
-/** USelectMenu-items — labels kort houden zodat de dropdown compact blijft. */
 const selectorItems = computed(() => {
   return tableEditor.instances.map((inst, idx) => ({
     label: inst.label !== '' ? inst.label : `Tabel ${idx + 1}`,
@@ -29,33 +17,29 @@ const selectorItems = computed(() => {
 </script>
 
 <template>
-  <section class="space-y-2">
+  <section class="space-y-4">
     <h2 class="text-base font-semibold text-highlighted px-1">
       {{ showSelector ? 'Tabellen' : 'Tabel' }}
     </h2>
 
-    <!-- Empty-state defensief (App.vue filtert deze component normaal weg). -->
     <UEmpty
       v-if="tableEditor.instances.length === 0"
       icon="i-lucide-table"
       description="Geen tabellen op deze slide."
       variant="naked"
-      size="sm"
     />
 
-    <!-- Instance-selector: alleen bij 2+ instances -->
-    <div class="space-y-3">
-      <WCard v-if="showSelector">
-        <UFormField name="graph-instance" label="Tabel" size="lg">
+    <div class="space-y-4">
+      <UCard v-if="showSelector">
+        <UFormField name="graph-instance" label="Tabel">
           <USelectMenu
             v-model="tableEditor.selectedId"
             :items="selectorItems"
             value-key="value"
-            size="lg"
             class="w-full"
           />
         </UFormField>
-      </WCard>
+      </UCard>
 
       <TableEditor
         v-if="

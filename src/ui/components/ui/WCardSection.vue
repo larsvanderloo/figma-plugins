@@ -20,7 +20,7 @@ const props = withDefaults(
 const sectionClass = computed(() => [
   'w-card-section',
   props.spacious ? 'space-y-4' : '',
-  'px-4 py-4',
+  'py-4',
   props.ui?.root ?? '',
 ]);
 

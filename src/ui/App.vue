@@ -1,18 +1,3 @@
-<!--
-  Welder Slide Editor — iframe root.
-
-  Layout:
-    - Splash while the sandbox initializes and reconciles stale icons.
-    - Tabbed sidebar for Basis and Onderdelen, with panel components owning
-      their domain editors.
-    - Export modal, resize handle, and bottom navigation live at app-shell
-      level until they are split into dedicated shell components.
-
-  Bridge-wiring:
-    - onMounted registers the bridge handler for init / slide-loaded /
-      slide-summary / target-updated / export responses, then posts ui-ready.
-    - Domain edits flow through composables and the typed bridge contract.
--->
 <script setup lang="ts">
 import { useToast } from '@nuxt/ui/composables';
 import { PDFDocument } from 'pdf-lib';
@@ -29,11 +14,6 @@ import { getLucideSvg } from './lucide-svgs';
 import { useIconRecents } from './stores/useIconRecents';
 import { useNotifications } from './stores/useNotifications';
 import { usePluginView } from './stores/usePluginView';
-
-// Constant PDF metadata applied to every Welder export. Title is set
-// per-document by the caller. Copyright lives in /Subject because
-// pdf-lib has no first-class XMP rights API and /Subject is the
-// closest standard /Info slot every PDF reader surfaces.
 const PDF_AUTHOR = 'Welder B.V.';
 const PDF_CREATOR = 'Welder Slide Editor';
 const PDF_PRODUCER = 'Welder Slide Editor';
@@ -73,41 +53,15 @@ function downloadBlob(bytes: Uint8Array, filename: string, mime: string): void {
 const bridge = usePluginBridge();
 const view = usePluginView();
 const exporter = useExport();
-
-// Surfaced as a "v0.x.y" UBadge in the splash and header so plugin users
-// and beta testers reporting bugs can identify the package build.
 const appVersion = APP_VERSION;
 const iconRecents = useIconRecents();
 const notifications = useNotifications();
-// Hand the Nuxt UI toast handle to the notifications store. Resolves
-// via inject() chain through `<UApp>`, so this MUST happen inside a
-// component setup. Doing it once at app root.
 notifications.init(useToast());
-
-// Auto-reconcile Card + Badge icons after library republishes wipe
-// their icon-slot child overrides. Mounted at app root (not inside the
-// per-tab editors) so it fires even when the user is on a tab whose
-// panel isn't currently displaying the affected section.
 useIconReconcile();
-
-// true until the first 'init' message arrives from main thread
 const initializing = ref<boolean>(true);
-
-// Cross-slide icon reconcile state. Sandbox walks every slide on
-// startup and posts `stale-icons` with the list of stale cards/badges.
-// While this is in flight (between ui-ready and the all-clear), the
-// splash stays visible so the user opens a fully-reconciled file
-// instead of seeing master defaults flash before getting fixed.
 const reconciling = ref<boolean>(true);
-// Hard cap on splash time, in case the stale-icons message never
-// arrives (e.g. very old sandbox build, or scan errors out silently).
 const STALE_DEADLINE_MS = 8000;
-// Grace period after the LAST update-card post is fired — we don't
-// wait for every individual target-updated ack, we assume the bridge
-// processes them in order and 1.5s is plenty for the queue to drain.
 const STALE_FALLBACK_MS = 1500;
-// Show the splash while EITHER init is pending OR reconcile is in
-// flight (capped by the safety timer below).
 const showSplash = computed<boolean>(() => initializing.value || reconciling.value);
 
 let reconcileFallbackTimer: ReturnType<typeof setTimeout> | null = null;
@@ -123,15 +77,7 @@ function finishReconcile(): void {
   }
   reconciling.value = false;
 }
-// Safety: never trap the user behind the splash if `stale-icons`
-// somehow never arrives.
 reconcileDeadlineTimer = setTimeout(finishReconcile, STALE_DEADLINE_MS);
-
-// ── Resize handle ──────────────────────────────────────────────────
-// Drag the bottom-right corner to resize the plugin window. Posts a
-// throttled `resize-ui` on every animation frame so the iframe tracks
-// the cursor 1:1 without flooding the bridge. Sandbox both applies the
-// size AND persists it via clientStorage.
 const MIN_W = 380;
 const MIN_H = 480;
 const resizing = ref<boolean>(false);
@@ -171,8 +117,6 @@ function onResizePointerUp(): void {
     cancelAnimationFrame(resizeFrame);
     resizeFrame = null;
   }
-  // Final post with the latest values so the persisted size matches
-  // exactly what the user sees on release.
   if (pendingW > 0 && pendingH > 0) {
     bridge.post({ type: 'resize-ui', width: pendingW, height: pendingH });
   }
@@ -180,48 +124,25 @@ function onResizePointerUp(): void {
   window.removeEventListener('pointerup', onResizePointerUp);
   window.removeEventListener('pointercancel', onResizePointerUp);
 }
-
-// Bottom-nav tab state. `general` = title / badge / image / theme;
-// `content` = cards / timeline / graphs. Defaults to general
-// since slide identity edits are the most common entry point.
 type TabId = 'general' | 'content';
 const activeTab = ref<TabId>('general');
 
 const hasContentOrGraphs = computed<boolean>(() => view.hasContent || view.hasGraphs);
-
-// Auto-flip to whichever tab actually has content when switching slides
-// so the user never lands on an empty tab. Watches the panel-presence
-// flags rather than the slide id so it also handles content appearing
-// asynchronously (e.g. after image-preview hydration).
 watch(
   () => ({ g: view.hasGeneral, c: hasContentOrGraphs.value }),
   function (next, prev) {
     if (activeTab.value === 'general' && !next.g && next.c) activeTab.value = 'content';
     else if (activeTab.value === 'content' && !next.c && next.g) activeTab.value = 'general';
-    // Surface initial choice when a slide is first picked.
     if (!prev || (!prev.g && !prev.c)) {
       activeTab.value = next.g ? 'general' : next.c ? 'content' : 'general';
     }
   },
   { immediate: true },
 );
-
-// One-shot guard: when the sandbox hydrates the recents list via
-// `setItems`, the deep watcher below would otherwise echo the
-// just-loaded array back as a save. Flipped on hydration, consumed
-// by the next watcher tick.
 let skipIconRecentsSave = false;
-
-// Export-modal state: target = wat exporteren we, format = welk
-// bestandsformaat. Beide blijven hangen tussen exports zodat een
-// herhaalde export dezelfde keuze toont.
 const exportModalOpen = ref<boolean>(false);
 const exportTarget = ref<'slide' | 'presentation'>('slide');
 const exportFormat = ref<'PDF' | 'PNG'>('PDF');
-
-// PNG van de hele presentatie wordt nog niet ondersteund — we snappen
-// het formaat terug naar PDF zodra de user de presentatie als target
-// kiest.
 watch(exportTarget, (next) => {
   if (next === 'presentation' && exportFormat.value === 'PNG') {
     exportFormat.value = 'PDF';
@@ -269,8 +190,6 @@ function onExportTargetChange(value: string | number | undefined): void {
 }
 
 function openExportModal(): void {
-  // Default naar 'presentation' als er geen actieve slide is — anders
-  // staat de modal op een disabled-optie en kan de user niet door.
   if (view.state.currentSlideId === null) {
     exportTarget.value = 'presentation';
   }
@@ -287,9 +206,6 @@ function submitExport(): void {
   }
   exportModalOpen.value = false;
 }
-
-// Register bridge-handlers vóór de ui-ready handshake zodat we het init-
-// bericht niet missen (main kan onmiddellijk terugantwoorden).
 bridge.onMessage((msg) => {
   if (msg.type === 'init') {
     if (msg.runtime !== undefined) {
@@ -304,10 +220,6 @@ bridge.onMessage((msg) => {
     return;
   }
   if (msg.type === 'stale-icons') {
-    // Re-apply each stale entry by sending the same update messages
-    // the picker uses. Sandbox handles them per-slide. After firing
-    // the batch, start a short grace timer so the splash stays
-    // visible while the bridge drains — sandbox applies are async.
     const cardCount = msg.cards.length;
     const badgeCount = msg.badges.length;
     console.log(
@@ -339,9 +251,6 @@ bridge.onMessage((msg) => {
         payload: { icon: entry.iconIntended, iconSvg: svg },
       });
     }
-    // Even with zero stale entries we still need to clear the splash —
-    // the sandbox always posts stale-icons (possibly empty) once its
-    // scan finishes.
     if (cardCount === 0 && badgeCount === 0) {
       finishReconcile();
     } else {
@@ -358,11 +267,6 @@ bridge.onMessage((msg) => {
     return;
   }
   if (msg.type === 'icon-recents') {
-    // Sandbox-driven hydration of recently-picked icon names from
-    // figma.clientStorage. If the sandbox has nothing stored AND the
-    // legacy iframe localStorage key from the pre-Pinia version still
-    // holds entries, migrate them once: populate the store, let the
-    // watcher persist them to clientStorage, and clear localStorage.
     if (msg.items.length === 0) {
       let migrated: string[] | null = null;
       try {
@@ -375,26 +279,17 @@ bridge.onMessage((msg) => {
           }
         }
       } catch {
-        // ignore — corrupt or unreadable; fall through to empty
       }
       if (migrated !== null) {
-        // Migration path: don't skip the next save — the sandbox needs
-        // to receive these so they survive the next plugin open.
         iconRecents.setItems(migrated);
         return;
       }
     }
-    // Skip the echo-save: this setItems is hydrating from the sandbox,
-    // not a user action.
     skipIconRecentsSave = true;
     iconRecents.setItems(msg.items);
     return;
   }
   if (msg.type === 'presentation-pdf-parts') {
-    // Merge the per-slide single-page PDFs into one multi-page PDF,
-    // stamp Welder metadata, trigger the download. Done off the
-    // message-handler tick so we don't block the bridge while pdf-lib
-    // does its work.
     void (async () => {
       try {
         const merged = await PDFDocument.create();
@@ -414,10 +309,6 @@ bridge.onMessage((msg) => {
     return;
   }
   if (msg.type === 'document-ready') {
-    // PDF: round-trip through pdf-lib so we can stamp Welder metadata
-    // (title/author/creator) on the document. PNG: no metadata path,
-    // download the raw bytes. The browser's own download UI is the
-    // success signal — no toast for the happy path.
     if (msg.format === 'PNG') {
       try {
         downloadBlob(msg.bytes, msg.filename, 'image/png');
@@ -441,21 +332,13 @@ bridge.onMessage((msg) => {
     return;
   }
   if (msg.type === 'target-updated' && msg.ok === false) {
-    // Surface sandbox-side failures via the Nuxt UI toaster so they
-    // don't disappear silently. Successful target-updated messages
-    // stay quiet for now (no save-indicator yet — T8+ scope).
     notifications.pushError(
       'Bewerking mislukt',
       typeof msg.error === 'string' && msg.error.length > 0 ? msg.error : undefined,
     );
     return;
   }
-  // target-updated (ok=true): toekomstige save-indicator (T8+). Nu stil negeren.
 });
-
-// Persist recents to clientStorage whenever the store mutates (i.e.,
-// the user picks an icon in any IconPicker instance). The sandbox's
-// `set-icon-recents` handler writes the array verbatim.
 watch(
   () => iconRecents.items,
   (next) => {
@@ -475,10 +358,6 @@ onMounted(() => {
 
 <template>
   <UApp>
-    <!-- Splash: plugin initializing — shown until 'init' arrives.
-         Sandbox does the heavy work (font load, initial-slide scan,
-         image-preview prefetch) before posting init, so when this
-         hides the UI is already populated. -->
     <div
       v-if="showSplash"
       class="flex h-full flex-col items-center justify-center bg-elevated text-default"
@@ -492,12 +371,9 @@ onMounted(() => {
       </div>
     </div>
 
-    <!-- Real UI — shown once 'init' received AND the cross-slide
-         icon-reconcile pass finishes (or its deadline times out). -->
     <div v-else class="relative flex h-full flex-col bg-elevated text-default">
       <main class="flex-1 overflow-y-auto">
         <div class="mx-auto max-w-2xl space-y-3 p-3 pb-28">
-          <!-- Empty states first; they pre-empt the tab content. -->
           <UEmpty
             v-if="view.noSlide"
             icon="i-lucide-mouse-pointer-click"
@@ -514,10 +390,6 @@ onMounted(() => {
             size="sm"
           />
 
-          <!-- Tab-based content. Only one panel renders at a time so the
-               page stays focused. GeneralPanel handles its own internal
-               disable state; ContentPanel + GraphsPanel sit in a fieldset
-               that disables when the slide is skipped. -->
           <template v-else>
             <Transition
               mode="out-in"
@@ -558,63 +430,47 @@ onMounted(() => {
             </Transition>
           </template>
 
-          <!-- Export modal: kies wat (huidige slide / hele presentatie)
-               en welk formaat (PDF / PNG). PNG van een hele presentatie
-               geeft één brede page-PNG; PDF geeft een multi-page PDF. -->
           <UModal
             v-model:open="exportModalOpen"
             title="Exporteren"
-            :ui="{
-              overlay: 'bg-black/40',
-              content: 'max-w-md divide-y-0',
-            }"
           >
             <template #body>
-              <div class="space-y-4">
-                <UFormField label="Wat wil je exporteren?" name="export-target">
-                  <URadioGroup
-                    :model-value="exportTarget"
-                    :items="exportTargetItems"
-                    value-key="value"
-                    variant="card"
-                    orientation="horizontal"
-                    indicator="hidden"
-                    size="sm"
-                    :ui="{
-                      fieldset: 'grid grid-cols-2 gap-2',
-                      item: 'p-0 overflow-hidden',
-                      wrapper: 'w-full',
-                      label: 'w-full cursor-pointer',
-                    }"
-                    @update:model-value="onExportTargetChange"
-                  >
-                    <template #label="{ item }">
-                      <span
-                        class="flex flex-col items-start gap-2 p-3 text-left transition-colors"
-                        :class="
-                          exportTarget === item.value
-                            ? 'bg-primary/5 text-primary'
-                            : 'bg-default text-default hover:bg-elevated'
-                        "
-                      >
-                        <UIcon :name="item.icon" class="h-5 w-5" />
-                        <span>
-                          <span class="block text-sm font-medium">{{ item.label }}</span>
-                          <span class="block text-xs text-muted">{{ item.description }}</span>
-                        </span>
+              <UFormField label="Wat wil je exporteren?" name="export-target">
+                <URadioGroup
+                  :model-value="exportTarget"
+                  :items="exportTargetItems"
+                  value-key="value"
+                  variant="card"
+                  orientation="horizontal"
+                  indicator="hidden"
+                  @update:model-value="onExportTargetChange"
+                >
+                  <template #label="{ item }">
+                    <span
+                      class="flex flex-col items-start gap-2 p-3 text-left transition-colors"
+                      :class="
+                        exportTarget === item.value
+                          ? 'bg-primary/5 text-primary'
+                          : 'bg-default text-default hover:bg-elevated'
+                      "
+                    >
+                      <UIcon :name="item.icon" class="h-5 w-5" />
+                      <span>
+                        <span class="block text-sm font-medium">{{ item.label }}</span>
+                        <span class="block text-xs text-muted">{{ item.description }}</span>
                       </span>
-                    </template>
-                  </URadioGroup>
-                </UFormField>
-                <UFormField label="Formaat" name="export-format">
-                  <USelect
-                    v-model="exportFormat"
-                    :items="formatItems"
-                    icon="i-lucide-file"
-                    class="w-full"
-                  />
-                </UFormField>
-              </div>
+                    </span>
+                  </template>
+                </URadioGroup>
+              </UFormField>
+              <UFormField label="Formaat" name="export-format">
+                <USelect
+                  v-model="exportFormat"
+                  :items="formatItems"
+                  icon="i-lucide-file"
+                  class="w-full"
+                />
+              </UFormField>
             </template>
             <template #footer>
               <div class="flex w-full items-center justify-end gap-2">
@@ -636,22 +492,11 @@ onMounted(() => {
         </div>
       </main>
 
-      <!--
-        Bottom scrim — gradient fade from page background up into
-        transparent, so the scrolling content visually tucks beneath
-        the floating navbar instead of clashing through it. Same iOS
-        pattern Music / Files / Health use under their tab bars.
-      -->
       <div
         class="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-linear-to-t from-elevated from-30% to-transparent"
         aria-hidden="true"
       />
 
-      <!--
-        Floating bottom navbar — brand on the left, tab segments on the
-        right. Sits over the scrim + scrolling content; `pb-28` on the
-        main gutter keeps the last bits of content above the navbar.
-      -->
       <nav
         class="pointer-events-none absolute inset-x-0 bottom-4 flex items-center justify-center gap-2 px-3"
         aria-label="Welder-navigatie"
@@ -659,11 +504,6 @@ onMounted(() => {
         <div
           class="pointer-events-auto flex items-center gap-2.5 rounded-full bg-default/65 backdrop-blur-xl pl-3.5 pr-3 py-3 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.22)] ring-1 ring-default/40"
         >
-          <!--
-            Inline W-only mark — same paths as the full Welder logo
-            without the wordmark, so the navbar reads as a brand icon
-            instead of a logo card. Fill is the Welder brand orange.
-          -->
           <svg
             viewBox="100 100 720 540"
             class="h-7 w-auto shrink-0"
@@ -686,22 +526,10 @@ onMounted(() => {
             :content="false"
             variant="pill"
             size="lg"
-            :ui="{
-              root: 'w-[14rem]',
-              list: 'grid grid-cols-[6rem_8rem] rounded-full bg-elevated p-1',
-              indicator: 'rounded-full bg-default shadow-[0_1px_2px_rgba(0,0,0,0.06)]',
-              trigger: 'h-8 rounded-full px-0 data-[state=active]:text-default',
-              leadingIcon: 'size-4',
-            }"
             @update:model-value="onActiveTabChange"
           />
         </div>
 
-        <!--
-          Floating export button — same height + glass treatment as the
-          nav pill. Sits to the right of the tab picker so the existing
-          export entry at the bottom of the scroll area can be retired.
-        -->
         <UButton
           color="neutral"
           variant="ghost"
@@ -710,16 +538,10 @@ onMounted(() => {
           class="pointer-events-auto size-12 rounded-full bg-default/65 backdrop-blur-xl shadow-[0_12px_32px_-12px_rgba(0,0,0,0.18)] ring-1 ring-default/40 text-muted hover:text-primary hover:bg-default/70 transition-colors flex items-center justify-center"
           :title="'Exporteer · v' + appVersion"
           aria-label="Exporteer"
-          :ui="{ leadingIcon: 'size-5' }"
           @click="openExportModal"
         />
       </nav>
 
-      <!--
-        Version label — tiny muted text centered at the very bottom of
-        the iframe, below the floating navbar. Just enough to identify
-        which build is running without competing with the controls.
-      -->
       <div
         class="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center"
         aria-hidden="true"
@@ -727,13 +549,6 @@ onMounted(() => {
         <span class="text-[10px] text-muted/50 tracking-wide">v{{ appVersion }}</span>
       </div>
 
-      <!--
-        Resize handle — drag the bottom-right corner to resize the plugin
-        window. Sandbox persists the size via clientStorage so reopening
-        the plugin restores the last picked dimensions. While dragging,
-        `cursor-nwse-resize` is forced on the whole page so the cursor
-        doesn't flicker as it crosses over child elements.
-      -->
       <div
         :class="[
           'absolute bottom-0 right-0 size-6 cursor-nwse-resize select-none flex items-end justify-end p-1.5 text-muted/60 hover:text-muted transition-colors',
@@ -753,8 +568,6 @@ onMounted(() => {
           />
         </svg>
       </div>
-      <!-- Lock cursor + disable selection globally while dragging so the
-           pointer doesn't flicker over inputs / buttons. -->
       <div
         v-if="resizing"
         class="fixed inset-0 z-9999 cursor-nwse-resize select-none"
