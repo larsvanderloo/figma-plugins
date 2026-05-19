@@ -227,7 +227,7 @@ function onAccentFocusOut(event: FocusEvent): void {
   <div class="space-y-4">
     <div v-if="modelValue.size !== null" class="space-y-1.5">
       <div class="flex items-center justify-between gap-2 h-6">
-        <label class="text-sm font-medium text-default">Tekstgrootte</label>
+        <label class="text-sm font-medium text-default">Grootte</label>
       </div>
       <!--
         Single absolutely-positioned pill animates between segments via

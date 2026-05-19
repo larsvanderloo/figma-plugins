@@ -1,15 +1,15 @@
 {
   "name": "welder-editor",
-  "version": "0.5.193",
+  "version": "0.5.200",
   "type": "module",
   "scripts": {
     "build:version": "node scripts/write-app-version.mjs",
     "build": "npm run build:aliases && npm run build:svgs && npm run build:ui && npm run build:widget",
     "build:aliases": "node generate-lucide-aliases.mjs",
     "build:svgs": "node generate-lucide-svgs.mjs",
-    "build:ui": "npm run build:version && vite build",
+    "build:ui": "npm run build:version && vite build && node scripts/normalize-ui-bundle.mjs",
     "build:widget": "node esbuild.config.mjs",
-    "watch": "npm run build:version && npm run build:aliases && npm run build:svgs && concurrently --kill-others-on-fail \"node scripts/write-app-version.mjs --watch\" \"vite build --watch\" \"node esbuild.config.mjs --watch\"",
+    "watch": "npm run build:version && npm run build:aliases && npm run build:svgs && concurrently --kill-others-on-fail \"node scripts/write-app-version.mjs --watch\" \"vite build --watch\" \"node scripts/normalize-ui-bundle.mjs --watch\" \"node esbuild.config.mjs --watch\"",
     "version:assert": "node scripts/assert-bundle-version.mjs",
     "debug:stop": "node scripts/stop-debug-sessions.mjs",
     "debug:restart": "npm run debug:stop && npm run debug:session",

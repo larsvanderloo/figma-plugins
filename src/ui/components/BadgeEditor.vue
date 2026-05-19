@@ -49,7 +49,7 @@ function onVisibilityToggle(next: boolean): void {
 <template>
   <div class="space-y-1.5">
     <div class="flex items-center justify-between gap-2 h-6">
-      <span class="text-sm font-medium text-default">Badge</span>
+      <span class="text-sm font-medium text-default">Label</span>
       <label
         v-if="modelValue.visible !== null"
         class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none"

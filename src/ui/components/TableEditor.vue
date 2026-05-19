@@ -419,7 +419,7 @@ watch(csvText, () => {
     class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
   >
     <section class="space-y-4 px-5 py-6">
-      <h3 class="text-sm font-semibold text-highlighted">Tabel</h3>
+      <h3 class="text-sm font-semibold text-highlighted">Weergave</h3>
       <UFormField name="table-width" label="Breedte" size="md">
         <div class="flex gap-2">
           <UButton
@@ -512,7 +512,7 @@ watch(csvText, () => {
           >
             <div class="flex items-center justify-between gap-2 px-4 py-2 bg-elevated">
               <div class="flex items-center gap-2">
-                <span class="text-sm font-semibold text-default">Header</span>
+                <span class="text-sm font-semibold text-default">Koprij</span>
                 <UBadge
                   v-if="truncationFlags.header"
                   color="secondary"

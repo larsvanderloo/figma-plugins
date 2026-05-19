@@ -371,7 +371,7 @@ function updateColumnSubheader(index: number, value: string): void {
         <!-- Card-body: 3 inputs -->
         <div class="space-y-2 px-4 py-3 bg-elevated">
           <div class="grid grid-cols-[80px_1fr] items-center gap-3">
-            <span class="text-xs font-medium text-muted">Header</span>
+            <span class="text-xs font-medium text-muted">Titel</span>
             <BInput
               :model-value="col.header"
               placeholder="Titel"
@@ -380,7 +380,7 @@ function updateColumnSubheader(index: number, value: string): void {
             />
           </div>
           <div class="grid grid-cols-[80px_1fr] items-center gap-3">
-            <span class="text-xs font-medium text-muted">Subheader</span>
+            <span class="text-xs font-medium text-muted">Subtitel</span>
             <BInput
               :model-value="col.subheader"
               placeholder="Beschrijving"

@@ -15,6 +15,7 @@ const DEBUG_PATTERNS = [
   /\bdebug-log-server\.mjs\b/,
   /\bwrite-debug-manifests\.mjs --watch\b/,
   /\bwrite-app-version\.mjs --watch\b/,
+  /\bnormalize-ui-bundle\.mjs --watch\b/,
 ];
 
 function sleep(ms) {

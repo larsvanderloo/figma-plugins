@@ -20,7 +20,7 @@ interface Props {
   previewUrl?: string | null;
   sizeBytes?: number | null;
   /** When true, the icon picker stays visible but is non-interactive
-   *  (used by the global "Text only" card-size tile). */
+   *  (used by the global "Alleen tekst" card-size tile). */
   iconDisabled?: boolean;
 }
 
@@ -86,14 +86,14 @@ async function onFileSelected(event: Event): Promise<void> {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <section class="space-y-4 px-5 py-5">
     <div class="flex items-center justify-between gap-3">
-      <h3 class="text-sm font-medium text-default">Kaart {{ index }}</h3>
+      <h3 class="text-sm font-semibold text-highlighted">Kaart {{ index }}</h3>
       <label
         v-if="modelValue.style !== null"
         class="flex items-center gap-2 text-xs text-muted cursor-pointer select-none"
       >
-        <span>Outline</span>
+        <span>Rand</span>
         <USwitch
           :model-value="modelValue.style === 'Outline'"
           size="xs"
@@ -103,6 +103,7 @@ async function onFileSelected(event: Event): Promise<void> {
     </div>
 
     <div v-if="hasVisualSlot" class="space-y-2">
+      <label class="text-sm font-medium text-default">Afbeelding</label>
       <div
         v-if="previewUrl"
         class="relative w-full overflow-hidden rounded-xl bg-muted select-none h-32"
@@ -133,30 +134,36 @@ async function onFileSelected(event: Event): Promise<void> {
       </div>
     </div>
 
-    <div class="flex items-center gap-2">
-      <IconPicker
-        :model-value="modelValue.icon ?? ''"
-        :disabled="iconDisabled || modelValue.icon === null"
-        @update:model-value="onIconChange"
-      />
-      <BInput
-        :model-value="modelValue.heading"
-        placeholder="Koptekst"
-        size="md"
-        class="flex-1"
-        @update:model-value="onHeadingCommit"
-      />
+    <div class="space-y-1.5">
+      <label class="text-sm font-medium text-default">Titel</label>
+      <div class="flex items-center gap-2">
+        <IconPicker
+          :model-value="modelValue.icon ?? ''"
+          :disabled="iconDisabled || modelValue.icon === null"
+          @update:model-value="onIconChange"
+        />
+        <BInput
+          :model-value="modelValue.heading"
+          placeholder="Koptekst"
+          size="md"
+          class="flex-1"
+          @update:model-value="onHeadingCommit"
+        />
+      </div>
     </div>
 
-    <BTextarea
-      :model-value="modelValue.paragraph"
-      :rows="3"
-      :autoresize="true"
-      placeholder="Alineatekst"
-      size="md"
-      class="w-full"
-      @update:model-value="onParagraphCommit"
-    />
+    <div class="space-y-1.5">
+      <label class="text-sm font-medium text-default">Omschrijving</label>
+      <BTextarea
+        :model-value="modelValue.paragraph"
+        :rows="3"
+        :autoresize="true"
+        placeholder="Alineatekst"
+        size="md"
+        class="w-full"
+        @update:model-value="onParagraphCommit"
+      />
+    </div>
 
     <input
       v-if="hasVisualSlot"
@@ -166,5 +173,5 @@ async function onFileSelected(event: Event): Promise<void> {
       style="display: none"
       @change="onFileSelected"
     />
-  </div>
+  </section>
 </template>

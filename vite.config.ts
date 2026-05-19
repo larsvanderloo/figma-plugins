@@ -29,7 +29,11 @@ function renameIndexToUi(): Plugin {
     async writeBundle(options) {
       const fs = await import('node:fs/promises');
       const path = await import('node:path');
-      const outDir = options.dir ?? 'dist';
+      const configDir = path.dirname(fileURLToPath(import.meta.url));
+      const outDirOption = options.dir ?? fileURLToPath(new URL('./dist', import.meta.url));
+      const outDir = path.isAbsolute(outDirOption)
+        ? outDirOption
+        : path.resolve(configDir, outDirOption);
       const srcPath = path.join(outDir, 'index.html');
       const destPath = path.join(outDir, 'ui.html');
       try {

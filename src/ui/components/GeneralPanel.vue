@@ -2,10 +2,10 @@
   GeneralPanel — orkestrator voor de General-tab.
 
   Vier show-only-if-present-secties:
-    1. Weergave            — theme picker + visibility (skip) toggle.
-    2. Title & Description — TitleDescriptionEditor.
-    3. Badge                — BadgeEditor.
-    4. Image                — ImageEditor.
+    1. Presentatie — theme picker + visibility (skip) toggle.
+    2. Tekst       — TitleDescriptionEditor.
+    3. Badge       — BadgeEditor.
+    4. Afbeelding  — ImageEditor.
 
   Elke sectie rendert alleen als de bijbehorende composable een non-null
   model exposeert (de composable wikkelt store + bridge).
@@ -28,13 +28,11 @@ const imageEditor = useImageEditor();
 const view = usePluginView();
 const settings = useSlideSettings();
 
-// Per-section visibility flags — the inset separators between
-// sections are rendered only when BOTH the previous and the next
-// section are present, so the divider count tracks the section count.
 const hasTheme = computed<boolean>(() => view.state.general?.theme !== null && view.state.general?.theme !== undefined);
 const hasSkip = computed<boolean>(
   () => view.currentSummary !== null && view.currentSummary.isSkipped !== null,
 );
+const hasPresentation = computed<boolean>(() => hasTheme.value || hasSkip.value);
 const hasTitleDesc = computed<boolean>(
   () => titleDescriptionEditor.model !== null && titleDescriptionEditor.model !== undefined,
 );
@@ -44,12 +42,6 @@ const hasBadge = computed<boolean>(
 const hasImage = computed<boolean>(
   () => imageEditor.model !== null && imageEditor.model !== undefined,
 );
-
-const anyBeforeTitleDesc = computed<boolean>(() => hasTheme.value || hasSkip.value);
-const anyBeforeBadge = computed<boolean>(
-  () => anyBeforeTitleDesc.value || hasTitleDesc.value,
-);
-const anyBeforeImage = computed<boolean>(() => anyBeforeBadge.value || hasBadge.value);
 
 function toggleSkip(visibleInPresentation: boolean): void {
   const summary = view.currentSummary;
@@ -66,19 +58,22 @@ function onThemeChange(modeId: string | null): void {
 </script>
 
 <template>
-  <section class="space-y-2">
+  <section class="space-y-3">
     <h2 class="text-base font-semibold text-highlighted px-1">Basis</h2>
     <div
-      class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden"
+      v-if="hasPresentation"
+      class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
     >
+      <div class="px-5 py-3">
+        <h3 class="text-sm font-semibold text-highlighted">Presentatie</h3>
+      </div>
+
       <section v-if="hasTheme" class="px-5 py-4">
         <SlideThemeSwitcher
           :theme="view.state.general!.theme!"
           @update:model-value="onThemeChange"
         />
       </section>
-
-      <div v-if="hasTheme && hasSkip" class="px-5"><USeparator /></div>
 
       <section v-if="hasSkip" class="px-5 py-4">
         <div class="flex items-center justify-between gap-3">
@@ -90,24 +85,30 @@ function onThemeChange(modeId: string | null): void {
           />
         </div>
       </section>
+    </div>
 
-      <!--
-        Editing sections disable when the slide is skipped — but the
-        Weergave/skip rows above stay interactive so the user can
-        un-hide. `contents` keeps the fieldset transparent so the
-        sections inside flow as siblings of the rest of the card.
-      -->
-      <fieldset
-        :disabled="view.currentSummary?.isSkipped === true"
-        :class="
-          view.currentSummary?.isSkipped === true
-            ? 'opacity-50 pointer-events-none'
-            : 'contents'
-        "
-        style="border: 0; padding: 0; margin: 0; min-width: 0"
+    <!--
+      Editing sections disable when the slide is skipped — but the
+      Presentatie/skip rows above stay interactive so the user can
+      un-hide the slide.
+    -->
+    <fieldset
+      :disabled="view.currentSummary?.isSkipped === true"
+      :class="
+        view.currentSummary?.isSkipped === true
+          ? 'space-y-3 opacity-50 pointer-events-none'
+          : 'space-y-3'
+      "
+      style="border: 0; padding: 0; margin: 0; min-width: 0"
+    >
+      <div
+        v-if="hasTitleDesc"
+        class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
       >
-        <div v-if="anyBeforeTitleDesc && hasTitleDesc" class="px-5"><USeparator /></div>
-        <section v-if="hasTitleDesc" class="px-5 py-4">
+        <div class="px-5 py-3">
+          <h3 class="text-sm font-semibold text-highlighted">Tekst</h3>
+        </div>
+        <section class="px-5 py-4">
           <TitleDescriptionEditor
             :model-value="titleDescriptionEditor.model!"
             :accent-pending="titleDescriptionEditor.accentPending"
@@ -118,18 +119,32 @@ function onThemeChange(modeId: string | null): void {
             @commit:visibility="titleDescriptionEditor.commitVisibility"
           />
         </section>
+      </div>
 
-        <div v-if="anyBeforeBadge && hasBadge" class="px-5"><USeparator /></div>
-        <section v-if="hasBadge" class="px-5 py-4">
+      <div
+        v-if="hasBadge"
+        class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
+      >
+        <div class="px-5 py-3">
+          <h3 class="text-sm font-semibold text-highlighted">Badge</h3>
+        </div>
+        <section class="px-5 py-4">
           <BadgeEditor
             :model-value="badgeEditor.model!"
             @update:model-value="badgeEditor.update"
             @commit:visibility="badgeEditor.commitVisibility"
           />
         </section>
+      </div>
 
-        <div v-if="anyBeforeImage && hasImage" class="px-5"><USeparator /></div>
-        <section v-if="hasImage" class="px-5 py-4">
+      <div
+        v-if="hasImage"
+        class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
+      >
+        <div class="px-5 py-3">
+          <h3 class="text-sm font-semibold text-highlighted">Afbeelding</h3>
+        </div>
+        <section class="px-5 py-4">
           <ImageEditor
             :model-value="imageEditor.model!"
             :preview-url="imageEditor.previewUrl"
@@ -139,7 +154,7 @@ function onThemeChange(modeId: string | null): void {
             @upload="imageEditor.upload"
           />
         </section>
-      </fieldset>
-    </div>
+      </div>
+    </fieldset>
   </section>
 </template>

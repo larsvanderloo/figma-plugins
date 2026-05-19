@@ -21,11 +21,11 @@ const cardEditor = useCardEditor();
 const timelineEditor = useTimelineEditor();
 const journeyEditor = useJourneyEditor();
 
-// Card-size tile picker options. Order: Text only → Compact → Default.
+// Card-size tile picker options. Order: text only → compact → default.
 const sizeOptions = [
-  { value: 'NO_ICON' as const, label: 'Text only', icon: 'i-lucide-type' },
+  { value: 'NO_ICON' as const, label: 'Alleen tekst', icon: 'i-lucide-type' },
   { value: 'SM' as const, label: 'Compact', icon: 'i-lucide-rows-3' },
-  { value: 'LG' as const, label: 'Default', icon: 'i-lucide-rows-2' },
+  { value: 'LG' as const, label: 'Standaard', icon: 'i-lucide-rows-2' },
 ];
 </script>
 
@@ -39,73 +39,72 @@ const sizeOptions = [
       "
       class="text-sm text-muted"
     >
-      No cards on this slide.
+      Geen onderdelen op deze slide.
     </p>
 
     <section v-if="cardEditor.cards.length > 0" class="space-y-2">
       <h2 class="text-base font-semibold text-highlighted px-1">Kaarten</h2>
       <div
-        class="rounded-[calc(var(--ui-radius)*4)] bg-default px-5 py-6 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
+        class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
       >
-      <!-- Card-size tile picker — two horizontal tiles (SM / LG) drive
-           both icon size and heading text-style on every card. -->
-      <div class="grid grid-cols-3 gap-2 pb-4">
-        <button
-          v-for="opt in sizeOptions"
-          :key="opt.value"
-          type="button"
-          class="relative flex flex-col items-center justify-center gap-1.5 rounded-lg border px-3 py-3 transition-colors focus:outline-none overflow-hidden"
-          :class="
-            cardEditor.cardSize === opt.value
-              ? 'border-primary bg-primary/10 text-primary'
-              : 'border-default bg-default text-default hover:bg-elevated'
-          "
-          @click="(e) => { cardEditor.commitCardSize(opt.value); (e.currentTarget as HTMLElement).blur(); }"
-        >
-          <UIcon
-            :name="opt.icon"
-            class="size-5 transition-opacity"
-            :class="{ 'opacity-60': cardEditor.isApplyingCardSize && cardEditor.cardSize === opt.value }"
+        <section class="space-y-3 px-5 py-5">
+          <h3 class="text-sm font-semibold text-highlighted">Kaartweergave</h3>
+          <div class="grid grid-cols-3 gap-2">
+            <button
+              v-for="opt in sizeOptions"
+              :key="opt.value"
+              type="button"
+              class="relative flex flex-col items-center justify-center gap-1.5 rounded-lg border px-3 py-3 transition-colors focus:outline-none overflow-hidden"
+              :class="
+                cardEditor.cardSize === opt.value
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-default bg-default text-default hover:bg-elevated'
+              "
+              @click="(e) => { cardEditor.commitCardSize(opt.value); (e.currentTarget as HTMLElement).blur(); }"
+            >
+              <UIcon
+                :name="opt.icon"
+                class="size-5 transition-opacity"
+                :class="{ 'opacity-60': cardEditor.isApplyingCardSize && cardEditor.cardSize === opt.value }"
+              />
+              <span
+                class="text-xs font-medium transition-opacity"
+                :class="{ 'opacity-60': cardEditor.isApplyingCardSize && cardEditor.cardSize === opt.value }"
+              >
+                {{ opt.label }}
+              </span>
+              <span
+                v-if="cardEditor.isApplyingCardSize && cardEditor.cardSize === opt.value"
+                class="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden"
+                aria-hidden="true"
+              >
+                <span class="block h-full w-1/3 bg-primary/80 animate-tile-progress" />
+              </span>
+            </button>
+          </div>
+        </section>
+
+        <section class="divide-y divide-default">
+          <CardItemEditor
+            v-for="(card, idx) in cardEditor.cards"
+            :key="card.cardNodeId"
+            :model-value="card"
+            :index="idx + 1"
+            :preview-url="cardEditor.previewUrls[card.cardNodeId] || null"
+            :size-bytes="cardEditor.previewSizes[card.cardNodeId] || null"
+            :icon-disabled="cardEditor.cardSize === 'NO_ICON'"
+            @update:model-value="cardEditor.update"
+            @upload-visual="(bytes) => cardEditor.uploadVisual(card.cardNodeId, bytes)"
           />
-          <span
-            class="text-xs font-medium transition-opacity"
-            :class="{ 'opacity-60': cardEditor.isApplyingCardSize && cardEditor.cardSize === opt.value }"
-          >
-            {{ opt.label }}
-          </span>
-          <!-- Indeterminate progress bar at the bottom edge — slides L→R
-               while the sandbox is processing. Gives a clear "working"
-               signal without replacing the tile's icon. -->
-          <span
-            v-if="cardEditor.isApplyingCardSize && cardEditor.cardSize === opt.value"
-            class="absolute inset-x-0 bottom-0 h-0.5 overflow-hidden"
-            aria-hidden="true"
-          >
-            <span class="block h-full w-1/3 bg-primary/80 animate-tile-progress" />
-          </span>
-        </button>
-      </div>
-
-      <USeparator class="mb-5" />
-
-      <template v-for="(card, idx) in cardEditor.cards" :key="card.cardNodeId">
-        <USeparator v-if="idx > 0" class="my-5" />
-        <CardItemEditor
-          :model-value="card"
-          :index="idx + 1"
-          :preview-url="cardEditor.previewUrls[card.cardNodeId] || null"
-          :size-bytes="cardEditor.previewSizes[card.cardNodeId] || null"
-          :icon-disabled="cardEditor.cardSize === 'NO_ICON'"
-          @update:model-value="cardEditor.update"
-          @upload-visual="(bytes) => cardEditor.uploadVisual(card.cardNodeId, bytes)"
-        />
-      </template>
+        </section>
       </div>
     </section>
 
     <section v-if="timelineEditor.items.length > 0" class="space-y-2">
       <h2 class="text-base font-semibold text-highlighted px-1">Tijdlijn</h2>
-      <div class="space-y-3">
+      <div
+        class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden divide-y divide-default"
+      >
         <TimelineItemEditor
           v-for="(item, idx) in timelineEditor.items"
           :key="item.copyWrapNodeId"
@@ -117,7 +116,7 @@ const sizeOptions = [
     </section>
 
     <section v-if="journeyEditor.model !== null" class="space-y-2">
-      <h2 class="text-base font-semibold text-highlighted px-1">Journey</h2>
+      <h2 class="text-base font-semibold text-highlighted px-1">Traject</h2>
       <JourneyEditor :model-value="journeyEditor.model" @update:model-value="journeyEditor.update" />
     </section>
   </div>

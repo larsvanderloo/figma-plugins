@@ -29,27 +29,31 @@ function onParagraphCommit(value: string): void {
 </script>
 
 <template>
-  <section
-    class="space-y-3 rounded-[calc(var(--ui-radius)*4)] bg-default px-5 py-8 shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)]"
-  >
-    <h3 class="text-sm font-medium text-default">Timeline-item {{ index }}</h3>
+  <section class="space-y-4 px-5 py-5">
+    <h3 class="text-sm font-semibold text-highlighted">Item {{ index }}</h3>
 
-    <BInput
-      :model-value="modelValue.heading"
-      placeholder="Koptekst"
-      size="md"
-      class="w-full"
-      @update:model-value="onHeadingCommit"
-    />
+    <div class="space-y-1.5">
+      <label class="text-sm font-medium text-default">Titel</label>
+      <BInput
+        :model-value="modelValue.heading"
+        placeholder="Koptekst"
+        size="md"
+        class="w-full"
+        @update:model-value="onHeadingCommit"
+      />
+    </div>
 
-    <BTextarea
-      :model-value="modelValue.paragraph"
-      :rows="3"
-      :autoresize="true"
-      placeholder="Alineatekst"
-      size="md"
-      class="w-full"
-      @update:model-value="onParagraphCommit"
-    />
+    <div class="space-y-1.5">
+      <label class="text-sm font-medium text-default">Omschrijving</label>
+      <BTextarea
+        :model-value="modelValue.paragraph"
+        :rows="3"
+        :autoresize="true"
+        placeholder="Alineatekst"
+        size="md"
+        class="w-full"
+        @update:model-value="onParagraphCommit"
+      />
+    </div>
   </section>
 </template>
