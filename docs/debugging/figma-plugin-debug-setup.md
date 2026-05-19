@@ -79,6 +79,8 @@ The debug setup keeps that split intact:
     - `debug:manifests`: writes Figma-importable `manifest-cache/*/manifest.json` files from the debug templates and copies the current bundle.
     - `debug:logs`: starts the local log collector.
     - `debug:session`: runs `debug:logs` and `debug:watch` together.
+    - `debug:stop`: stops repo-local debug/watch processes.
+    - `debug:restart`: runs `debug:stop`, then starts `debug:session`.
   - Production scripts also run version sync/assertions so release builds cannot ship with a stale UI tag.
 
 - `vite.config.ts`
@@ -155,7 +157,7 @@ The debug setup keeps that split intact:
 
 Use this for normal mutating Figma Design / Figma Slides debugging.
 
-1. Stop any older `npm run watch` or `npm run debug:watch` terminals that are still running, otherwise they may keep rewriting `dist/` with stale debug settings.
+1. Start debug mode with the VS Code `Figma: debug session` task or `npm run debug:restart`. This is the normal ritual: it stops older repo-local debug/watch processes before starting the fresh watcher/log collector pair, so stale build settings and stale version tags do not keep rewriting `dist/`.
 
    Restarting the task keeps the generated `manifest-cache/*/dist/` copies in sync and ensures fresh bundles get explicit `sandbox` and `ui` source labels plus the local log endpoint.
 

@@ -50,7 +50,7 @@ Do not commit:
 Debug sessions use:
 
 ```bash
-npm run debug:session
+npm run debug:restart
 ```
 
 and Figma imports:
@@ -71,7 +71,7 @@ and Figma imports the root:
 manifest.json
 ```
 
-The debug manifest intentionally allows `http://localhost:4789` for local log mirroring. The release manifest intentionally keeps `networkAccess.allowedDomains: ["none"]`.
+The debug manifest intentionally allows `http://localhost:4789` for local log mirroring. The release manifest intentionally keeps `networkAccess.allowedDomains: ["none"]`. Prefer `npm run debug:restart` or the VS Code `Figma: debug session` task over raw `debug:session`; restart mode clears older watchers before starting a new debug run.
 
 ## Version Badge
 

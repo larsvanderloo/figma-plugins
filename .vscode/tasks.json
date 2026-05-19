@@ -4,7 +4,7 @@
     {
       "label": "Figma: debug session",
       "type": "shell",
-      "command": "npm run debug:session",
+      "command": "npm run debug:restart",
       "isBackground": true,
       "problemMatcher": [],
       "presentation": {

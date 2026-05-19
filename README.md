@@ -11,6 +11,8 @@ npm install
 npm run build          # vite (UI) + esbuild (sandbox)
 npm run watch          # parallel watch mode
 npm run debug:session  # local log collector + debug watch
+npm run debug:restart  # stop older debug/watch processes, then start debug session
+npm run debug:stop     # stop repo-local debug/watch processes
 npm run debug:watch    # watch mode with debug logs + inline sourcemaps
 npm run debug:manifests # write manifest-cache/*/manifest.json for Figma import
 npm run debug:logs     # local Figma runtime log collector only
@@ -25,7 +27,7 @@ Load in Figma → Plugins → Development → Import plugin from manifest → po
 
 ## Debugging
 
-Use VS Code for source edits and the `Figma: debug session` task. That task runs the build watcher and a local log collector at `http://localhost:4789/log`, so Figma runtime logs also stream into the VS Code terminal and `.local/figma-debug.log`.
+Use VS Code for source edits and the `Figma: debug session` task. That task runs `npm run debug:restart`: it first stops older repo-local debug/watch processes, then starts the build watcher and a local log collector at `http://localhost:4789/log`, so Figma runtime logs also stream into the VS Code terminal and `.local/figma-debug.log`.
 
 For this terminal log bridge, import `manifest-cache/debug/manifest.json` in Figma Desktop. Figma requires the imported file to be named `manifest.json`, with `main` and `ui` inside that manifest directory; `manifest.debug.json` is only the checked-in source template. Use Figma Desktop Developer Tools for runtime inspection: open `Plugins → Development → Open Console...` (`Option+Cmd+I`), enable `Plugins → Development → Use Developer VM` only when stepping through source, and add temporary `debugger;` statements where needed. See [`docs/debugging/figma-plugin-debug-setup.md`](./docs/debugging/figma-plugin-debug-setup.md) for the full setup details.
 
