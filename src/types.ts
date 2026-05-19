@@ -171,10 +171,10 @@ export interface TitleDescriptionSection {
   /** null wanneer CopyWrap geen Paragraph-textnode heeft. */
   paragraph: string | null;
   /**
-   * Heading-section visibility. Driven by the `TypHeading` wrapper's
-   * `.visible` flag. The iframe always renders the heading input and
-   * exposes a switch so the user can preserve the text while hiding
-   * the section in Figma.
+   * Heading-section visibility. Driven by the whole CopyWrap instance's
+   * `.visible` flag because CopyWrap owns the fill/container. The iframe
+   * exposes a switch so the user can preserve the text while hiding the
+   * section in Figma.
    */
   headingVisible: boolean;
   /**
@@ -485,6 +485,8 @@ export type UIToPluginMessage =
        */
       type: 'update-accent';
       slideId: string;
+      /** UI correlation id so high-frequency accent edits only ack themselves. */
+      requestId?: string;
       /** Canonical ranges (zie `TitleDescriptionSection.headingDim`). */
       dimRanges: Array<[number, number]>;
     }
@@ -587,16 +589,17 @@ export type UIToPluginMessage =
   | {
       type: 'set-slide-skipped';
       slideId: string;
+      /** UI correlation id so rapid skip toggles can ignore stale acks. */
+      requestId?: string;
       skipped: boolean;
     }
   | {
       /**
        * Toggle visibility of the Heading or Paragraph subtree on the
-       * slide's CopyWrap. Heading routes through the TypHeading wrapper's
+       * slide's CopyWrap. Heading routes through the whole CopyWrap's
        * `.visible` flag; Paragraph through the `showParagraph` BOOLEAN
-       * component property on CopyWrap. Text content is preserved on
-       * both sides so toggling off-then-on doesn't lose what the user
-       * typed.
+       * component property on CopyWrap. Text content is preserved on both
+       * sides so toggling off-then-on doesn't lose what the user typed.
        */
       type: 'set-typography-visibility';
       slideId: string;
@@ -719,6 +722,7 @@ export type PluginToUIMessage =
   | {
       type: 'target-updated';
       ok: boolean;
+      requestId?: string;
       targetId?: string;
       error?: string;
     }

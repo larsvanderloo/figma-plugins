@@ -1,6 +1,6 @@
 {
   "name": "welder-editor",
-  "version": "0.5.181",
+  "version": "0.5.193",
   "type": "module",
   "scripts": {
     "build:version": "node scripts/write-app-version.mjs",
@@ -17,6 +17,7 @@
     "debug:build": "PLUGIN_DEBUG=1 PLUGIN_DEBUG_LOG_ENDPOINT=http://localhost:4789/log npm run build && npm run debug:manifests",
     "debug:watch": "npm run debug:manifests && concurrently --kill-others-on-fail \"PLUGIN_DEBUG=1 PLUGIN_DEBUG_LOG_ENDPOINT=http://localhost:4789/log npm run watch\" \"node scripts/write-debug-manifests.mjs --watch\"",
     "debug:logs": "node scripts/debug-log-server.mjs --clear",
+    "debug:speed": "node scripts/debug-speed-report.mjs",
     "debug:session": "concurrently --kill-others-on-fail \"npm run debug:logs\" \"npm run debug:watch\"",
     "dev:ui": "vite",
     "typecheck:plugin": "tsc --noEmit -p tsconfig.json",

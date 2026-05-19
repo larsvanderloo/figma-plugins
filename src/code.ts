@@ -47,8 +47,9 @@ import { normalizeIconKey, LUCIDE_SLUG_RE, primeIconCache } from './editors/_sha
 import { applyTable, scanTableSlot } from './editors/table/renderer';
 import { applyJourney, scanJourneySlot } from './editors/journey/renderer';
 import { importCSV } from './editors/table/csv';
-import { loadAllFontsForNode, setTextCharactersSafe } from './editors/_shared/fonts';
-import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from './editors/_shared/accent-vars';
+import { setTextCharactersSafe } from './editors/_shared/fonts';
+import { loadAccentVars } from './editors/_shared/accent-vars';
+import { applyAccentRanges, readDimRanges } from './editors/_shared/accent-ranges';
 import type {
   SlideSummary,
   GeneralSections,
@@ -247,142 +248,6 @@ if (!isDevModeRuntime()) {
   });
 } else {
   debugLog('icon-backfill', 'skipped-dev-mode');
-}
-
-// ============================================================
-// Accent (Text Dimmer) — library-variable helpers (spec §13 T30)
-//
-// T34.2: `loadAccentVars`, `resolveColor`, `TEXT_KEY`, `TEXT_DIMMER_KEY`,
-// `TEXT_DIMMER_RGB` zijn verhuisd naar `editors/_shared/accent-vars.ts`
-// zodat zowel deze accent-range-writer (T28.2 heading-dim) als de
-// Slot-based table-renderer (T34.2) dezelfde single-source-of-truth
-// gebruiken.
-// ============================================================
-
-const DIMMER_HEX_TOLERANCE = 0.01;
-
-/**
- * True wanneer een fill een SOLID-paint is bound aan de gegeven variable-id,
- * óf raw SOLID met een kleur die ≈ #ffc78f matcht (binnen tolerance).
- * Dekt beide read-gevallen: variable-bound accent + raw-hex accent
- * (migreert bij eerste write naar variable-binding).
- */
-function isDimmedFill(fill: Paint, dimmerId: string | null): boolean {
-  if (fill.type !== 'SOLID') return false;
-  const solid = fill as SolidPaint;
-  if (dimmerId !== null && solid.boundVariables !== undefined && solid.boundVariables !== null) {
-    const bound = solid.boundVariables.color;
-    if (bound !== undefined && bound !== null && bound.id === dimmerId) {
-      return true;
-    }
-  }
-  const c = solid.color;
-  if (
-    Math.abs(c.r - TEXT_DIMMER_RGB.r) <= DIMMER_HEX_TOLERANCE &&
-    Math.abs(c.g - TEXT_DIMMER_RGB.g) <= DIMMER_HEX_TOLERANCE &&
-    Math.abs(c.b - TEXT_DIMMER_RGB.b) <= DIMMER_HEX_TOLERANCE
-  ) {
-    return true;
-  }
-  return false;
-}
-
-/**
- * Leest dim-ranges van een TextNode via `getStyledTextSegments`.
- *
- * - `null` → library-variables niet bereikbaar (UI verbergt het accent-blok).
- * - `[]`   → library OK maar geen dim-range aanwezig.
- * - gevuld → aaneengesloten dim-segmenten samengevoegd tot canonical ranges.
- */
-async function readDimRanges(node: TextNode): Promise<Array<[number, number]> | null> {
-  const vars = await loadAccentVars();
-  if (vars.text === null && vars.dimmer === null) {
-    return null;
-  }
-  const dimmerId = vars.dimmer !== null ? vars.dimmer.id : null;
-  const segments = node.getStyledTextSegments(['fills']);
-  const ranges: Array<[number, number]> = [];
-  for (let i = 0; i < segments.length; i++) {
-    const seg = segments[i];
-    const fills = seg.fills;
-    if (!Array.isArray(fills) || fills.length === 0) continue;
-    let dimmed = false;
-    for (let j = 0; j < fills.length; j++) {
-      if (isDimmedFill(fills[j], dimmerId)) {
-        dimmed = true;
-        break;
-      }
-    }
-    if (!dimmed) continue;
-    const last = ranges.length > 0 ? ranges[ranges.length - 1] : null;
-    if (last !== null && last[1] === seg.start) {
-      last[1] = seg.end;
-    } else {
-      ranges.push([seg.start, seg.end]);
-    }
-  }
-  return ranges;
-}
-
-/**
- * Past accent-ranges toe op een text-node: dim-fill op `dimRanges`,
- * text-fill op het complement. Characters blijven ongemoeid.
- * T28.2-patroon: all-fonts-preflight, resolveForConsumer-pre-resolve,
- * setBoundVariableForPaint, visible-toggle render-cache-flush.
- */
-async function applyAccentRanges(
-  node: TextNode,
-  dimRanges: Array<[number, number]>,
-): Promise<void> {
-  const vars = await loadAccentVars();
-  if (vars.text === null || vars.dimmer === null) {
-    console.log('[welder-slide-editor] applyAccentRanges skipped — library vars not available.');
-    return;
-  }
-  await loadAllFontsForNode(node);
-
-  const textColor = resolveColor(vars.text, node, { r: 1, g: 0.957, b: 0.918 });
-  const dimColor = resolveColor(vars.dimmer, node, {
-    r: TEXT_DIMMER_RGB.r,
-    g: TEXT_DIMMER_RGB.g,
-    b: TEXT_DIMMER_RGB.b,
-  });
-
-  const textFill = figma.variables.setBoundVariableForPaint(
-    { type: 'SOLID', color: textColor },
-    'color',
-    vars.text,
-  );
-  const dimFill = figma.variables.setBoundVariableForPaint(
-    { type: 'SOLID', color: dimColor },
-    'color',
-    vars.dimmer,
-  );
-
-  const len = node.characters.length;
-  if (len === 0) return;
-
-  try {
-    node.setRangeFills(0, len, [textFill]);
-    for (let i = 0; i < dimRanges.length; i++) {
-      const r = dimRanges[i];
-      const start = Math.max(0, r[0]);
-      const end = Math.min(len, r[1]);
-      if (end <= start) continue;
-      node.setRangeFills(start, end, [dimFill]);
-    }
-  } catch (err: unknown) {
-    console.log('[welder-slide-editor] setRangeFills failed:', err);
-  }
-
-  // T28.2 belt-and-suspenders render-cache-flush.
-  try {
-    const prev = node.visible;
-    node.visible = !prev;
-    node.visible = prev;
-  } catch (err: unknown) {
-    console.log('[welder-slide-editor] visible-toggle flush failed:', err);
-  }
 }
 
 /**
@@ -733,15 +598,19 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
     const paragraphChars = readTextByName(copyWrap, 'Paragraph');
     const paragraph = paragraphChars !== null ? paragraphChars : null;
 
-    // Heading visibility — TypHeading wrapper's .visible flag (defaults
-    // to true when the wrapper is missing). Paragraph visibility —
-    // showParagraph BOOLEAN component property (null when the property
-    // doesn't exist OR there's no Paragraph TextNode).
-    let headingVisible = true;
+    // Heading visibility — CopyWrap's .visible flag. CopyWrap owns the
+    // title fill/container, so hiding only TypHeading leaves a visual
+    // shell behind. Paragraph visibility — showParagraph BOOLEAN
+    // component property (null when the property doesn't exist OR
+    // there's no Paragraph TextNode).
+    let headingVisible = copyWrap.visible !== false;
     const typHeading = copyWrap.findOne(function (n: SceneNode) {
       return n.type === 'INSTANCE' && n.name === 'TypHeading';
     });
-    if (typHeading !== null && 'visible' in typHeading) {
+    if (headingVisible && typHeading !== null && 'visible' in typHeading) {
+      // Legacy read: pre-CopyWrap-toggle builds hid TypHeading directly.
+      // Keep reflecting that as hidden until the next "on" toggle
+      // normalizes both CopyWrap and TypHeading back to visible.
       headingVisible = (typHeading as InstanceNode).visible !== false;
     }
     let paragraphVisible: boolean | null = null;
@@ -1584,19 +1453,51 @@ async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideScan): P
 }
 
 async function scanSlide(slide: InstanceNode): Promise<SlideScan> {
+  const startedAt = Date.now();
+  let normalizeMs = 0;
+  let refreshTablesMs = 0;
   if (!isDevModeRuntime()) {
+    const normalizeStartedAt = Date.now();
     const visibilityChanged = await normalizeCopyWrapVisibility(slide);
+    normalizeMs = Date.now() - normalizeStartedAt;
     if (visibilityChanged) {
+      const refreshStartedAt = Date.now();
       await refreshTablesOnSlide(slide);
+      refreshTablesMs = Date.now() - refreshStartedAt;
     }
   } else {
     debugLog('sandbox', 'scan-readonly', { slideId: slide.id });
   }
+
+  const generalStartedAt = Date.now();
   const general = await scanGeneral(slide);
+  const generalMs = Date.now() - generalStartedAt;
+
+  const contentStartedAt = Date.now();
+  const content = scanContent(slide);
+  const contentMs = Date.now() - contentStartedAt;
+
+  const graphsStartedAt = Date.now();
+  const graphs = scanGraphs(slide);
+  const graphsMs = Date.now() - graphsStartedAt;
+
+  debugLog('perf', 'scan-slide', {
+    slideId: slide.id,
+    normalizeMs: normalizeMs,
+    refreshTablesMs: refreshTablesMs,
+    generalMs: generalMs,
+    contentMs: contentMs,
+    graphsMs: graphsMs,
+    totalMs: Date.now() - startedAt,
+    hasGeneral: general !== null,
+    cardCount: content !== null ? content.cards.length : 0,
+    graphCount: graphs !== null ? graphs.instances.length : 0,
+  });
+
   return {
     general: general,
-    content: scanContent(slide),
-    graphs: scanGraphs(slide),
+    content: content,
+    graphs: graphs,
   };
 }
 
@@ -1633,6 +1534,134 @@ async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
 // Slide-lookup helpers
 // ============================================================
 
+interface SlidePageCache {
+  pageId: string;
+  slides: InstanceNode[];
+  numberById: { [id: string]: number };
+}
+
+interface SlideLookupResult {
+  slides: InstanceNode[];
+  source: 'canvas-grid' | 'children' | 'fallback';
+}
+
+let slidePageCache: SlidePageCache | null = null;
+
+function invalidateSlidePageCache(reason: string): void {
+  if (slidePageCache === null) return;
+  debugLog('perf', 'slide-cache-invalidate', {
+    reason: reason,
+    pageId: slidePageCache.pageId,
+    slideCount: slidePageCache.slides.length,
+  });
+  slidePageCache = null;
+}
+
+function getSlidesOnCurrentPage(): InstanceNode[] {
+  if (slidePageCache !== null && slidePageCache.pageId === figma.currentPage.id) {
+    return slidePageCache.slides;
+  }
+  const startedAt = Date.now();
+  const lookup = findSlidesOnCurrentPageOptimized();
+  const slides = lookup.slides;
+  const numberById: { [id: string]: number } = {};
+  for (let i = 0; i < slides.length; i++) {
+    numberById[slides[i].id] = i + 1;
+  }
+  slidePageCache = {
+    pageId: figma.currentPage.id,
+    slides: slides,
+    numberById: numberById,
+  };
+  debugLog('perf', 'slide-cache-build', {
+    pageId: figma.currentPage.id,
+    slideCount: slides.length,
+    source: lookup.source,
+    totalMs: Date.now() - startedAt,
+  });
+  return slides;
+}
+
+function findSlidesOnCurrentPageOptimized(): SlideLookupResult {
+  const gridSlides = findSlidesFromCanvasGrid();
+  if (gridSlides.length > 0) {
+    return { slides: gridSlides, source: 'canvas-grid' };
+  }
+
+  const childSlides = findSlidesFromPageChildren();
+  if (childSlides.length > 0 && (figma.editorType !== 'slides' || childSlides.length > 1)) {
+    return { slides: childSlides, source: 'children' };
+  }
+
+  return { slides: findSlidesOnPage(), source: 'fallback' };
+}
+
+function findSlidesFromCanvasGrid(): InstanceNode[] {
+  if (figma.editorType !== 'slides') return [];
+  try {
+    const grid = figma.getCanvasGrid();
+    const slides: InstanceNode[] = [];
+    for (let row = 0; row < grid.length; row++) {
+      const nodes = grid[row];
+      for (let col = 0; col < nodes.length; col++) {
+        const slide = findNestedWelderSlide(nodes[col]);
+        if (slide !== null) {
+          slides.push(slide);
+        }
+      }
+    }
+    return slides;
+  } catch (_e) {
+    return [];
+  }
+}
+
+function findSlidesFromPageChildren(): InstanceNode[] {
+  const children = figma.currentPage.children;
+  const slides: InstanceNode[] = [];
+  for (let i = 0; i < children.length; i++) {
+    const slide = findNestedWelderSlide(children[i]);
+    if (slide !== null) {
+      slides.push(slide);
+    }
+  }
+  return slides;
+}
+
+function findNestedWelderSlide(node: SceneNode): InstanceNode | null {
+  if (node.type === 'INSTANCE' && isSlide(node)) {
+    return node;
+  }
+  if ('children' in node) {
+    const children = (node as SceneNode & { children: ReadonlyArray<SceneNode> }).children;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      if (child.type === 'INSTANCE' && isSlide(child)) {
+        return child as InstanceNode;
+      }
+    }
+  }
+  if ('findOne' in node) {
+    const scope = node as SceneNode & { findOne: SlideNode['findOne'] };
+    const found = scope.findOne(function (n: SceneNode) {
+      return n.type === 'INSTANCE' && isSlide(n);
+    });
+    if (found !== null && found.type === 'INSTANCE') {
+      return found as InstanceNode;
+    }
+  }
+  return null;
+}
+
+function getSlideNumber(slide: InstanceNode): number {
+  getSlidesOnCurrentPage();
+  if (slidePageCache !== null) {
+    const number = slidePageCache.numberById[slide.id];
+    if (typeof number === 'number') return number;
+  }
+  return 1;
+}
+
 /**
  * Compute the SlideSummary for a single slide. Used by every slide-loaded
  * / slide-summary emission. `findSlidesOnPage` here is for the 1-based
@@ -1641,13 +1670,11 @@ async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
  * SlideSummary shape consistent with the export-document filename logic.
  */
 function summaryForSlide(slide: InstanceNode): SlideSummary {
-  const slides = findSlidesOnPage();
-  const idx = slides.indexOf(slide);
-  return slideSummary(slide, idx >= 0 ? idx + 1 : 1);
+  return slideSummary(slide, getSlideNumber(slide));
 }
 
 function findSlideById(id: string): InstanceNode | null {
-  const nodes = findSlidesOnPage();
+  const nodes = getSlidesOnCurrentPage();
   for (const node of nodes) {
     if (node.id === id) return node;
   }
@@ -1887,20 +1914,34 @@ function postSlideContent(): void {
       return;
     }
     void (async function () {
+      const startedAt = Date.now();
       try {
         const slide = findSlideById(lastDisplayedSlideId!);
         if (slide === null) return;
+        const scanStartedAt = Date.now();
         const scan = await scanSlide(slide);
+        const scanMs = Date.now() - scanStartedAt;
         // Cheap signature: stringify the general/content/graphs payload.
         // If it matches the last sent, skip the post (avoids spamming
         // the bridge on documentchanges that didn't actually change
         // editable state — e.g. selection-only events).
+        const signatureStartedAt = Date.now();
         const sig = JSON.stringify({
           g: scan.general,
           c: scan.content,
           h: scan.graphs,
         });
-        if (sig === lastSentSlideContentSignature) return;
+        const signatureMs = Date.now() - signatureStartedAt;
+        if (sig === lastSentSlideContentSignature) {
+          debugLog('perf', 'post-slide-content-skip', {
+            slideId: slide.id,
+            reason: 'signature',
+            scanMs: scanMs,
+            signatureMs: signatureMs,
+            totalMs: Date.now() - startedAt,
+          });
+          return;
+        }
         lastSentSlideContentSignature = sig;
         debugLog('sandbox', 'post-slide-content', {
           slideId: slide.id,
@@ -1908,12 +1949,23 @@ function postSlideContent(): void {
           cardCount: scan.content !== null ? scan.content.cards.length : 0,
           graphCount: scan.graphs !== null ? scan.graphs.instances.length : 0,
         });
+        const postStartedAt = Date.now();
         postToUI({
           type: 'slide-loaded',
           summary: summaryForSlide(slide),
           general: scan.general,
           content: scan.content,
           graphs: scan.graphs,
+        });
+        debugLog('perf', 'post-slide-content', {
+          slideId: slide.id,
+          scanMs: scanMs,
+          signatureMs: signatureMs,
+          postMs: Date.now() - postStartedAt,
+          totalMs: Date.now() - startedAt,
+          hasGeneral: scan.general !== null,
+          cardCount: scan.content !== null ? scan.content.cards.length : 0,
+          graphCount: scan.graphs !== null ? scan.graphs.instances.length : 0,
         });
       } catch (err: unknown) {
         debugLog('sandbox', 'post-slide-content:error', err);
@@ -1942,15 +1994,34 @@ function postSlideSummary(): void {
   pendingSlideSummaryUpdate = setTimeout(() => {
     pendingSlideSummaryUpdate = null;
     if (lastDisplayedSlideId === null) return;
+    const startedAt = Date.now();
     try {
       const slide = findSlideById(lastDisplayedSlideId);
       if (slide === null) return;
+      const summaryStartedAt = Date.now();
       const summary = summaryForSlide(slide);
+      const summaryMs = Date.now() - summaryStartedAt;
       const sig = summary.id + '|' + summary.name + '|' + String(summary.isSkipped);
-      if (sig === lastSentSummarySignature) return;
+      if (sig === lastSentSummarySignature) {
+        debugLog('perf', 'post-slide-summary-skip', {
+          slideId: slide.id,
+          reason: 'signature',
+          summaryMs: summaryMs,
+          totalMs: Date.now() - startedAt,
+        });
+        return;
+      }
       lastSentSummarySignature = sig;
       debugLog('sandbox', 'post-slide-summary', summary);
+      const postStartedAt = Date.now();
       postToUI({ type: 'slide-summary', summary: summary });
+      debugLog('perf', 'post-slide-summary', {
+        slideId: slide.id,
+        summaryMs: summaryMs,
+        postMs: Date.now() - postStartedAt,
+        totalMs: Date.now() - startedAt,
+        isSkipped: summary.isSkipped,
+      });
     } catch (err: unknown) {
       debugLog('sandbox', 'post-slide-summary:error', err);
       console.log('[welder-slide-editor] postSlideSummary failed:', err);
@@ -1965,13 +2036,17 @@ function postSlideSummary(): void {
  * currentpagechange.
  */
 async function emitSlideLoaded(slide: InstanceNode): Promise<void> {
+  const startedAt = Date.now();
   try {
     debugLog('sandbox', 'emit-slide-loaded:start', {
       slideId: slide.id,
       slideName: slide.name,
     });
+    const scanStartedAt = Date.now();
     const scan = await scanSlide(slide);
+    const scanMs = Date.now() - scanStartedAt;
     lastDisplayedSlideId = slide.id;
+    const signatureStartedAt = Date.now();
     lastSentSlideContentSignature = JSON.stringify({
       g: scan.general,
       c: scan.content,
@@ -1979,6 +2054,8 @@ async function emitSlideLoaded(slide: InstanceNode): Promise<void> {
     });
     const summary = summaryForSlide(slide);
     lastSentSummarySignature = summary.id + '|' + summary.name + '|' + String(summary.isSkipped);
+    const signatureMs = Date.now() - signatureStartedAt;
+    const postStartedAt = Date.now();
     postToUI({
       type: 'slide-loaded',
       summary: summary,
@@ -1986,8 +2063,19 @@ async function emitSlideLoaded(slide: InstanceNode): Promise<void> {
       content: scan.content,
       graphs: scan.graphs,
     });
+    const postMs = Date.now() - postStartedAt;
     debugLog('sandbox', 'emit-slide-loaded:posted', {
       slideId: slide.id,
+      hasGeneral: scan.general !== null,
+      cardCount: scan.content !== null ? scan.content.cards.length : 0,
+      graphCount: scan.graphs !== null ? scan.graphs.instances.length : 0,
+    });
+    debugLog('perf', 'emit-slide-loaded', {
+      slideId: slide.id,
+      scanMs: scanMs,
+      signatureMs: signatureMs,
+      postMs: postMs,
+      totalMs: Date.now() - startedAt,
       hasGeneral: scan.general !== null,
       cardCount: scan.content !== null ? scan.content.cards.length : 0,
       graphCount: scan.graphs !== null ? scan.graphs.instances.length : 0,
@@ -2054,6 +2142,7 @@ async function preloadSlideFonts(slide: InstanceNode): Promise<void> {
  * the picker UI can unlock.
  */
 async function primeIconCacheForSlide(scan: SlideScan): Promise<void> {
+  const startedAt = Date.now();
   let cardNodeId: string | null = null;
   if (scan.content !== null && scan.content.cards.length > 0) {
     cardNodeId = scan.content.cards[0].cardNodeId;
@@ -2070,14 +2159,28 @@ async function primeIconCacheForSlide(scan: SlideScan): Promise<void> {
     }
   }
   if (targetNode === null) {
+    debugLog('perf', 'prime-icon-cache-slide', {
+      targetFound: false,
+      totalMs: Date.now() - startedAt,
+    });
     postToUI({ type: 'icons-ready' });
     return;
   }
+  let ok = true;
   try {
     await primeIconCache(targetNode);
-  } catch (_e) {
+  } catch (e) {
+    ok = false;
+    debugLog('sandbox', 'prime-icon-cache:error', e);
     // fall through to icons-ready so the picker can open even if priming fails
   }
+  debugLog('perf', 'prime-icon-cache-slide', {
+    targetFound: true,
+    ok: ok,
+    targetId: targetNode.id,
+    targetName: targetNode.name,
+    totalMs: Date.now() - startedAt,
+  });
   postToUI({ type: 'icons-ready' });
 }
 
@@ -2100,6 +2203,11 @@ function isMutatingMessage(msg: UIToPluginMessage): boolean {
   if (msg.type === 'export-document') return false;
   if (msg.type === 'close') return false;
   return true;
+}
+
+function readMessageRequestId(msg: UIToPluginMessage): string | null {
+  const raw = (msg as { requestId?: unknown }).requestId;
+  return typeof raw === 'string' && raw.length > 0 ? raw : null;
 }
 
 async function handleMessage(msg: UIToPluginMessage): Promise<void> {
@@ -2227,7 +2335,12 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     // Spec §13 T30 — heading-only. Paragraph-accent permanent out-of-scope.
     const slide = findSlideById(msg.slideId);
     if (slide === null) {
-      postToUI({ type: 'target-updated', ok: false, error: 'Slide not found: ' + msg.slideId });
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        requestId: msg.requestId,
+        error: 'Slide not found: ' + msg.slideId,
+      });
       return;
     }
     const copyWrap = findCopyWrap(slide);
@@ -2235,13 +2348,19 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       postToUI({
         type: 'target-updated',
         ok: false,
+        requestId: msg.requestId,
         error: 'CopyWrap not found on slide: ' + msg.slideId,
       });
       return;
     }
     const headingNode = findVisibleTextNodeByName(copyWrap, 'Heading', slide);
     if (headingNode === null) {
-      postToUI({ type: 'target-updated', ok: false, error: 'Heading node not found' });
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        requestId: msg.requestId,
+        error: 'Heading node not found',
+      });
       return;
     }
     const startedAt = Date.now();
@@ -2264,7 +2383,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       applyMs: applyMs,
       totalMs: Date.now() - startedAt,
     });
-    postToUI({ type: 'target-updated', ok: true, targetId: headingNode.id });
+    postToUI({ type: 'target-updated', ok: true, requestId: msg.requestId, targetId: headingNode.id });
     return;
   }
 
@@ -3058,6 +3177,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       postToUI({
         type: 'target-updated',
         ok: false,
+        requestId: msg.requestId,
         error: 'Slide not found: ' + msg.slideId,
       });
       return;
@@ -3067,6 +3187,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       postToUI({
         type: 'target-updated',
         ok: false,
+        requestId: msg.requestId,
         error: 'Slide has no SlideNode parent (requires Figma Slides editor)',
       });
       return;
@@ -3074,6 +3195,9 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     figma.commitUndo();
     markSelfWrite();
     (skipParent as SlideNode).isSkippedSlide = msg.skipped;
+    const skipSummary = summaryForSlide(skipSlide);
+    lastSentSummarySignature =
+      skipSummary.id + '|' + skipSummary.name + '|' + String(skipSummary.isSkipped);
     // No slide-summary re-emit: the iframe flips its visibility pill
     // optimistically before posting, so a sandbox echo just forces a
     // wasted round-trip and can clobber a rapid second click. Same
@@ -3086,6 +3210,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     postToUI({
       type: 'target-updated',
       ok: true,
+      requestId: msg.requestId,
       targetId: skipSlide.id,
     });
     return;
@@ -3268,9 +3393,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       // the current page. Same logic as `slideSummary` (used by the
       // SlideSelector dropdown), so the file the user downloads is
       // labelled with the same name they see in the picker.
-      const allSlides = findSlidesOnPage();
-      const idx = allSlides.indexOf(welderSlide);
-      const summary = slideSummary(welderSlide, idx >= 0 ? idx + 1 : 1);
+      const summary = summaryForSlide(welderSlide);
       const baseName = summary.name;
 
       const ext = msg.format === 'PNG' ? '.png' : '.pdf';
@@ -3317,7 +3440,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     // each as a single-page PDF, ship the parts to the iframe; the
     // iframe merges with pdf-lib. Page-level exportAsync would just
     // produce one giant single-page PDF spanning the canvas grid.
-    const welderSlides = findSlidesOnPage();
+    const welderSlides = getSlidesOnCurrentPage();
     const targets: SceneNode[] = [];
     for (let i = 0; i < welderSlides.length; i++) {
       const ws = welderSlides[i];
@@ -3422,7 +3545,7 @@ async function main(): Promise<void> {
   if (!isDevModeRuntime()) {
     (async function () {
       try {
-        const slides = findSlidesOnPage();
+        const slides = getSlidesOnCurrentPage();
         for (let i = 0; i < slides.length; i++) {
           const card = slides[i].findOne((n: SceneNode) => n.type === 'INSTANCE' && n.name === 'Card');
           if (card !== null && card.type === 'INSTANCE') {
@@ -3440,9 +3563,24 @@ async function main(): Promise<void> {
 
   figma.ui.onmessage = (raw: unknown) => {
     const msg = raw as UIToPluginMessage;
+    const startedAt = Date.now();
     debugMessage('ui->plugin', msg);
-    handleMessage(msg).catch((err: unknown) => {
+    handleMessage(msg).then(() => {
+      debugLog('perf', 'sandbox-handler', {
+        type: msg.type,
+        requestId: readMessageRequestId(msg),
+        ok: true,
+        totalMs: Date.now() - startedAt,
+      });
+    }).catch((err: unknown) => {
       const text = err instanceof Error ? err.message : String(err);
+      debugLog('perf', 'sandbox-handler', {
+        type: msg.type,
+        requestId: readMessageRequestId(msg),
+        ok: false,
+        totalMs: Date.now() - startedAt,
+        error: text,
+      });
       debugLog('sandbox', 'handler-error', { type: msg.type, error: text });
       figma.notify('Slide editor error: ' + text, { error: true });
       postToUI({ type: 'target-updated', ok: false, error: text });
@@ -3465,10 +3603,16 @@ async function main(): Promise<void> {
   function onPageNodeChange(event: NodeChangeEvent): void {
     try {
       let summaryDirty = false;
+      let contentDirty = false;
       const changes = event.nodeChanges;
       for (let i = 0; i < changes.length; i++) {
         const change = changes[i];
-        if (summaryDirty) continue;
+        if (
+          (change.node.type === 'INSTANCE' && isSlide(change.node)) ||
+          (change.node.type === 'SLIDE' && change.type !== 'PROPERTY_CHANGE')
+        ) {
+          invalidateSlidePageCache('slide-structure-change');
+        }
         if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') {
           summaryDirty = true;
           continue;
@@ -3479,15 +3623,19 @@ async function main(): Promise<void> {
           change.node.name === 'Heading'
         ) {
           summaryDirty = true;
+          contentDirty = true;
+          continue;
         }
+        contentDirty = true;
       }
       debugLog('figma-event', 'nodechange', {
         pageId: figma.currentPage.id,
         changeCount: changes.length,
         summaryDirty: summaryDirty,
+        contentDirty: contentDirty,
       });
       if (summaryDirty) postSlideSummary();
-      postSlideContent();
+      if (contentDirty) postSlideContent();
     } catch (err: unknown) {
       debugLog('figma-event', 'nodechange:error', err);
       console.log('[welder-slide-editor] nodechange handler failed:', err);
@@ -3525,6 +3673,7 @@ async function main(): Promise<void> {
         pageId: figma.currentPage.id,
         pageName: figma.currentPage.name,
       });
+      invalidateSlidePageCache('currentpagechange');
       // Swap the nodechange subscription to the new current page first
       // so any edits there reach the iframe.
       attachNodeChangeListener();

@@ -47,15 +47,27 @@ export function isSlide(node: SceneNode): node is InstanceNode {
  *
  * In Figma Design liggen Welder-Slide-instances op top-level van de page.
  * In Figma Slides editor (manifest.editorType=['figma','slides']) zitten
- * ze in SlideNode-containers, één niveau dieper. `findAll` met de strikte
- * isSlide-predicate (INSTANCE + name === 'Slide' + 1920x1080) vangt beide
- * zonder false-positives — geen wrapper binnen een slide (CopyWrap,
- * CardWrap, etc.) matcht die criteria.
+ * ze in SlideNode-containers, één niveau dieper. We zoeken eerst alleen
+ * INSTANCE-nodes via `findAllWithCriteria` en filteren daarna met de strikte
+ * isSlide-predicate (INSTANCE + name === 'Slide' + 1920x1080). Dat behoudt
+ * de bestaande order, maar vermijdt callback-work voor alle niet-instance
+ * descendants op grote decks.
  */
 export function findSlidesOnPage(page?: PageNode): InstanceNode[] {
   const target = page !== undefined ? page : figma.currentPage;
-  const found = target.findAll(isSlide);
-  return found as InstanceNode[];
+  try {
+    const instances = target.findAllWithCriteria({ types: ['INSTANCE'] });
+    const slides: InstanceNode[] = [];
+    for (let i = 0; i < instances.length; i++) {
+      if (isSlide(instances[i])) {
+        slides.push(instances[i] as InstanceNode);
+      }
+    }
+    return slides;
+  } catch (_e) {
+    const found = target.findAll(isSlide);
+    return found as InstanceNode[];
+  }
 }
 
 /**

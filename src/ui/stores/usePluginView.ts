@@ -35,6 +35,16 @@ export interface PluginViewState {
   graphs: GraphItems | null;
 }
 
+interface SkipOverride {
+  skipped: boolean;
+  requestId: string;
+  expiresAt: number;
+  clearTimer: ReturnType<typeof setTimeout> | null;
+}
+
+const SKIP_OVERRIDE_HOLD_MS = 1200;
+const SKIP_OVERRIDE_MAX_MS = 6000;
+
 export const usePluginView = defineStore('pluginView', () => {
   const state = reactive<PluginViewState>({
     runtime: null,
@@ -45,6 +55,7 @@ export const usePluginView = defineStore('pluginView', () => {
     content: null,
     graphs: null,
   });
+  const skipOverrides = new Map<string, SkipOverride>();
 
   // ── Getters ────────────────────────────────────────────────────────────
   const noSlide = computed<boolean>(() => state.currentSlideId === null);
@@ -76,6 +87,57 @@ export const usePluginView = defineStore('pluginView', () => {
     state.runtime = runtime;
   }
 
+  function applySkipOverride(summary: SlideSummary): SlideSummary {
+    if (summary.isSkipped === null) return summary;
+    const override = skipOverrides.get(summary.id);
+    if (override === undefined) return summary;
+    if (override.expiresAt < Date.now()) {
+      if (override.clearTimer !== null) clearTimeout(override.clearTimer);
+      skipOverrides.delete(summary.id);
+      return summary;
+    }
+    if (summary.isSkipped === override.skipped) return summary;
+    return {
+      id: summary.id,
+      number: summary.number,
+      name: summary.name,
+      isSkipped: override.skipped,
+    };
+  }
+
+  function setSkipOverride(slideId: string, skipped: boolean, requestId: string): void {
+    const prev = skipOverrides.get(slideId);
+    if (prev !== undefined && prev.clearTimer !== null) {
+      clearTimeout(prev.clearTimer);
+    }
+    skipOverrides.set(slideId, {
+      skipped: skipped,
+      requestId: requestId,
+      expiresAt: Date.now() + SKIP_OVERRIDE_MAX_MS,
+      clearTimer: null,
+    });
+    if (
+      state.currentSummary !== null &&
+      state.currentSummary.id === slideId &&
+      state.currentSummary.isSkipped !== null
+    ) {
+      state.currentSummary.isSkipped = skipped;
+    }
+  }
+
+  function settleSkipOverride(slideId: string, requestId: string): void {
+    const override = skipOverrides.get(slideId);
+    if (override === undefined || override.requestId !== requestId) return;
+    override.expiresAt = Date.now() + SKIP_OVERRIDE_HOLD_MS;
+    if (override.clearTimer !== null) clearTimeout(override.clearTimer);
+    override.clearTimer = setTimeout(() => {
+      const current = skipOverrides.get(slideId);
+      if (current !== undefined && current.requestId === requestId) {
+        skipOverrides.delete(slideId);
+      }
+    }, SKIP_OVERRIDE_HOLD_MS);
+  }
+
   /** Apply a full slide-loaded payload from the sandbox. */
   function setSlideLoaded(
     summary: SlideSummary,
@@ -83,8 +145,9 @@ export const usePluginView = defineStore('pluginView', () => {
     content: ContentItems | null,
     graphs: GraphItems | null,
   ): void {
-    state.currentSummary = summary;
-    state.currentSlideId = summary.id;
+    const nextSummary = applySkipOverride(summary);
+    state.currentSummary = nextSummary;
+    state.currentSlideId = nextSummary.id;
     state.general = general;
     state.content = content;
     state.graphs = graphs;
@@ -92,8 +155,9 @@ export const usePluginView = defineStore('pluginView', () => {
 
   /** Apply a summary-only update (slide renamed or skip-toggled). */
   function setSummary(summary: SlideSummary): void {
-    state.currentSummary = summary;
-    state.currentSlideId = summary.id;
+    const nextSummary = applySkipOverride(summary);
+    state.currentSummary = nextSummary;
+    state.currentSlideId = nextSummary.id;
   }
 
   /** Selection cleared on the canvas — drop slide state entirely. */
@@ -118,6 +182,8 @@ export const usePluginView = defineStore('pluginView', () => {
     // actions
     setActiveTab,
     setRuntime,
+    setSkipOverride,
+    settleSkipOverride,
     setSlideLoaded,
     setSummary,
     clearSlide,

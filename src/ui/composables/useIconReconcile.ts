@@ -4,7 +4,7 @@
 // depend on the user opening the matching tab/panel — earlier it sat
 // inside useCardEditor / useBadgeEditor and only fired when those
 // panels were already mounted, which meant the user had to click the
-// Inhoud tab for cards to reconcile.
+// Onderdelen tab for cards to reconcile.
 //
 // Mechanism: watches the per-slide `content.cards` array and the
 // `general.badge` object. Both are replaced wholesale by the sandbox

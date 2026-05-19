@@ -222,7 +222,7 @@ export function useCardEditor() {
 
   // NOTE: card-icon reconcile lives at App.vue scope (useIconReconcile)
   // so it runs regardless of which tab is mounted. Previously this
-  // watcher sat here and required the user to open the Inhoud tab
+  // watcher sat here and required the user to open the Onderdelen tab
   // before stale icons would restore.
 
   return reactive({

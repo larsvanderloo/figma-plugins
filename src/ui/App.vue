@@ -644,7 +644,7 @@ onMounted(() => {
         aria-label="Welder-navigatie"
       >
         <div
-          class="pointer-events-auto flex items-center gap-3 rounded-full bg-default/65 backdrop-blur-xl pl-4 pr-3 py-3 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.22)] ring-1 ring-default/40"
+          class="pointer-events-auto flex items-center gap-2.5 rounded-full bg-default/65 backdrop-blur-xl pl-3.5 pr-3 py-3 shadow-[0_16px_40px_-12px_rgba(0,0,0,0.22)] ring-1 ring-default/40"
         >
           <!--
             Inline W-only mark — same paths as the full Welder logo
@@ -666,21 +666,16 @@ onMounted(() => {
               d="M528.4,155.5c-6-10.1-19-13.4-29.1-7.4l-42.6,25.3c-50.5,29.9-67.1,95.1-37.2,145.5l166.3,280.4c6,10.1,19,13.4,29.1,7.4l42.6-25.3c50.5-29.9,67.1-95.1,37.2-145.6l-166.3-280.4Z"
             />
           </svg>
-          <span class="h-7 w-px bg-border" aria-hidden="true" />
+          <span class="h-6 w-px bg-border" aria-hidden="true" />
           <!--
-            Grid-cols-2 ensures both tabs claim equal width, so the
-            sliding pill (50% - 4px wide, jumping between left:4px and
-            left:50%) lines up with each button regardless of label
-            length. Flex + gap-1 looked off because "Algemeen" is 2
-            characters longer than "Inhoud".
+            Fixed columns keep the segmented control visually balanced:
+            "Basis" gets the smaller column, while "Onderdelen" gets the
+            extra width it needs without making the whole control feel loose.
           -->
-          <div class="relative grid grid-cols-2 items-center bg-elevated rounded-full p-1 min-w-56">
+          <div class="relative grid grid-cols-[6rem_8rem] items-center bg-elevated rounded-full p-1">
             <div
               class="absolute inset-y-1 rounded-full bg-default shadow-[0_1px_2px_rgba(0,0,0,0.06)] transition-all duration-200 ease-out pointer-events-none"
-              :style="{
-                width: 'calc(50% - 4px)',
-                left: activeTab === 'general' ? '4px' : '50%',
-              }"
+              :class="activeTab === 'general' ? 'left-1 w-24' : 'left-[6.25rem] w-32'"
               aria-hidden="true"
             />
             <button
@@ -691,7 +686,7 @@ onMounted(() => {
               @click="activeTab = 'general'"
             >
               <UIcon name="i-lucide-square-pen" class="size-4" />
-              Algemeen
+              Basis
             </button>
             <button
               type="button"
@@ -701,7 +696,7 @@ onMounted(() => {
               @click="activeTab = 'content'"
             >
               <UIcon name="i-lucide-layers" class="size-4" />
-              Inhoud
+              Onderdelen
             </button>
           </div>
         </div>

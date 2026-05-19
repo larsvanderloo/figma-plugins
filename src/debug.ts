@@ -36,13 +36,75 @@ export function debugLog(scope: string, event: string, data?: unknown): void {
 
 export function debugMessage(direction: string, msg: unknown): void {
   if (!isPluginDebugEnabled()) return;
-  debugLog('bridge', direction + ' ' + readMessageType(msg), msg);
+  debugLog('bridge', direction + ' ' + readMessageType(msg), summarizeBridgeMessage(msg));
 }
 
 function readMessageType(msg: unknown): string {
   if (msg === null || msg === undefined || typeof msg !== 'object') return 'unknown';
   const typed = msg as { type?: unknown };
   return typeof typed.type === 'string' ? typed.type : 'unknown';
+}
+
+function summarizeBridgeMessage(msg: unknown): unknown {
+  if (msg === null || msg === undefined || typeof msg !== 'object') return msg;
+  const record = msg as { [key: string]: unknown };
+  const type = typeof record.type === 'string' ? record.type : 'unknown';
+
+  if (type === 'slide-loaded') {
+    const content = record.content as { cards?: unknown } | null | undefined;
+    const graphs = record.graphs as { instances?: unknown } | null | undefined;
+    return {
+      type: type,
+      summary: record.summary,
+      hasGeneral: record.general !== null && record.general !== undefined,
+      hasContent: record.content !== null && record.content !== undefined,
+      hasGraphs: record.graphs !== null && record.graphs !== undefined,
+      cardCount: arrayLength(content !== null && content !== undefined ? content.cards : undefined),
+      graphCount: arrayLength(graphs !== null && graphs !== undefined ? graphs.instances : undefined),
+    };
+  }
+
+  if (type === 'card-visual-preview' || type === 'image-preview') {
+    return {
+      type: type,
+      cardNodeId: record.cardNodeId,
+      imageWrapId: record.imageWrapId,
+      bytes: byteLength(record.bytes),
+      fillW: record.fillW,
+      fillH: record.fillH,
+    };
+  }
+
+  if (type === 'document-ready') {
+    return {
+      type: type,
+      target: record.target,
+      format: record.format,
+      bytes: byteLength(record.bytes),
+      filename: record.filename,
+      title: record.title,
+    };
+  }
+
+  if (type === 'presentation-pdf-parts') {
+    return {
+      type: type,
+      parts: arrayLength(record.parts),
+      filename: record.filename,
+      title: record.title,
+    };
+  }
+
+  return msg;
+}
+
+function arrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0;
+}
+
+function byteLength(value: unknown): number {
+  if (isUint8Array(value)) return value.length;
+  return 0;
 }
 
 function postDebugLog(scope: string, event: string, data: unknown, hasData: boolean): void {

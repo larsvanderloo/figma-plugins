@@ -20,12 +20,15 @@
 // ============================================================
 
 import { findCopyWrap, findEnclosingInstanceByName } from '../../slide-machine';
+import { applyAccentRanges } from '../_shared/accent-ranges';
 import { setTextCharactersSafe } from '../_shared/fonts';
 
 /** Payload-shape voor `update-general` met section `titleDescription`. */
 export interface TitleDescriptionPayload {
   heading?: string;
   paragraph?: string;
+  /** Optional heading accent ranges to apply after a heading text write. */
+  headingDim?: Array<[number, number]>;
   /** Explicit heading visibility — toggled by the iframe switch. */
   headingVisible?: boolean;
   /** Explicit paragraph visibility — toggled by the iframe switch. */
@@ -63,10 +66,13 @@ export async function applyTitleDescription(
     const headingNode = findTextByName(copyWrap, 'Heading');
     if (headingNode !== null) {
       await setTextCharactersSafe(headingNode, payload.heading);
-      // Visibility is now driven by the explicit `headingVisible` switch
-      // (see below). Keep the inner TEXT visible so the toggle can show
-      // / hide via the wrapper without ever blanking the inner node.
+      // Visibility is driven by the explicit `headingVisible` switch
+      // (see below). Keep the inner TEXT visible so the CopyWrap toggle
+      // never blanks the node itself.
       headingNode.visible = true;
+      if (payload.headingDim !== undefined) {
+        await applyAccentRanges(headingNode, payload.headingDim);
+      }
     }
   }
 
@@ -80,19 +86,23 @@ export async function applyTitleDescription(
 
   // Explicit visibility toggles — decoupled from text content so the
   // user can hide a section without losing what they typed. Heading
-  // toggles the TypHeading wrapper; paragraph routes through the
-  // `showParagraph` BOOLEAN component property on CopyWrap (canonical
-  // Welder mechanism — Slide Machine reflows the rest of the slide
-  // off this signal).
+  // toggles the whole CopyWrap because CopyWrap owns the fill/container;
+  // hiding only TypHeading leaves the container visible. Paragraph still
+  // routes through the `showParagraph` BOOLEAN component property on
+  // CopyWrap (canonical Welder mechanism — Slide Machine reflows the
+  // rest of the slide off this signal).
   if (typeof payload.headingVisible === 'boolean') {
+    copyWrap.visible = payload.headingVisible;
     const headingNode = findTextByName(copyWrap, 'Heading');
-    if (headingNode !== null) {
+    if (payload.headingVisible === true && headingNode !== null) {
+      // Legacy cleanup: older builds hid TypHeading itself. When the
+      // CopyWrap comes back, make sure that nested state does not keep
+      // the title visually hidden.
       const wrapper = findEnclosingInstanceByName(headingNode, 'TypHeading', slide);
       if (wrapper !== null) {
-        wrapper.visible = payload.headingVisible;
-      } else {
-        headingNode.visible = payload.headingVisible;
+        wrapper.visible = true;
       }
+      headingNode.visible = true;
     }
   }
 

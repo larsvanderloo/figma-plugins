@@ -51,11 +51,11 @@ const anyBeforeBadge = computed<boolean>(
 );
 const anyBeforeImage = computed<boolean>(() => anyBeforeBadge.value || hasBadge.value);
 
-function toggleSkip(): void {
+function toggleSkip(visibleInPresentation: boolean): void {
   const summary = view.currentSummary;
   if (summary === null) return;
   if (summary.isSkipped === null) return;
-  settings.setSkipped(summary.id, !summary.isSkipped);
+  settings.setSkipped(summary.id, !visibleInPresentation);
 }
 
 function onThemeChange(modeId: string | null): void {
@@ -67,7 +67,7 @@ function onThemeChange(modeId: string | null): void {
 
 <template>
   <section class="space-y-2">
-    <h2 class="text-base font-semibold text-highlighted px-1">Algemeen</h2>
+    <h2 class="text-base font-semibold text-highlighted px-1">Basis</h2>
     <div
       class="rounded-[calc(var(--ui-radius)*4)] bg-default shadow-[0_4px_16px_-6px_rgba(0,0,0,0.08)] overflow-hidden"
     >
@@ -113,6 +113,7 @@ function onThemeChange(modeId: string | null): void {
             :accent-pending="titleDescriptionEditor.accentPending"
             @update:model-value="titleDescriptionEditor.update"
             @update:heading-dim="titleDescriptionEditor.updateHeadingDim"
+            @commit:heading-dim="titleDescriptionEditor.flushHeadingDim"
             @commit:size="titleDescriptionEditor.commitSize"
             @commit:visibility="titleDescriptionEditor.commitVisibility"
           />

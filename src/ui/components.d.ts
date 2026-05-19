@@ -22,6 +22,7 @@ declare module 'vue' {
     UInput: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Input.vue')['default']
     UModal: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Modal.vue')['default']
     UPopover: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Popover.vue')['default']
+    UProgress: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Progress.vue')['default']
     USelect: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Select.vue')['default']
     USelectMenu: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/SelectMenu.vue')['default']
     USeparator: typeof import('./../../node_modules/@nuxt/ui/dist/runtime/components/Separator.vue')['default']

@@ -25,7 +25,7 @@
 // ============================================================
 
 import { computed, getCurrentInstance, onUnmounted, ref, type ComputedRef } from 'vue';
-import { debugMessage } from '../../debug';
+import { debugLog, debugMessage, isPluginDebugEnabled } from '../../debug';
 import type { PluginToUIMessage, UIToPluginMessage } from '../../types';
 
 /** Handler voor een inkomend plugin-bericht. */
@@ -53,6 +53,127 @@ export interface PluginBridge {
 const pluginMessageHandlers = new Set<PluginMessageHandler>();
 let isWindowMessageListenerAttached = false;
 
+interface PendingBridgePerf {
+  id: number;
+  type: string;
+  requestId: string | null;
+  startedAt: number;
+}
+
+const pendingBridgeByRequestId = new Map<string, PendingBridgePerf>();
+const pendingBridgeQueue: PendingBridgePerf[] = [];
+let nextBridgePerfId = 1;
+
+const MAX_PENDING_BRIDGE_PERF_AGE_MS = 15000;
+
+function readMessageType(msg: unknown): string {
+  if (msg === null || msg === undefined || typeof msg !== 'object') return 'unknown';
+  const typed = msg as { type?: unknown };
+  return typeof typed.type === 'string' ? typed.type : 'unknown';
+}
+
+function readRequestId(msg: unknown): string | null {
+  if (msg === null || msg === undefined || typeof msg !== 'object') return null;
+  const typed = msg as { requestId?: unknown };
+  return typeof typed.requestId === 'string' && typed.requestId.length > 0 ? typed.requestId : null;
+}
+
+function shouldTrackRoundtrip(msg: UIToPluginMessage): boolean {
+  if (msg.type === 'ui-ready') return false;
+  if (msg.type === 'set-icon-recents') return false;
+  if (msg.type === 'resize-ui') return false;
+  if (msg.type === 'export-document') return false;
+  if (msg.type === 'trigger-undo') return false;
+  if (msg.type === 'close') return false;
+  return true;
+}
+
+function pruneBridgePerf(now: number): void {
+  while (
+    pendingBridgeQueue.length > 0 &&
+    now - pendingBridgeQueue[0].startedAt > MAX_PENDING_BRIDGE_PERF_AGE_MS
+  ) {
+    const stale = pendingBridgeQueue.shift()!;
+    if (stale.requestId !== null) {
+      pendingBridgeByRequestId.delete(stale.requestId);
+    }
+    debugLog('perf', 'ui-roundtrip-timeout', {
+      id: stale.id,
+      type: stale.type,
+      requestId: stale.requestId,
+      ageMs: now - stale.startedAt,
+    });
+  }
+}
+
+function trackBridgePost(msg: UIToPluginMessage): void {
+  if (!isPluginDebugEnabled()) return;
+  if (!shouldTrackRoundtrip(msg)) return;
+  const now = Date.now();
+  pruneBridgePerf(now);
+  const pending: PendingBridgePerf = {
+    id: nextBridgePerfId++,
+    type: msg.type,
+    requestId: readRequestId(msg),
+    startedAt: now,
+  };
+  pendingBridgeQueue.push(pending);
+  if (pending.requestId !== null) {
+    pendingBridgeByRequestId.set(pending.requestId, pending);
+  }
+  debugLog('perf', 'ui-post', {
+    id: pending.id,
+    type: pending.type,
+    requestId: pending.requestId,
+  });
+}
+
+function settleBridgeRoundtrip(msg: PluginToUIMessage): void {
+  if (!isPluginDebugEnabled()) return;
+  if (msg.type !== 'target-updated') return;
+  const now = Date.now();
+  pruneBridgePerf(now);
+
+  let pending: PendingBridgePerf | null = null;
+  const requestId = readRequestId(msg);
+  if (requestId !== null) {
+    const byRequest = pendingBridgeByRequestId.get(requestId);
+    if (byRequest !== undefined) {
+      pending = byRequest;
+      pendingBridgeByRequestId.delete(requestId);
+      const idx = pendingBridgeQueue.indexOf(byRequest);
+      if (idx >= 0) pendingBridgeQueue.splice(idx, 1);
+    }
+  }
+
+  if (pending === null && pendingBridgeQueue.length > 0) {
+    pending = pendingBridgeQueue.shift()!;
+    if (pending.requestId !== null) {
+      pendingBridgeByRequestId.delete(pending.requestId);
+    }
+  }
+
+  if (pending === null) {
+    debugLog('perf', 'ui-roundtrip-unmatched', {
+      requestId: requestId,
+      ok: msg.ok,
+      targetId: msg.targetId,
+      error: msg.error,
+    });
+    return;
+  }
+
+  debugLog('perf', 'ui-roundtrip', {
+    id: pending.id,
+    type: pending.type,
+    requestId: pending.requestId,
+    ok: msg.ok,
+    targetId: msg.targetId,
+    totalMs: now - pending.startedAt,
+    error: msg.error,
+  });
+}
+
 function unwrapPluginMessage(event: MessageEvent): PluginToUIMessage | null {
   // Edge-case: Vite HMR en andere iframe-messages hebben geen
   // pluginMessage-envelope. Stil negeren, niet throwen.
@@ -68,6 +189,7 @@ function unwrapPluginMessage(event: MessageEvent): PluginToUIMessage | null {
 function handleWindowMessage(event: MessageEvent): void {
   const msg = unwrapPluginMessage(event);
   if (msg === null) return;
+  settleBridgeRoundtrip(msg);
 
   for (const handler of Array.from(pluginMessageHandlers)) {
     try {
@@ -86,6 +208,7 @@ function ensureWindowMessageListener(): void {
 
 function post(msg: UIToPluginMessage): void {
   debugMessage('ui->plugin', msg);
+  trackBridgePost(msg);
   parent.postMessage({ pluginMessage: msg }, '*');
 }
 

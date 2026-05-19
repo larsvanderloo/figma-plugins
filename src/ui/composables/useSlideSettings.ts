@@ -4,17 +4,82 @@ import { onUnmounted, reactive, ref } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { usePluginBridge } from './usePluginBridge';
 
+interface SkipRequest {
+  slideId: string;
+  skipped: boolean;
+  requestId: string;
+}
+
 export function useSlideSettings() {
   const view = usePluginView();
   const bridge = usePluginBridge();
 
   // Dedicated busy-flag for the visibility toggle so the pill can show
   // a brief loading shimmer while the sandbox is applying the change.
-  // Cleared on the next target-updated, or after a 2 s fallback.
+  // Rapid clicks are coalesced: while one sandbox write is in-flight,
+  // only the latest requested state is kept and sent after the ack.
   const isApplyingSkip = ref<boolean>(false);
+  let skipSeq = 0;
+  let activeSkip: SkipRequest | null = null;
+  let queuedSkip: SkipRequest | null = null;
   let skipClearTimer: ReturnType<typeof setTimeout> | null = null;
+
+  function makeSkipRequest(slideId: string, skipped: boolean): SkipRequest {
+    skipSeq += 1;
+    return {
+      slideId: slideId,
+      skipped: skipped,
+      requestId: 'skip-' + skipSeq,
+    };
+  }
+
+  function scheduleSkipFallback(requestId: string): void {
+    if (skipClearTimer !== null) clearTimeout(skipClearTimer);
+    skipClearTimer = setTimeout(() => {
+      if (activeSkip !== null && activeSkip.requestId === requestId) {
+        activeSkip = null;
+        const next = queuedSkip;
+        queuedSkip = null;
+        if (next !== null) {
+          postSkip(next);
+        } else {
+          isApplyingSkip.value = false;
+        }
+      }
+      skipClearTimer = null;
+    }, 3000);
+  }
+
+  function postSkip(req: SkipRequest): void {
+    activeSkip = req;
+    isApplyingSkip.value = true;
+    scheduleSkipFallback(req.requestId);
+    bridge.post({
+      type: 'set-slide-skipped',
+      slideId: req.slideId,
+      requestId: req.requestId,
+      skipped: req.skipped,
+    });
+  }
+
   const unsubSkipAck = bridge.onMessage((msg) => {
-    if (msg.type === 'target-updated' && isApplyingSkip.value) {
+    if (msg.type !== 'target-updated') return;
+    if (activeSkip === null) return;
+    if (msg.requestId !== activeSkip.requestId) return;
+
+    if (msg.ok) {
+      view.settleSkipOverride(activeSkip.slideId, activeSkip.requestId);
+    }
+    activeSkip = null;
+
+    const next = queuedSkip;
+    queuedSkip = null;
+    if (next !== null) {
+      postSkip(next);
+      return;
+    }
+
+    if (isApplyingSkip.value) {
       isApplyingSkip.value = false;
       if (skipClearTimer !== null) {
         clearTimeout(skipClearTimer);
@@ -26,24 +91,18 @@ export function useSlideSettings() {
 
   /** Toggle whether the slide is skipped during present mode. Flips the
    *  local summary optimistically so the visibility pill updates the
-   *  instant the user clicks; the sandbox no longer echoes slide-summary
-   *  back (matching set-slide-theme), so there's no clobber on rapid clicks. */
+   *  instant the user clicks. Stale slide-summary / slide-loaded echoes
+   *  are clamped by a short local override until the matching sandbox
+   *  ack has drained. */
   function setSkipped(slideId: string, skipped: boolean): void {
-    const summary = view.state.currentSummary;
-    if (summary !== null && summary.id === slideId && summary.isSkipped !== null) {
-      summary.isSkipped = skipped;
+    const req = makeSkipRequest(slideId, skipped);
+    view.setSkipOverride(slideId, skipped, req.requestId);
+    if (activeSkip !== null) {
+      queuedSkip = req;
+      isApplyingSkip.value = true;
+      return;
     }
-    isApplyingSkip.value = true;
-    if (skipClearTimer !== null) clearTimeout(skipClearTimer);
-    skipClearTimer = setTimeout(() => {
-      isApplyingSkip.value = false;
-      skipClearTimer = null;
-    }, 2000);
-    bridge.post({
-      type: 'set-slide-skipped',
-      slideId: slideId,
-      skipped: skipped,
-    });
+    postSkip(req);
   }
 
   /**

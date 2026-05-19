@@ -3,9 +3,9 @@
   section. Uses BInput / BTextarea so typing doesn't fire a sandbox
   round-trip per keystroke (commit-on-blur).
 
-  Accent chips (heading-dim word toggles) operate on the LAST-COMMITTED
-  heading text. While the user is typing, chips stay frozen against the
-  current modelValue.heading; once blur commits the new heading, chips
+  Accent markers (heading-dim word toggles) operate on the LAST-COMMITTED
+  heading text. While the user is typing, markers stay frozen against the
+  current modelValue.heading; once blur commits the new heading, markers
   re-derive from it. Length change → char-indices invalid → dim-words
   flush automatically.
 -->
@@ -35,11 +35,22 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   'update:modelValue': [value: TitleDescriptionValue];
   'update:headingDim': [ranges: Array<[number, number]>];
+  'commit:headingDim': [];
   'commit:size': [size: string];
   'commit:visibility': [field: 'heading' | 'paragraph', visible: boolean];
 }>();
 
 const hasParagraph = computed<boolean>(() => props.modelValue.paragraph !== null);
+const showHeadingFields = computed<boolean>(() => props.modelValue.headingVisible);
+const showAccentFields = computed<boolean>(
+  () => props.modelValue.headingVisible && props.modelValue.headingDim !== null,
+);
+const showParagraphSection = computed<boolean>(
+  () => hasParagraph.value && props.modelValue.headingVisible,
+);
+const showParagraphInput = computed<boolean>(
+  () => showParagraphSection.value && props.modelValue.paragraphVisible !== false,
+);
 
 // ── Heading-size slider (CopyWrap.Size VARIANT) ───────────────────────
 // Slider runs UNCONTROLLED: Reka's SliderRoot in controlled mode snaps
@@ -80,7 +91,7 @@ function onSizePick(idx: number): void {
   }
 }
 
-// ── Accent state (heading word-toggle) ─────────────────────────────────
+// ── Accent state (heading inline word-toggle) ──────────────────────────
 const dimWords = ref<Set<number>>(new Set());
 
 interface WordToken {
@@ -174,7 +185,6 @@ function onHeadingCommit(value: string): void {
   });
   if (headingChangedLength && dimWords.value.size > 0) {
     dimWords.value = new Set();
-    emit('update:headingDim', []);
   }
 }
 
@@ -203,6 +213,13 @@ function toggleWord(wordIndex: number): void {
   else next.add(wordIndex);
   dimWords.value = next;
   emit('update:headingDim', buildCharRanges());
+}
+
+function onAccentFocusOut(event: FocusEvent): void {
+  const current = event.currentTarget;
+  const next = event.relatedTarget;
+  if (current instanceof Node && next instanceof Node && current.contains(next)) return;
+  emit('commit:headingDim');
 }
 </script>
 
@@ -264,19 +281,21 @@ function toggleWord(wordIndex: number): void {
         </label>
       </div>
       <BInput
+        v-if="showHeadingFields"
         :model-value="modelValue.heading"
         placeholder="Bijv. Onze missie voor 2026"
         size="md"
-        :disabled="!modelValue.headingVisible"
         class="w-full"
         @update:model-value="onHeadingCommit"
       />
     </div>
 
-    <div v-if="modelValue.headingDim !== null" class="space-y-1.5">
+    <div v-if="showAccentFields" class="space-y-1.5">
       <div class="flex items-center justify-between gap-2 h-6">
-        <label class="text-sm font-medium text-default flex items-center gap-2">
-          Accent
+        <label class="text-sm font-medium text-default">
+          Accenten
+        </label>
+        <div class="h-5 min-w-20 flex justify-end">
           <Transition
             enter-active-class="transition-opacity duration-150"
             enter-from-class="opacity-0"
@@ -285,30 +304,65 @@ function toggleWord(wordIndex: number): void {
           >
             <span
               v-if="accentPending"
-              class="size-1.5 rounded-full bg-primary animate-pulse"
-              aria-hidden="true"
+              class="inline-flex h-5 items-center gap-1 rounded-full bg-elevated px-2 text-[11px] font-medium text-muted ring-1 ring-default"
+              role="status"
+              aria-live="polite"
+            >
+              <UIcon
+                name="i-lucide-loader-circle"
+                class="size-3 text-primary animate-spin"
+                aria-hidden="true"
+              />
+              Verwerken...
+            </span>
+          </Transition>
+        </div>
+      </div>
+      <div
+        class="-m-1 rounded-md p-1 ring-1 ring-transparent transition-[background-color,box-shadow]"
+        :class="accentPending ? 'bg-elevated/60 ring-primary/30' : ''"
+        :aria-busy="accentPending ? 'true' : 'false'"
+      >
+        <div
+          class="flex flex-wrap gap-2"
+          role="group"
+          aria-label="Accentwoorden"
+          @focusout="onAccentFocusOut"
+        >
+          <template v-for="(tok, i) in tokens" :key="i">
+            <UButton
+              v-if="tok.type === 'word'"
+              type="button"
+              size="xs"
+              :color="dimWords.has(tok.wordIndex) ? 'primary' : 'neutral'"
+              :variant="dimWords.has(tok.wordIndex) ? 'solid' : 'subtle'"
+              :aria-pressed="dimWords.has(tok.wordIndex)"
+              @click="toggleWord(tok.wordIndex)"
+            >
+              {{ tok.text }}
+            </UButton>
+          </template>
+        </div>
+        <div class="mt-2 h-0.5 overflow-hidden">
+          <Transition
+            enter-active-class="transition-opacity duration-150"
+            enter-from-class="opacity-0"
+            leave-active-class="transition-opacity duration-200"
+            leave-to-class="opacity-0"
+          >
+            <UProgress
+              v-if="accentPending"
+              :model-value="null"
+              size="xs"
+              color="primary"
+              animation="carousel"
             />
           </Transition>
-        </label>
+        </div>
       </div>
-      <div class="flex flex-wrap gap-2">
-        <template v-for="(tok, i) in tokens" :key="i">
-          <UButton
-            v-if="tok.type === 'word'"
-            size="xs"
-            :variant="dimWords.has(tok.wordIndex) ? 'solid' : 'subtle'"
-            :aria-pressed="dimWords.has(tok.wordIndex)"
-            @click="toggleWord(tok.wordIndex)"
-          >
-            {{ tok.text }}
-          </UButton>
-          <span v-else class="text-xs">&nbsp;</span>
-        </template>
-      </div>
-      <p class="text-xs text-muted">Klik op woorden om ze te accentueren.</p>
     </div>
 
-    <div v-if="hasParagraph" class="space-y-1.5">
+    <div v-if="showParagraphSection" class="space-y-1.5">
       <div class="flex items-center justify-between gap-2 h-6">
         <span class="text-sm font-medium text-default">Omschrijving</span>
         <label
@@ -326,12 +380,12 @@ function toggleWord(wordIndex: number): void {
         </label>
       </div>
       <BTextarea
+        v-if="showParagraphInput"
         :model-value="modelValue.paragraph ?? ''"
         :rows="3"
         :autoresize="true"
         placeholder="Een korte toelichting onder de titel"
         size="md"
-        :disabled="modelValue.paragraphVisible === false"
         class="w-full"
         @update:model-value="onParagraphCommit"
       />

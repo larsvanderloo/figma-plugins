@@ -34,6 +34,7 @@
 // ============================================================
 
 import { expandLucideNameVariants } from '../../lucide-aliases';
+import { debugLog } from '../../debug';
 
 // ============================================================
 // Name normalisation
@@ -104,9 +105,18 @@ let hydratePromise: Promise<void> | null = null;
 function startHydrateFromStorage(): Promise<void> {
   if (hydratePromise !== null) return hydratePromise;
   hydratePromise = (async () => {
+    const startedAt = Date.now();
     try {
       const raw = await figma.clientStorage.getAsync(PREF_VALUE_STORAGE_KEY);
-      if (raw === null || raw === undefined || typeof raw !== 'object') return;
+      if (raw === null || raw === undefined || typeof raw !== 'object') {
+        debugLog('perf', 'icon-cache-hydrate', {
+          added: 0,
+          total: prefValueCache.size,
+          totalMs: Date.now() - startedAt,
+          source: 'empty',
+        });
+        return;
+      }
       const obj = raw as { [k: string]: unknown };
       const keys = Object.keys(obj);
       let added = 0;
@@ -125,10 +135,22 @@ function startHydrateFromStorage(): Promise<void> {
             String(added) +
             ' entries (total ' +
             String(prefValueCache.size) +
-            ')',
+          ')',
         );
       }
+      debugLog('perf', 'icon-cache-hydrate', {
+        added: added,
+        storedCount: keys.length,
+        total: prefValueCache.size,
+        totalMs: Date.now() - startedAt,
+        source: 'clientStorage',
+      });
     } catch (e) {
+      debugLog('perf', 'icon-cache-hydrate', {
+        ok: false,
+        totalMs: Date.now() - startedAt,
+        error: String(e),
+      });
       console.log('[icon-swap] hydrate from clientStorage failed: ' + String(e));
     }
   })();
@@ -142,6 +164,7 @@ function startHydrateFromStorage(): Promise<void> {
  */
 function persistPrefValueCacheToStorage(): void {
   void (async () => {
+    const startedAt = Date.now();
     try {
       const serialized: { [k: string]: string } = {};
       prefValueCache.forEach((value, key) => {
@@ -153,7 +176,17 @@ function persistPrefValueCacheToStorage(): void {
           String(prefValueCache.size) +
           ' entries',
       );
+      debugLog('perf', 'icon-cache-persist', {
+        total: prefValueCache.size,
+        totalMs: Date.now() - startedAt,
+      });
     } catch (e) {
+      debugLog('perf', 'icon-cache-persist', {
+        ok: false,
+        total: prefValueCache.size,
+        totalMs: Date.now() - startedAt,
+        error: String(e),
+      });
       console.log('[icon-swap] persist to clientStorage failed: ' + String(e));
     }
   })();
@@ -167,6 +200,7 @@ function persistPrefValueCacheToStorage(): void {
 async function buildPrefValueCache(
   entries: ReadonlyArray<{ type: string; key: string }>,
 ): Promise<void> {
+  const startedAt = Date.now();
   const components = entries.filter(function (e) {
     return e.type === 'COMPONENT';
   });
@@ -200,6 +234,12 @@ async function buildPrefValueCache(
     }
   }
   console.log('[icon-swap] prefValueCache built: ' + String(prefValueCache.size) + ' entries');
+  debugLog('perf', 'icon-cache-build', {
+    preferredCount: entries.length,
+    componentCount: components.length,
+    total: prefValueCache.size,
+    totalMs: Date.now() - startedAt,
+  });
   // Persist to clientStorage so future plugin opens — even on decks
   // without a Card to prime from — can hydrate the cache.
   persistPrefValueCacheToStorage();
@@ -223,31 +263,59 @@ export async function swapComponentByName(
   instance: InstanceNode,
   iconName: string,
 ): Promise<boolean> {
+  const startedAt = Date.now();
   var target = normalizeIconKey(iconName);
+  var waitedForBuild = false;
+  var waitedForHydrate = false;
 
   // Wacht op lopende cache-build (van eerder gestart Card-prime) of
   // op clientStorage-hydrate zodat ook decks zonder Card op de page
   // de Lucide-keys uit een eerdere sessie kunnen vinden.
   if (prefValueBuildPromise !== null) {
+    waitedForBuild = true;
     try {
       await prefValueBuildPromise;
     } catch (_e) {}
   }
   if (prefValueCache.size === 0) {
+    waitedForHydrate = true;
     await startHydrateFromStorage();
   }
 
   var cachedKey = prefValueCache.get(target);
   if (cachedKey === undefined) {
     console.log('[icon-swap] swapComponentByName: "' + target + '" not in cache');
+    debugLog('perf', 'icon-swap-direct', {
+      icon: target,
+      ok: false,
+      cacheHit: false,
+      waitedForBuild: waitedForBuild,
+      waitedForHydrate: waitedForHydrate,
+      totalMs: Date.now() - startedAt,
+    });
     return false;
   }
 
   var comp: ComponentNode;
   try {
+    const importStartedAt = Date.now();
     comp = await figma.importComponentByKeyAsync(cachedKey);
+    debugLog('perf', 'icon-import', {
+      icon: target,
+      method: 'direct',
+      importMs: Date.now() - importStartedAt,
+    });
   } catch (e) {
     console.log('[icon-swap] swapComponentByName: importComponentByKeyAsync failed: ' + String(e));
+    debugLog('perf', 'icon-swap-direct', {
+      icon: target,
+      ok: false,
+      cacheHit: true,
+      waitedForBuild: waitedForBuild,
+      waitedForHydrate: waitedForHydrate,
+      totalMs: Date.now() - startedAt,
+      error: String(e),
+    });
     return false;
   }
 
@@ -256,9 +324,26 @@ export async function swapComponentByName(
     console.log(
       '[icon-swap] swapComponentByName: swapped "' + instance.name + '" → "' + iconName + '"',
     );
+    debugLog('perf', 'icon-swap-direct', {
+      icon: target,
+      ok: true,
+      cacheHit: true,
+      waitedForBuild: waitedForBuild,
+      waitedForHydrate: waitedForHydrate,
+      totalMs: Date.now() - startedAt,
+    });
     return true;
   } catch (e) {
     console.log('[icon-swap] swapComponentByName: swapComponent failed: ' + String(e));
+    debugLog('perf', 'icon-swap-direct', {
+      icon: target,
+      ok: false,
+      cacheHit: true,
+      waitedForBuild: waitedForBuild,
+      waitedForHydrate: waitedForHydrate,
+      totalMs: Date.now() - startedAt,
+      error: String(e),
+    });
     return false;
   }
 }
@@ -275,6 +360,7 @@ export async function swapComponentByName(
  * @param instance — een InstanceNode met een INSTANCE_SWAP-property (bv. een Card).
  */
 export async function primeIconCache(instance: InstanceNode): Promise<void> {
+  const startedAt = Date.now();
   // Always kick off the clientStorage hydrate in parallel — covers the
   // "deck has only badges, no card to prime from" path. Hydrate is a
   // no-op when storage is empty (first-ever open).
@@ -282,6 +368,13 @@ export async function primeIconCache(instance: InstanceNode): Promise<void> {
 
   // Already building or done — nothing to do.
   if (prefValueBuildPromise !== null) {
+    debugLog('perf', 'icon-cache-prime', {
+      instanceId: instance.id,
+      instanceName: instance.name,
+      reusedBuild: true,
+      cacheSize: prefValueCache.size,
+      totalMs: Date.now() - startedAt,
+    });
     return prefValueBuildPromise;
   }
 
@@ -290,9 +383,26 @@ export async function primeIconCache(instance: InstanceNode): Promise<void> {
   try {
     main = await instance.getMainComponentAsync();
   } catch (e) {
+    debugLog('perf', 'icon-cache-prime', {
+      instanceId: instance.id,
+      instanceName: instance.name,
+      ok: false,
+      reason: 'main-component-error',
+      totalMs: Date.now() - startedAt,
+      error: String(e),
+    });
     return;
   }
-  if (main === null) return;
+  if (main === null) {
+    debugLog('perf', 'icon-cache-prime', {
+      instanceId: instance.id,
+      instanceName: instance.name,
+      ok: false,
+      reason: 'main-component-null',
+      totalMs: Date.now() - startedAt,
+    });
+    return;
+  }
 
   let owner: ComponentNode | ComponentSetNode;
   if (main.parent !== null && main.parent.type === 'COMPONENT_SET') {
@@ -312,7 +422,16 @@ export async function primeIconCache(instance: InstanceNode): Promise<void> {
   }
 
   const defs = owner.componentPropertyDefinitions;
-  if (defs === null || defs === undefined) return;
+  if (defs === null || defs === undefined) {
+    debugLog('perf', 'icon-cache-prime', {
+      instanceId: instance.id,
+      instanceName: instance.name,
+      ok: false,
+      reason: 'no-property-definitions',
+      totalMs: Date.now() - startedAt,
+    });
+    return;
+  }
 
   const defKeys = Object.keys(defs);
   for (let i = 0; i < defKeys.length; i++) {
@@ -328,8 +447,22 @@ export async function primeIconCache(instance: InstanceNode): Promise<void> {
         ' entries)',
     );
     prefValueBuildPromise = buildPrefValueCache(preferred);
+    debugLog('perf', 'icon-cache-prime', {
+      instanceId: instance.id,
+      instanceName: instance.name,
+      ok: true,
+      preferredCount: preferred.length,
+      totalMs: Date.now() - startedAt,
+    });
     return prefValueBuildPromise;
   }
+  debugLog('perf', 'icon-cache-prime', {
+    instanceId: instance.id,
+    instanceName: instance.name,
+    ok: false,
+    reason: 'no-instance-swap-preferred-values',
+    totalMs: Date.now() - startedAt,
+  });
 }
 
 // ============================================================
@@ -357,6 +490,10 @@ export async function trySwapViaInstanceProperty(
   instance: InstanceNode,
   iconName: string,
 ): Promise<boolean> {
+  const startedAt = Date.now();
+  const target = normalizeIconKey(iconName);
+  let waitedForBuild = false;
+  let waitedForHydrate = false;
   // Stap 1: haal mainComponent op.
   let main: ComponentNode | null;
   try {
@@ -365,10 +502,27 @@ export async function trySwapViaInstanceProperty(
     console.log(
       '[icon-swap] getMainComponentAsync failed for "' + instance.name + '": ' + String(e),
     );
+    debugLog('perf', 'icon-swap-instance-property', {
+      icon: target,
+      instanceId: instance.id,
+      instanceName: instance.name,
+      ok: false,
+      reason: 'main-component-error',
+      totalMs: Date.now() - startedAt,
+      error: String(e),
+    });
     return false;
   }
   if (main === null) {
     console.log('[icon-swap] getMainComponentAsync → null for "' + instance.name + '"');
+    debugLog('perf', 'icon-swap-instance-property', {
+      icon: target,
+      instanceId: instance.id,
+      instanceName: instance.name,
+      ok: false,
+      reason: 'main-component-null',
+      totalMs: Date.now() - startedAt,
+    });
     return false;
   }
   console.log(
@@ -422,10 +576,19 @@ export async function trySwapViaInstanceProperty(
 
   // Stap 3: property-definitions uitlezen.
   const defs = ownerDefs;
-  if (defs === null || defs === undefined) return false;
+  if (defs === null || defs === undefined) {
+    debugLog('perf', 'icon-swap-instance-property', {
+      icon: target,
+      instanceId: instance.id,
+      instanceName: instance.name,
+      ok: false,
+      reason: 'no-property-definitions',
+      totalMs: Date.now() - startedAt,
+    });
+    return false;
+  }
 
   // Stap 4: zoek de eerste INSTANCE_SWAP-property.
-  const target = normalizeIconKey(iconName);
   const keys = Object.keys(defs);
   let foundInstanceSwap = false;
   for (let i = 0; i < keys.length; i++) {
@@ -469,6 +632,7 @@ export async function trySwapViaInstanceProperty(
     let cachedKey = prefValueCache.get(target);
     if (cachedKey === undefined && prefValueBuildPromise !== null) {
       console.log('[icon-swap] cache miss for "' + target + '" — awaiting in-flight build');
+      waitedForBuild = true;
       try {
         await prefValueBuildPromise;
       } catch (_e) {
@@ -478,6 +642,7 @@ export async function trySwapViaInstanceProperty(
     }
     if (cachedKey === undefined && prefValueCache.size === 0) {
       console.log('[icon-swap] cache empty — awaiting clientStorage hydrate');
+      waitedForHydrate = true;
       await startHydrateFromStorage();
       cachedKey = prefValueCache.get(target);
     }
@@ -500,6 +665,17 @@ export async function trySwapViaInstanceProperty(
             owner.name +
             '"',
         );
+        debugLog('perf', 'icon-swap-instance-property', {
+          icon: target,
+          instanceId: instance.id,
+          instanceName: instance.name,
+          ok: false,
+          reason: 'cache-miss',
+          cacheHit: false,
+          waitedForBuild: waitedForBuild,
+          waitedForHydrate: waitedForHydrate,
+          totalMs: Date.now() - startedAt,
+        });
         return false;
       }
       console.log(
@@ -516,8 +692,16 @@ export async function trySwapViaInstanceProperty(
 
     // Stap 7: import via gecachede key en swap.
     let imported: ComponentNode;
+    let importMs = 0;
     try {
+      const importStartedAt = Date.now();
       imported = await figma.importComponentByKeyAsync(cachedKey);
+      importMs = Date.now() - importStartedAt;
+      debugLog('perf', 'icon-import', {
+        icon: target,
+        method: 'instance-property',
+        importMs: importMs,
+      });
     } catch (e) {
       console.log(
         '[icon-swap] importComponentByKeyAsync failed for cached key "' +
@@ -525,6 +709,18 @@ export async function trySwapViaInstanceProperty(
           '": ' +
           String(e),
       );
+      debugLog('perf', 'icon-swap-instance-property', {
+        icon: target,
+        instanceId: instance.id,
+        instanceName: instance.name,
+        ok: false,
+        reason: 'import-error',
+        cacheHit: true,
+        waitedForBuild: waitedForBuild,
+        waitedForHydrate: waitedForHydrate,
+        totalMs: Date.now() - startedAt,
+        error: String(e),
+      });
       return false;
     }
 
@@ -536,6 +732,17 @@ export async function trySwapViaInstanceProperty(
       console.log(
         '[icon-swap] icon swapped → ' + iconName + ' (via INSTANCE_SWAP prop "' + propKey + '")',
       );
+      debugLog('perf', 'icon-swap-instance-property', {
+        icon: target,
+        instanceId: instance.id,
+        instanceName: instance.name,
+        ok: true,
+        cacheHit: true,
+        waitedForBuild: waitedForBuild,
+        waitedForHydrate: waitedForHydrate,
+        importMs: importMs,
+        totalMs: Date.now() - startedAt,
+      });
       return true;
     } catch (e) {
       console.log(
@@ -546,6 +753,19 @@ export async function trySwapViaInstanceProperty(
           '": ' +
           String(e),
       );
+      debugLog('perf', 'icon-swap-instance-property', {
+        icon: target,
+        instanceId: instance.id,
+        instanceName: instance.name,
+        ok: false,
+        reason: 'set-properties-error',
+        cacheHit: true,
+        waitedForBuild: waitedForBuild,
+        waitedForHydrate: waitedForHydrate,
+        importMs: importMs,
+        totalMs: Date.now() - startedAt,
+        error: String(e),
+      });
       return false;
     }
   }
@@ -555,5 +775,16 @@ export async function trySwapViaInstanceProperty(
   }
 
   // Geen INSTANCE_SWAP-property gevonden.
+  debugLog('perf', 'icon-swap-instance-property', {
+    icon: target,
+    instanceId: instance.id,
+    instanceName: instance.name,
+    ok: false,
+    reason: foundInstanceSwap ? 'cache-miss' : 'no-instance-swap-property',
+    cacheHit: false,
+    waitedForBuild: waitedForBuild,
+    waitedForHydrate: waitedForHydrate,
+    totalMs: Date.now() - startedAt,
+  });
   return false;
 }
