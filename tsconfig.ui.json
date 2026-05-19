@@ -23,8 +23,7 @@
     "src/ui/**/*.vue",
     "src/ui/shims-vue.d.ts",
     "src/types.ts",
-    "src/constants.ts",
-    "src/chart-core/**/*.ts"
+    "src/constants.ts"
   ],
   "exclude": ["node_modules", "dist", "vite.config.ts", "esbuild.config.mjs"]
 }

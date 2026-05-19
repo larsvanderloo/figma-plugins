@@ -25,71 +25,8 @@ app.use(createPinia());
 app.use(ui);
 app.mount('#app');
 
-// ── Dev-only mock bridge ──────────────────────────────────────────────────
-// In de Vite dev-server is er geen Figma main thread. We simuleren de
-// init → slide-loaded → icons-ready handshake zodat de UI volledig
-// rendert in de sidebar preview.
 if (import.meta.env.DEV) {
-  function devPost(msg: unknown, delay: number): void {
-    setTimeout(function () {
-      window.dispatchEvent(new MessageEvent('message', { data: { pluginMessage: msg } }));
-    }, delay);
-  }
-
-  devPost(
-    {
-      type: 'init',
-      slides: [
-        { id: 'dev-slide-1', name: 'Slide 1 — Intro' },
-        { id: 'dev-slide-2', name: 'Slide 2 — Results' },
-      ],
-      initialSlideId: 'dev-slide-1',
-    },
-    300,
-  );
-
-  devPost(
-    {
-      type: 'slide-loaded',
-      slideId: 'dev-slide-1',
-      general: {
-        titleDescription: {
-          copyWrapId: 'cw-1',
-          heading: 'Onze resultaten dit kwartaal',
-          paragraph: 'Een korte toelichting op de cijfers en context.',
-          headingDim: [[6, 19]],
-        },
-        badge: { badgeNodeId: 'badge-1', label: 'Q1 2025', icon: 'trending-up' },
-        image: { imageWrapId: 'iw-1', imageHash: null },
-      },
-      content: {
-        cardWrapId: 'wrap-1',
-        cards: [
-          {
-            cardNodeId: 'c-1',
-            heading: 'Omzet',
-            paragraph: 'Totale omzet gestegen met 12% t.o.v. vorig kwartaal.',
-            icon: 'euro',
-            visualHash: null,
-          },
-          {
-            cardNodeId: 'c-2',
-            heading: 'Klanten',
-            paragraph: 'Aantal actieve klanten is dit kwartaal met 8% gegroeid.',
-            icon: 'users',
-            visualHash: undefined,
-          },
-          {
-            cardNodeId: 'c-3',
-            heading: 'NPS',
-            paragraph: 'Net Promoter Score stabiel op 42.',
-            icon: 'heart',
-            visualHash: null,
-          },
-        ],
-      },
-      graphs: null,
-    },
-    600,
-  );
+  void import('./dev/mockBridge').then(({ installMockBridge }) => {
+    installMockBridge();
+  });
 }

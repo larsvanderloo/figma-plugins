@@ -2,24 +2,33 @@
   Welder Slide Editor — iframe root.
 
   Layout:
-    - Header: welder-logo (links) + SlideSelector (midden) + close-knop (rechts).
-    - Body: gestapelde panelen (General / Content / Graphs) in cards met
-      rounded corners + shadow. Alle aanwezige panelen verschijnen verticaal
-      op één pagina.
-    - Empty-state wanneer geen slide gekozen óf de gekozen slide geen
-      bewerkbare wrappers heeft.
+    - Splash while the sandbox initializes and reconciles stale icons.
+    - Tabbed sidebar for Basis and Onderdelen, with panel components owning
+      their domain editors.
+    - Export modal, resize handle, and bottom navigation live at app-shell
+      level until they are split into dedicated shell components.
 
   Bridge-wiring:
-    - onMounted: `onMessage`-handler voor init / slide-loaded / page-changed
-      en daarna `ui-ready` posten.
-    - SlideSelector-wijziging: pickSlide-store + `pick-slide` bridge.
+    - onMounted registers the bridge handler for init / slide-loaded /
+      slide-summary / target-updated / export responses, then posts ui-ready.
+    - Domain edits flow through composables and the typed bridge contract.
 -->
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
 import { useToast } from '@nuxt/ui/composables';
-
 import { PDFDocument } from 'pdf-lib';
-
+import { computed, onMounted, ref, watch } from 'vue';
+import welderLogo from './assets/welder-logo.svg';
+import ContentPanel from './components/panels/ContentPanel.vue';
+import GeneralPanel from './components/panels/GeneralPanel.vue';
+import GraphsPanel from './components/panels/GraphsPanel.vue';
+import { useExport } from './composables/useExport';
+import { useIconReconcile } from './composables/useIconReconcile';
+import { usePluginBridge } from './composables/usePluginBridge';
+import { APP_VERSION } from './generated/app-version';
+import { getLucideSvg } from './lucide-svgs';
+import { useIconRecents } from './stores/useIconRecents';
+import { useNotifications } from './stores/useNotifications';
+import { usePluginView } from './stores/usePluginView';
 
 // Constant PDF metadata applied to every Welder export. Title is set
 // per-document by the caller. Copyright lives in /Subject because
@@ -60,18 +69,6 @@ function downloadBlob(bytes: Uint8Array, filename: string, mime: string): void {
   document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 0);
 }
-import GeneralPanel from './components/panels/GeneralPanel.vue';
-import ContentPanel from './components/panels/ContentPanel.vue';
-import GraphsPanel from './components/panels/GraphsPanel.vue';
-import { usePluginBridge } from './composables/usePluginBridge';
-import { useIconReconcile } from './composables/useIconReconcile';
-import { getLucideSvg } from './lucide-svgs';
-import { useExport } from './composables/useExport';
-import { usePluginView } from './stores/usePluginView';
-import { useIconRecents } from './stores/useIconRecents';
-import { useNotifications } from './stores/useNotifications';
-import welderLogo from './assets/welder-logo.svg';
-import { APP_VERSION } from './generated/app-version';
 
 const bridge = usePluginBridge();
 const view = usePluginView();

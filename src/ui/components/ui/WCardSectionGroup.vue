@@ -1,11 +1,11 @@
 <template>
-  <div class="global-card-section-group">
+  <div class="w-card-section-group">
     <slot />
   </div>
 </template>
 
 <style scoped>
-.global-card-section-group :deep(.global-card-section + .global-card-section)::before {
+.w-card-section-group :deep(.w-card-section + .w-card-section)::before {
   content: '';
   display: block;
   height: 1px;

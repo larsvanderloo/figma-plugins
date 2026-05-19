@@ -146,15 +146,12 @@ export interface SlideSummary {
 }
 
 // ============================================================
-// Tabs + overkoepelende PluginView (spec §3.2)
+// Overkoepelende PluginView-state (spec §3.2)
 // ============================================================
-
-export type TabId = 'general' | 'graphs';
 
 export interface PluginView {
   /** Current slide summary (id, number, name, isSkipped); null when no slide selected. */
   currentSummary: SlideSummary | null;
-  activeTab: TabId;
   /** null tot er een slide is gekozen óf als de slide deze wrapper niet heeft. */
   general: GeneralSections | null;
   content: ContentItems | null;

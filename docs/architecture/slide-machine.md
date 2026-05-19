@@ -2,7 +2,11 @@
 
 **Status:** Living document (derived from code as ground truth)
 **Last updated:** 2026-05-07
-**Source files:** `plugin-src/slide-machine.ts`, `plugin-src/constants.ts`, `plugin-src/types.ts`, `plugin-src/editors/**`
+**Current source files:** `src/slide-machine.ts`, `src/constants.ts`, `src/types.ts`, `src/editors/**`
+
+> Note: this document still contains historical and queued JourneyWrap notes.
+> For current repository placement rules, see
+> [`current-structure.md`](./current-structure.md).
 **Audience:** Engineers and designers joining the Welder team who need to modify the plugin or the Slide Machine template.
 
 ---
@@ -186,7 +190,7 @@ functions.
 | Body rows | `TableRow-N` FRAME with `TableItem-cN` cells; FILL vertical (equal height sharing); top-stroke 1px on rows 2+ |
 | Font size formula | `getFontSizes(slotHeight, rowCount, textSize)` — formula-based, not a preset matrix (T39.1.1) |
 | Theme coupling | Cell text fill bound to `Text` variable (key `aaeec2f93a38b8a2e3af696972c4313eff529bc7`); strokes bound to `Text Dimmer` variable (key `cd3f59ce0c953ee93c4a30b738a96683035b3d72`) via `loadAccentVars()` / `setBoundVariableForPaint()` |
-| CSV import | `importCSV()` in `editors/table/csv.ts`; uses shared tokenizer in `chart-core/csv/`; truncates to `TABLE_MAX_ROWS` × `TABLE_MAX_COLS[width]` |
+| CSV import | `importCSV()` in `editors/table/csv.ts`; uses shared tokenizer in `src/csv/`; truncates to `TABLE_MAX_ROWS` × `TABLE_MAX_COLS[width]` |
 | Message types | `'update-table'` (full PUT), `'import-csv'` |
 
 ### 2.7 TimelineWrap (hand-built, legacy)

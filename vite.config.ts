@@ -7,6 +7,7 @@
 
 import { defineConfig, type Plugin } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
+import path from 'node:path';
 import vue from '@vitejs/plugin-vue';
 import ui from '@nuxt/ui/vite';
 import { viteSingleFile } from 'vite-plugin-singlefile';
@@ -14,6 +15,10 @@ import { welderNuxtUiTheme } from './src/ui/theme/nuxt-ui';
 
 const isDebug = process.env.PLUGIN_DEBUG === '1';
 const debugLogEndpoint = isDebug ? (process.env.PLUGIN_DEBUG_LOG_ENDPOINT ?? '') : '';
+const projectRoot = fileURLToPath(new URL('.', import.meta.url));
+const uiIndexHtml = fileURLToPath(new URL('./src/ui/index.html', import.meta.url));
+const uiAutoImportsDts = fileURLToPath(new URL('./src/ui/auto-imports.d.ts', import.meta.url));
+const uiComponentsDts = fileURLToPath(new URL('./src/ui/components.d.ts', import.meta.url));
 
 /**
  * Vite's input is src/ui/index.html; plugin-side esbuild importeert
@@ -29,27 +34,29 @@ function renameIndexToUi(): Plugin {
     enforce: 'post',
     async writeBundle(options) {
       const fs = await import('node:fs/promises');
-      const path = await import('node:path');
-      const configDir = path.dirname(fileURLToPath(import.meta.url));
       const outDirOption = options.dir ?? fileURLToPath(new URL('./dist', import.meta.url));
       const outDir = path.isAbsolute(outDirOption)
         ? outDirOption
-        : path.resolve(configDir, outDirOption);
-      const srcPath = path.join(outDir, 'index.html');
+        : path.resolve(projectRoot, outDirOption);
+      const candidatePaths = [path.join(outDir, 'index.html'), path.join(outDir, 'src', 'ui', 'index.html')];
       const destPath = path.join(outDir, 'ui.html');
-      try {
-        await fs.rename(srcPath, destPath);
-      } catch (err: unknown) {
-        // Als index.html niet bestaat (al hernoemd in watch-rebuild), geen fout.
-        const e = err as { code?: string };
-        if (e.code !== 'ENOENT') throw err;
+      for (const srcPath of candidatePaths) {
+        try {
+          await fs.rename(srcPath, destPath);
+          await fs.rm(path.join(outDir, 'src'), { recursive: true, force: true });
+          return;
+        } catch (err: unknown) {
+          // Als index.html niet bestaat (al hernoemd in watch-rebuild), geen fout.
+          const e = err as { code?: string };
+          if (e.code !== 'ENOENT') throw err;
+        }
       }
     },
   };
 }
 
 export default defineConfig({
-  root: fileURLToPath(new URL('./src/ui', import.meta.url)),
+  root: projectRoot,
   define: {
     // Replaced verbatim at bundle-time. Type declared in ui/env.d.ts.
     __PLUGIN_DEBUG__: JSON.stringify(isDebug),
@@ -62,6 +69,12 @@ export default defineConfig({
       // Forceer lichte modus: Figma-iframe volgt normaal `prefers-color-scheme`
       // van de user, maar we willen altijd Welder-branding in licht tonen.
       colorMode: false,
+      autoImport: {
+        dts: uiAutoImportsDts,
+      },
+      components: {
+        dts: uiComponentsDts,
+      },
       ui: welderNuxtUiTheme,
     }),
     viteSingleFile(),
@@ -83,6 +96,7 @@ export default defineConfig({
     cssCodeSplit: false,
     assetsInlineLimit: 100_000_000,
     rollupOptions: {
+      input: uiIndexHtml,
       output: {
         // Single-file-plugin verwacht 1 bundle; geen manualChunks.
         inlineDynamicImports: true,

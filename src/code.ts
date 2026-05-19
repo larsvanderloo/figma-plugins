@@ -1,5 +1,5 @@
 // ============================================================
-// Welder Slide Editor — Plugin Main (T4 skelet)
+// Welder Slide Editor — Plugin Main
 //
 // Entry-point voor de plugin-thread. Verantwoordelijkheden:
 //   1. UI-iframe tonen (figma.showUI).
@@ -10,11 +10,9 @@
 //      en response-messages (spec §5, FIG-MSG-01).
 //   5. Page-change listener: hercomputet de slidelist bij page-nav.
 //
-// Update-handlers voor general/card/graph/image zijn bewust no-op met
-// TODO-comments — die krijgen hun implementatie in T8–T12.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing,
-// geen catch-without-binding (memory feedback_figma_runtime.md).
+// This file is still the sandbox entry point. Keep new feature logic in
+// domain modules under editors/** where possible; code.ts should only wire
+// Figma lifecycle, scanning, message dispatch, and UI responses.
 // ============================================================
 
 import uiHtml from '../dist/ui.html';

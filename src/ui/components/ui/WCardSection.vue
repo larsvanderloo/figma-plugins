@@ -18,7 +18,7 @@ const props = withDefaults(
 );
 
 const sectionClass = computed(() => [
-  'global-card-section',
+  'w-card-section',
   props.spacious ? 'space-y-4' : '',
   'px-4 py-4',
   props.ui?.root ?? '',

@@ -19,7 +19,6 @@ import type {
   GraphItems,
   PluginRuntimeInfo,
   SlideSummary,
-  TabId,
 } from '../../types';
 
 export interface PluginViewState {
@@ -29,7 +28,6 @@ export interface PluginViewState {
   currentSummary: SlideSummary | null;
   /** Mirrors currentSummary.id for the editor composables that read it. */
   currentSlideId: string | null;
-  activeTab: TabId;
   general: GeneralSections | null;
   content: ContentItems | null;
   graphs: GraphItems | null;
@@ -50,7 +48,6 @@ export const usePluginView = defineStore('pluginView', () => {
     runtime: null,
     currentSummary: null,
     currentSlideId: null,
-    activeTab: 'general',
     general: null,
     content: null,
     graphs: null,
@@ -79,10 +76,6 @@ export const usePluginView = defineStore('pluginView', () => {
   );
 
   // ── Actions ────────────────────────────────────────────────────────────
-  function setActiveTab(tab: TabId): void {
-    state.activeTab = tab;
-  }
-
   function setRuntime(runtime: PluginRuntimeInfo): void {
     state.runtime = runtime;
   }
@@ -180,7 +173,6 @@ export const usePluginView = defineStore('pluginView', () => {
     hasGraphs,
     allEmpty,
     // actions
-    setActiveTab,
     setRuntime,
     setSkipOverride,
     settleSkipOverride,

@@ -1,5 +1,10 @@
 # welder-slide-editor — spec.md
 
+> Historical backlog note: this file predates the current `src/` repository
+> layout and still contains old `plugin-src/`, chart, and queued Journey
+> references. Use `docs/architecture/current-structure.md` as the current
+> source of truth for code placement and runtime boundaries.
+
 **Status:** Uitgebracht (v0.2.1) — v0.2.2 in voorbereiding (T39 responsive table)
 **Version:** 0.2.1
 **Last updated:** 2026-04-25 (T39 backlog uitgeschreven — responsive table met fixed slot-height. T39.0 = architect-research pre-flight, T39.1 = renderer rewrite via matrix-fontSize, T39.2 = UI/types/constants cleanup. Vorige entry 2026-04-24: T34 research done — zie `.archive/T34-table-research-2026-04-24.md`; T34.0–T34.6 backlog voor v0.2.0 TableWrap in-place-rewrite refactor. T36/T37/T38 polish geshipped als v0.2.1. Charts blijft op T33-state tot T34 geverifieerd — T35 gereserveerd maar BLOCKED. Eerder: T32 Card icon-picker visibility-check, T31.2 TimelineWrap polymorphic scan, T31.1 bredere wrapper-naam-matching, T31 TimelineWrap routering Graphs → Content, T30 heading-accent word-chips, T29 font-loading fix `5e0af6d`, T28 accent-ranges reverted — zie `.archive/T28-accent-ranges-handoff-2026-04-24.md`. Polish-tasks T19-T24 geshipped en uit §13 verwijderd.)

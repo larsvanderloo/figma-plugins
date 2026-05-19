@@ -1,8 +1,8 @@
 # Welder Editor
 
-Figma plugin for editing existing Welder-branded slides in Figma Design and Figma Slides. The user picks a slide on the current page from a dropdown, then edits its content via sub-editors for TitleDescription, Badge, Image, Card list, Table, and Journey/Timeline.
+Figma plugin for editing existing Welder-branded slides in Figma Design and Figma Slides. The user selects a slide on the canvas, then edits its content via sub-editors for title/description, badge, image, cards, timeline items, and tables.
 
-The full product specification is in [`docs/product/specs/spec.md`](./docs/product/specs/spec.md) (Dutch, ~2300 lines).
+The current repository structure is documented in [`docs/architecture/current-structure.md`](./docs/architecture/current-structure.md). The older product/backlog specification lives in [`docs/product/specs/spec.md`](./docs/product/specs/spec.md) and can contain historical paths or queued ideas.
 
 ## Build
 
@@ -17,6 +17,7 @@ npm run debug:watch    # watch mode with debug logs + inline sourcemaps
 npm run debug:manifests # write manifest-cache/*/manifest.json for Figma import
 npm run debug:logs     # local Figma runtime log collector only
 npm run dev:ui         # vite dev server for UI iteration
+npm run workspace:assert # fail on stale nested generated workspaces
 npm run typecheck      # plugin sandbox + UI type checks
 npm run typecheck:ui   # vue-tsc strict
 npm run version:assert # verify built bundles contain package.json version
@@ -54,6 +55,8 @@ The UI version badge is generated from `package.json` by `npm run build:version`
 - `src/csv/` — CSV tokenizer (used by the Table editor).
 
 The two threads are isolated; everything they share crosses the message bus. See `CLAUDE.md` for the non-negotiable thread rules.
+
+See [`docs/architecture/current-structure.md`](./docs/architecture/current-structure.md) for the current placement rules for Nuxt UI primitives, Figma API code, generated files, and known refactor targets.
 
 ## Editor types
 

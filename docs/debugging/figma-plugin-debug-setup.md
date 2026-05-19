@@ -146,9 +146,6 @@ The debug setup keeps that split intact:
 - `src/ui/shims-vue.d.ts`
   - Declares the injected `__PLUGIN_DEBUG__` compile-time flag for iframe TypeScript.
 
-- `src/editors/journey/renderer.ts`
-  - Small type-only cleanup found during verification: uses `ChildrenMixin` for `children` access instead of casting an `InstanceNode` to `FrameNode`.
-
 - `README.md`
   - Adds the new debug commands.
   - Links to this detailed document.
