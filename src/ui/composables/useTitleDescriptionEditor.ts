@@ -109,6 +109,36 @@ export function useTitleDescriptionEditor() {
     });
   }
 
+  // Trailing-debounce the bridge post — clicking each word in the
+  // accent chip strip used to fire one update-accent message per click,
+  // each triggering a sandbox font-load + per-segment fill write. With
+  // a 250ms idle wait, rapid edits coalesce to a single sandbox apply
+  // carrying the final set of ranges. The local store update happens
+  // immediately so the chip UI reacts to every click.
+  const ACCENT_DEBOUNCE_MS = 250;
+  let accentTimer: ReturnType<typeof setTimeout> | null = null;
+  let accentPending: { slideId: string; ranges: Array<[number, number]> } | null = null;
+
+  let accentPostedAt = 0;
+
+  function flushAccent(): void {
+    if (accentTimer !== null) {
+      clearTimeout(accentTimer);
+      accentTimer = null;
+    }
+    if (accentPending === null) return;
+    const p = accentPending;
+    accentPending = null;
+    accentPostedAt = performance.now();
+    console.log('[accent-perf] debounce fired → bridge.post · ranges=' + p.ranges.length);
+    tracker.register();
+    bridge.post({
+      type: 'update-accent',
+      slideId: p.slideId,
+      dimRanges: p.ranges,
+    });
+  }
+
   function updateHeadingDim(ranges: Array<[number, number]>): void {
     const slideId = view.state.currentSlideId;
     const td = view.state.general?.titleDescription;
@@ -116,13 +146,20 @@ export function useTitleDescriptionEditor() {
 
     td.headingDim = ranges;
 
-    tracker.register();
-    bridge.post({
-      type: 'update-accent',
-      slideId: slideId,
-      dimRanges: ranges,
-    });
+    accentPending = { slideId: slideId, ranges: ranges };
+    if (accentTimer !== null) clearTimeout(accentTimer);
+    accentTimer = setTimeout(flushAccent, ACCENT_DEBOUNCE_MS);
+    console.log('[accent-perf] composable received · scheduled flush in ' + ACCENT_DEBOUNCE_MS + 'ms');
   }
+
+  // Surface roundtrip latency for the user-visible apply.
+  bridge.onMessage(function (msg) {
+    if (msg.type === 'target-updated' && accentPostedAt > 0) {
+      const dt = performance.now() - accentPostedAt;
+      accentPostedAt = 0;
+      console.log('[accent-perf] target-updated received · bridge+apply ' + dt.toFixed(1) + 'ms');
+    }
+  });
 
   // reactive() wrapper unwraps `model` so `editor.model` returns the
   // current value directly in both script and template — no `.value`

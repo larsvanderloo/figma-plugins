@@ -2167,12 +2167,20 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       postToUI({ type: 'target-updated', ok: false, error: 'Heading node not found' });
       return;
     }
+    const t0 = Date.now();
     figma.commitUndo();
     markSelfWrite();
+    const t1 = Date.now();
     await applyAccentRanges(headingNode, msg.dimRanges);
+    const t2 = Date.now();
     await refreshTablesOnSlide(slide); // T39.3: heading-fill mutatie kan line-wrap reflowen
+    const t3 = Date.now();
     markSelfWrite();
     postToUI({ type: 'target-updated', ok: true, targetId: headingNode.id });
+    console.log(
+      '[accent-perf-sandbox] commitUndo ' + (t1 - t0) + 'ms · applyAccentRanges ' +
+        (t2 - t1) + 'ms · refreshTables ' + (t3 - t2) + 'ms · ranges=' + msg.dimRanges.length,
+    );
     return;
   }
 
@@ -2910,6 +2918,11 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     const targetName = sourceMode === null ? null : sourceMode.name;
 
     figma.commitUndo();
+    // Suppress the documentchange-driven full re-scan window. Without
+    // this, every theme tap would trigger `postSlideContent` →
+    // `scanSlide` → `slide-loaded` round-trip after the apply, which
+    // perceptibly lagged the picker swatch.
+    markSelfWrite();
     try {
       for (let i = 0; i < collections.length; i++) {
         const c = collections[i];
@@ -2975,11 +2988,17 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       return;
     }
     figma.commitUndo();
+    markSelfWrite();
     (skipParent as SlideNode).isSkippedSlide = msg.skipped;
     // No slide-summary re-emit: the iframe flips its visibility pill
     // optimistically before posting, so a sandbox echo just forces a
     // wasted round-trip and can clobber a rapid second click. Same
     // pattern as set-slide-theme.
+    //
+    // `markSelfWrite()` above suppresses the documentchange-driven
+    // re-scan window — without it, every toggle would trigger a full
+    // `postSlideContent` → `scanSlide` round-trip, making the toggle
+    // perceptibly lag.
     postToUI({
       type: 'target-updated',
       ok: true,

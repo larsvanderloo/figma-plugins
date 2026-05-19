@@ -196,11 +196,21 @@ function onParagraphVisibilityToggle(next: boolean): void {
 }
 
 function toggleWord(wordIndex: number): void {
+  const t0 = performance.now();
   const next = new Set(dimWords.value);
   if (next.has(wordIndex)) next.delete(wordIndex);
   else next.add(wordIndex);
   dimWords.value = next;
-  emit('update:headingDim', buildCharRanges());
+  const t1 = performance.now();
+  const ranges = buildCharRanges();
+  const t2 = performance.now();
+  emit('update:headingDim', ranges);
+  const t3 = performance.now();
+  console.log(
+    '[accent-perf] click → set-flip ' + (t1 - t0).toFixed(1) + 'ms · build-ranges ' +
+      (t2 - t1).toFixed(1) + 'ms · emit ' + (t3 - t2).toFixed(1) + 'ms · words=' +
+      next.size + ' · ranges=' + ranges.length,
+  );
 }
 </script>
 
