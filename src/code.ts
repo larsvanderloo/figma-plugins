@@ -2258,13 +2258,20 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
               templateVar.variableCollectionId,
             );
             if (collection !== null) {
+              // Resolve every variable in the collection in parallel.
+              // Was a sequential `for await` loop — 9 round-trips in a
+              // 9-variable Spacing collection meant ~450ms of latency
+              // before any card got touched.
+              const variables = await Promise.all(
+                collection.variableIds.map(function (id) {
+                  return figma.variables.getVariableByIdAsync(id);
+                }),
+              );
               const tried: string[] = [];
-              for (let i = 0; i < collection.variableIds.length; i++) {
-                const v = await figma.variables.getVariableByIdAsync(collection.variableIds[i]);
+              for (let i = 0; i < variables.length; i++) {
+                const v = variables[i];
                 if (v === null) continue;
                 tried.push(v.name);
-                // Exact-match or `<group>/<name>` suffix match — handles
-                // both flat ("5") and folder-grouped ("Spacing/5") names.
                 if (
                   targetSpacingVariable === null &&
                   (v.name === msg.gapModeName || v.name.endsWith('/' + msg.gapModeName))
@@ -2311,9 +2318,91 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     const cards = slide.findAll(function (n: SceneNode) {
       return n.type === 'INSTANCE' && n.name === 'Card';
     });
-    for (let i = 0; i < cards.length; i++) {
-      const card = cards[i];
-      if (card.type !== 'INSTANCE') continue;
+
+    // Cache for the per-card padding-mirror step. Without this each
+    // card would `getMainComponentAsync` + up to 4 `getVariableByIdAsync`
+    // calls, scaling to ~5N round-trips for N cards on the slide. Cards
+    // typically share a master (same variant), so the cache collapses
+    // it to one master fetch + a handful of variable fetches per call.
+    type PaddingSource =
+      | { kind: 'var'; variable: Variable }
+      | { kind: 'literal'; value: number }
+      | { kind: 'none' };
+    interface PaddingMirror {
+      paddingLeft: PaddingSource;
+      paddingRight: PaddingSource;
+      paddingTop: PaddingSource;
+      paddingBottom: PaddingSource;
+    }
+    const paddingMirrorCache: { [masterId: string]: Promise<PaddingMirror> } = {};
+    const PADDING_FIELDS: VariableBindableNodeField[] = [
+      'paddingLeft',
+      'paddingRight',
+      'paddingTop',
+      'paddingBottom',
+    ];
+
+    function resolvePaddingMirror(
+      master: ComponentNode,
+    ): Promise<PaddingMirror> {
+      const cached = paddingMirrorCache[master.id];
+      if (cached !== undefined) return cached;
+      // Promise-keyed cache — concurrent cards sharing a master see a
+      // cache hit immediately on the first call and await the same
+      // in-flight resolution instead of each firing its own fetches.
+      const p: Promise<PaddingMirror> = (async function () {
+        const masterBound = master.boundVariables;
+        const result: PaddingMirror = {
+          paddingLeft: { kind: 'none' },
+          paddingRight: { kind: 'none' },
+          paddingTop: { kind: 'none' },
+          paddingBottom: { kind: 'none' },
+        };
+        // Resolve all four variable aliases in parallel.
+        const fieldFetches = PADDING_FIELDS.map(async function (field) {
+          const alias =
+            masterBound !== null && masterBound !== undefined
+              ? (masterBound as { [k: string]: unknown })[field]
+              : undefined;
+          if (
+            alias !== undefined &&
+            alias !== null &&
+            typeof alias === 'object' &&
+            'id' in (alias as object)
+          ) {
+            try {
+              const v = await figma.variables.getVariableByIdAsync(
+                (alias as VariableAlias).id,
+              );
+              if (v !== null) {
+                return { field, source: { kind: 'var' as const, variable: v } };
+              }
+            } catch (_e) {
+              /* fall through */
+            }
+          }
+          const literal = (master as unknown as { [k: string]: number })[field];
+          if (typeof literal === 'number') {
+            return { field, source: { kind: 'literal' as const, value: literal } };
+          }
+          return { field, source: { kind: 'none' as const } };
+        });
+        const resolved = await Promise.all(fieldFetches);
+        for (let i = 0; i < resolved.length; i++) {
+          (result as Record<string, PaddingSource>)[resolved[i].field] =
+            resolved[i].source;
+        }
+        return result;
+      })();
+      paddingMirrorCache[master.id] = p;
+      return p;
+    }
+    // Per-card work is independent — run them concurrently so a slide
+    // with N cards finishes in roughly one card's worth of latency
+    // instead of N × the per-card cost (was sequential setTextStyleId +
+    // getMainComponent).
+    await Promise.all(cards.map(async function (card) {
+      if (card.type !== 'INSTANCE') return;
       const cardInst = card as InstanceNode;
 
       // Side-variant detection — read the canonical `Type` VARIANT
@@ -2433,53 +2522,31 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         }
       }
 
-      // Reset paddingLeft/Right to match the variant master exactly.
-      // Earlier picker builds wrote per-card overrides on these fields
-      // ("4" = 16px). `setBoundVariable(field, null)` alone wouldn't
-      // restore the master value (Figma keeps the last resolved literal
-      // as the override), so we read the master's binding (or literal)
-      // and mirror it on the instance.
+      // Reset paddings to mirror the variant master exactly. Cached
+      // resolution means we only pay for getMainComponentAsync +
+      // variable fetches once per unique master, regardless of how
+      // many cards we touch.
       try {
         const mainComp = await cardInst.getMainComponentAsync();
         if (mainComp !== null) {
-          const paddingFields: VariableBindableNodeField[] = ['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom'];
-          for (let f = 0; f < paddingFields.length; f++) {
-            const field = paddingFields[f];
-            const masterBound = (mainComp as ComponentNode).boundVariables;
-            const masterAlias =
-              masterBound !== null && masterBound !== undefined
-                ? (masterBound as { [k: string]: unknown })[field]
-                : undefined;
-            if (
-              masterAlias !== undefined &&
-              masterAlias !== null &&
-              typeof masterAlias === 'object' &&
-              'id' in (masterAlias as object)
-            ) {
-              // Master variable-bound → mirror the same variable.
+          const mirror = await resolvePaddingMirror(mainComp as ComponentNode);
+          for (let f = 0; f < PADDING_FIELDS.length; f++) {
+            const field = PADDING_FIELDS[f];
+            const src = (mirror as unknown as Record<string, PaddingSource>)[field];
+            if (src.kind === 'var') {
               try {
-                const masterVar = await figma.variables.getVariableByIdAsync(
-                  (masterAlias as VariableAlias).id,
-                );
-                if (masterVar !== null) {
-                  cardInst.setBoundVariable(field, masterVar);
-                }
+                cardInst.setBoundVariable(field, src.variable);
               } catch (_e) {
                 /* silent */
               }
-            } else {
-              // Master uses literal value → clear instance binding and
-              // copy the literal so the instance no longer overrides.
+            } else if (src.kind === 'literal') {
               try {
                 cardInst.setBoundVariable(field, null);
               } catch (_e) {
                 /* silent */
               }
               try {
-                const masterValue = (mainComp as unknown as { [k: string]: number })[field];
-                if (typeof masterValue === 'number') {
-                  (cardInst as unknown as { [k: string]: number })[field] = masterValue;
-                }
+                (cardInst as unknown as { [k: string]: number })[field] = src.value;
               } catch (_e) {
                 /* silent */
               }
@@ -2495,9 +2562,8 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       // to Icon Side cards in Compact mode; Default and Text-only let
       // the master padding stand.
       if (isSideVariant && wantsCompactSidePadding && compactSidePaddingVariable !== null) {
-        const paddingFields: VariableBindableNodeField[] = ['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom'];
-        for (let f = 0; f < paddingFields.length; f++) {
-          const field = paddingFields[f];
+        for (let f = 0; f < PADDING_FIELDS.length; f++) {
+          const field = PADDING_FIELDS[f];
           try {
             cardInst.setBoundVariable(field, compactSidePaddingVariable);
           } catch (e) {
@@ -2507,7 +2573,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
           }
         }
       }
-    }
+    }));
 
     markSelfWrite();
     postToUI({ type: 'target-updated', ok: true });
