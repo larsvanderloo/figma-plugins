@@ -880,14 +880,19 @@ async function findThemeCollectionsForSlide(slide: InstanceNode): Promise<Variab
   if (slide.resolvedVariableModes) {
     for (const k of Object.keys(slide.resolvedVariableModes)) ids.add(k);
   }
+  // Fetch every candidate collection in parallel — sequential awaits
+  // serialized 2-5 round-trips per slide selection.
+  const fetched = await Promise.all(
+    Array.from(ids).map(function (id) {
+      return figma.variables.getVariableCollectionByIdAsync(id).catch(function () {
+        return null;
+      });
+    }),
+  );
   const result: VariableCollection[] = [];
-  for (const id of ids) {
-    try {
-      const c = await figma.variables.getVariableCollectionByIdAsync(id);
-      if (c !== null && c.name === 'Theme') result.push(c);
-    } catch (err: unknown) {
-      // ignore — collection may have been removed
-    }
+  for (let i = 0; i < fetched.length; i++) {
+    const c = fetched[i];
+    if (c !== null && c.name === 'Theme') result.push(c);
   }
   // Local before remote so the picker's swatches come from the local
   // collection (faster to resolve, no library round-trip).
@@ -921,30 +926,39 @@ async function scanTheme(slide: InstanceNode): Promise<GeneralSections['theme']>
   // Pick the first two COLOR variables in the collection as the picker's
   // swatch colors. Library-agnostic: works for any Theme collection
   // whose first two color slots are the dominant + accent colors.
+  // Fetch all variables in parallel — sequential awaits added ~10ms ×
+  // collection-size before the picker could render.
+  const allVars = await Promise.all(
+    collection.variableIds.map(function (id) {
+      return figma.variables.getVariableByIdAsync(id);
+    }),
+  );
   const colorVars: Variable[] = [];
-  for (let i = 0; i < collection.variableIds.length && colorVars.length < 2; i++) {
-    const v = await figma.variables.getVariableByIdAsync(collection.variableIds[i]);
+  for (let i = 0; i < allVars.length && colorVars.length < 2; i++) {
+    const v = allVars[i];
     if (v !== null && v.resolvedType === 'COLOR') colorVars.push(v);
   }
 
-  const modes: ThemeMode[] = [];
-  for (let i = 0; i < collection.modes.length; i++) {
-    const m = collection.modes[i];
-    const primary =
-      colorVars.length >= 1
-        ? await resolveColorAsHex(colorVars[0].valuesByMode[m.modeId], m.modeId)
-        : null;
-    const secondary =
-      colorVars.length >= 2
-        ? await resolveColorAsHex(colorVars[1].valuesByMode[m.modeId], m.modeId)
-        : null;
-    modes.push({
-      id: m.modeId,
-      name: m.name,
-      swatchPrimary: primary,
-      swatchSecondary: secondary,
-    });
-  }
+  // Resolve every mode's primary + secondary in parallel — modes × 2
+  // awaits previously serialized into ~2M round-trips before render.
+  const modes: ThemeMode[] = await Promise.all(
+    collection.modes.map(async function (m) {
+      const [primary, secondary] = await Promise.all([
+        colorVars.length >= 1
+          ? resolveColorAsHex(colorVars[0].valuesByMode[m.modeId], m.modeId)
+          : Promise.resolve(null),
+        colorVars.length >= 2
+          ? resolveColorAsHex(colorVars[1].valuesByMode[m.modeId], m.modeId)
+          : Promise.resolve(null),
+      ]);
+      return {
+        id: m.modeId,
+        name: m.name,
+        swatchPrimary: primary,
+        swatchSecondary: secondary,
+      };
+    }),
+  );
 
   return {
     collectionId: collection.id,
@@ -1491,49 +1505,53 @@ async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideScan): P
   }
 
   if (scan.content !== null) {
-    const cards = scan.content.cards;
-    for (let i = 0; i < cards.length; i++) {
-      const ci = cards[i];
-      if (typeof ci.visualHash !== 'string') continue;
-      try {
-        const cardNode = await figma.getNodeByIdAsync(ci.cardNodeId);
-        if (cardNode === null || cardNode.type !== 'INSTANCE') continue;
-        const slot = findCardVisualSlot(cardNode as InstanceNode);
-        if (slot === null) continue;
-        const fills = (slot as GeometryMixin).fills;
-        if (fills === figma.mixed || !Array.isArray(fills)) continue;
-        let imageHash: string | null = null;
-        for (let f = 0; f < fills.length; f++) {
-          if (fills[f].type === 'IMAGE') {
-            imageHash = (fills[f] as ImagePaint).imageHash;
-            break;
+    // Card-visual prefetch: each card has two awaits (getNodeByIdAsync
+    // → getBytesAsync). Run all cards concurrently — a slide with 8
+    // cards would otherwise serialize 16 round-trips before any
+    // preview rendered.
+    await Promise.all(
+      scan.content.cards.map(async function (ci) {
+        if (typeof ci.visualHash !== 'string') return;
+        try {
+          const cardNode = await figma.getNodeByIdAsync(ci.cardNodeId);
+          if (cardNode === null || cardNode.type !== 'INSTANCE') return;
+          const slot = findCardVisualSlot(cardNode as InstanceNode);
+          if (slot === null) return;
+          const fills = (slot as GeometryMixin).fills;
+          if (fills === figma.mixed || !Array.isArray(fills)) return;
+          let imageHash: string | null = null;
+          for (let f = 0; f < fills.length; f++) {
+            if (fills[f].type === 'IMAGE') {
+              imageHash = (fills[f] as ImagePaint).imageHash;
+              break;
+            }
           }
-        }
-        if (imageHash === null) continue;
-        const img = figma.getImageByHash(imageHash);
-        if (img === null) continue;
-        const bytes = await img.getBytesAsync();
-        let fillW = 0;
-        let fillH = 0;
-        if ('width' in slot && 'height' in slot) {
-          const w = (slot as LayoutMixin).width;
-          const h = (slot as LayoutMixin).height;
-          if (w > 0 && h > 0) {
-            fillW = w;
-            fillH = h;
+          if (imageHash === null) return;
+          const img = figma.getImageByHash(imageHash);
+          if (img === null) return;
+          const bytes = await img.getBytesAsync();
+          let fillW = 0;
+          let fillH = 0;
+          if ('width' in slot && 'height' in slot) {
+            const w = (slot as LayoutMixin).width;
+            const h = (slot as LayoutMixin).height;
+            if (w > 0 && h > 0) {
+              fillW = w;
+              fillH = h;
+            }
           }
+          postToUI({
+            type: 'card-visual-preview',
+            cardNodeId: ci.cardNodeId,
+            bytes: bytes,
+            fillW: fillW,
+            fillH: fillH,
+          });
+        } catch (_e) {
+          // per-card silent
         }
-        postToUI({
-          type: 'card-visual-preview',
-          cardNodeId: ci.cardNodeId,
-          bytes: bytes,
-          fillW: fillW,
-          fillH: fillH,
-        });
-      } catch (_e) {
-        // per-card silent
-      }
-    }
+      }),
+    );
   }
 }
 
@@ -1689,34 +1707,46 @@ let textStyleMapBuilt = false;
 
 async function buildTextStyleMap(): Promise<void> {
   if (textStyleMapBuilt) return;
+  const pages = figma.root.children.filter(function (p) {
+    return p.type === 'PAGE';
+  }) as PageNode[];
+  // Load every page in parallel rather than sequentially — 5 pages
+  // serialized was ~5× the cost of a single loadAsync.
+  await Promise.all(
+    pages.map(function (page) {
+      return page.loadAsync().catch(function (e: unknown) {
+        console.log('[text-style-map] page.loadAsync failed: ' + String(e));
+      });
+    }),
+  );
+  // Collect every distinct textStyleId across all pages first, THEN
+  // batch the getStyleByIdAsync fetches in parallel. Was a sequential
+  // await per text node — N styles × ~10ms each on every plugin open.
+  const distinctIds: string[] = [];
   const seenIds: { [id: string]: true } = {};
-  const pages = figma.root.children;
   for (let p = 0; p < pages.length; p++) {
-    const page = pages[p];
-    if (page.type !== 'PAGE') continue;
-    try {
-      await page.loadAsync();
-    } catch (e) {
-      console.log('[text-style-map] page.loadAsync failed: ' + String(e));
-      continue;
-    }
-    const textNodes = page.findAll(function (n: SceneNode) {
+    const textNodes = pages[p].findAll(function (n: SceneNode) {
       return n.type === 'TEXT';
     });
     for (let i = 0; i < textNodes.length; i++) {
-      const text = textNodes[i] as TextNode;
-      const id = text.textStyleId;
+      const id = (textNodes[i] as TextNode).textStyleId;
       if (typeof id !== 'string' || id.length === 0) continue;
       if (seenIds[id]) continue;
       seenIds[id] = true;
-      try {
-        const style = await figma.getStyleByIdAsync(id);
-        if (style !== null && typeof style.name === 'string') {
-          textStyleByName[style.name] = id;
-        }
-      } catch (_e) {
-        /* silent — style may have been deleted */
-      }
+      distinctIds.push(id);
+    }
+  }
+  const styles = await Promise.all(
+    distinctIds.map(function (id) {
+      return figma.getStyleByIdAsync(id).catch(function () {
+        return null;
+      });
+    }),
+  );
+  for (let i = 0; i < styles.length; i++) {
+    const style = styles[i];
+    if (style !== null && typeof style.name === 'string') {
+      textStyleByName[style.name] = distinctIds[i];
     }
   }
   textStyleMapBuilt = true;
