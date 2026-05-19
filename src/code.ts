@@ -2167,20 +2167,12 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       postToUI({ type: 'target-updated', ok: false, error: 'Heading node not found' });
       return;
     }
-    const t0 = Date.now();
     figma.commitUndo();
     markSelfWrite();
-    const t1 = Date.now();
     await applyAccentRanges(headingNode, msg.dimRanges);
-    const t2 = Date.now();
     await refreshTablesOnSlide(slide); // T39.3: heading-fill mutatie kan line-wrap reflowen
-    const t3 = Date.now();
     markSelfWrite();
     postToUI({ type: 'target-updated', ok: true, targetId: headingNode.id });
-    console.log(
-      '[accent-perf-sandbox] commitUndo ' + (t1 - t0) + 'ms · applyAccentRanges ' +
-        (t2 - t1) + 'ms · refreshTables ' + (t3 - t2) + 'ms · ranges=' + msg.dimRanges.length,
-    );
     return;
   }
 
@@ -3358,8 +3350,71 @@ async function main(): Promise<void> {
     });
   };
 
+  // Per-page nodechange subscription instead of figma.on('documentchange').
+  // documentchange forces Figma to load every page in the file just to
+  // subscribe — Figma's own dynamic-page docs steer us to PageNode.on
+  // ('nodechange') for targeted monitoring. We re-attach the listener
+  // whenever the current page changes so we always observe the page
+  // the user is editing.
+  type NodeChangeEvent = {
+    nodeChanges: ReadonlyArray<{ type: string; node: SceneNode }>;
+  };
+  type PageWithNodeChange = PageNode & {
+    on: (type: 'nodechange', cb: (e: NodeChangeEvent) => void) => void;
+    off: (type: 'nodechange', cb: (e: NodeChangeEvent) => void) => void;
+  };
+  function onPageNodeChange(event: NodeChangeEvent): void {
+    try {
+      let summaryDirty = false;
+      const changes = event.nodeChanges;
+      for (let i = 0; i < changes.length; i++) {
+        const change = changes[i];
+        if (summaryDirty) continue;
+        if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') {
+          summaryDirty = true;
+          continue;
+        }
+        if (
+          change.type === 'PROPERTY_CHANGE' &&
+          change.node.type === 'TEXT' &&
+          change.node.name === 'Heading'
+        ) {
+          summaryDirty = true;
+        }
+      }
+      if (summaryDirty) postSlideSummary();
+      postSlideContent();
+    } catch (err: unknown) {
+      console.log('[welder-slide-editor] nodechange handler failed:', err);
+    }
+  }
+
+  let subscribedPage: PageWithNodeChange | null = null;
+  function attachNodeChangeListener(): void {
+    const newPage = figma.currentPage as PageWithNodeChange;
+    if (subscribedPage === newPage) return;
+    if (subscribedPage !== null) {
+      try {
+        subscribedPage.off('nodechange', onPageNodeChange);
+      } catch (_e) {
+        /* silent */
+      }
+    }
+    try {
+      newPage.on('nodechange', onPageNodeChange);
+      subscribedPage = newPage;
+    } catch (err: unknown) {
+      console.log('[welder-slide-editor] page.on(nodechange) failed:', err);
+    }
+  }
+  attachNodeChangeListener();
+
   figma.on('currentpagechange', () => {
     try {
+      // Swap the nodechange subscription to the new current page first
+      // so any edits there reach the iframe.
+      attachNodeChangeListener();
+
       // Page changed — the previously-focused slide is on a different page
       // now, so the iframe should re-evaluate based on the new page's
       // current selection.
@@ -3374,53 +3429,6 @@ async function main(): Promise<void> {
       console.log('[welder-slide-editor] currentpagechange handler failed:', err);
     }
   });
-
-  // documentchange-registratie: in dynamic-page mode vereist Figma dat
-  // loadAllPagesAsync gedraaid heeft voordat we kunnen subscribe'n.
-  // We doen die load in de achtergrond (non-blocking) zodat de plugin
-  // direct openbaar is.
-  figma
-    .loadAllPagesAsync()
-    .then(() => {
-      try {
-        figma.on('documentchange', (event: DocumentChangeEvent) => {
-          try {
-            // Walk the changes once. Two signals are extracted:
-            //   - summaryDirty: the currently-displayed slide's name
-            //     (Heading text) or isSkipped flag changed → cheap
-            //     slide-summary post.
-            //   - any change → debounced postSlideContent for the current
-            //     slide. The signature dedup makes no-op changes free.
-            let summaryDirty = false;
-            const changes = event.documentChanges;
-            for (let i = 0; i < changes.length; i++) {
-              const change = changes[i];
-              if (summaryDirty) continue;
-              if (change.type === 'PROPERTY_CHANGE' && change.node.type === 'SLIDE') {
-                summaryDirty = true;
-                continue;
-              }
-              if (
-                change.type === 'PROPERTY_CHANGE' &&
-                change.node.type === 'TEXT' &&
-                change.node.name === 'Heading'
-              ) {
-                summaryDirty = true;
-              }
-            }
-            if (summaryDirty) postSlideSummary();
-            postSlideContent();
-          } catch (err: unknown) {
-            console.log('[welder-slide-editor] documentchange handler failed:', err);
-          }
-        });
-      } catch (err: unknown) {
-        console.log('[welder-slide-editor] documentchange registration failed:', err);
-      }
-    })
-    .catch((err: unknown) => {
-      console.log('[welder-slide-editor] loadAllPagesAsync failed:', err);
-    });
 
   // Selection-driven slide switching. When the user selects a slide (or
   // anything inside one), the sandbox scans it and posts slide-loaded.

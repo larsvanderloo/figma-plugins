@@ -3,7 +3,7 @@
 // debounced-text update handler, and the heading-accent update handler.
 // Consumers don't see the message-bus contract.
 
-import { computed, reactive } from 'vue';
+import { computed, reactive, ref } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { TitleDescriptionValue } from '../components/TitleDescriptionEditor.vue';
@@ -112,25 +112,29 @@ export function useTitleDescriptionEditor() {
   // Trailing-debounce the bridge post — clicking each word in the
   // accent chip strip used to fire one update-accent message per click,
   // each triggering a sandbox font-load + per-segment fill write. With
-  // a 250ms idle wait, rapid edits coalesce to a single sandbox apply
-  // carrying the final set of ranges. The local store update happens
-  // immediately so the chip UI reacts to every click.
-  const ACCENT_DEBOUNCE_MS = 250;
+  // a 100ms idle wait, rapid edits coalesce to a single sandbox apply
+  // carrying the final set of ranges. Local chip flip happens instantly
+  // so the user has feedback per-click while the canvas catches up.
+  //
+  // `accentPending` stays true from the moment the user makes their
+  // first click in a burst until the sandbox acks the last apply. It
+  // surfaces a subtle "saving" dot in the UI so the user knows work is
+  // happening during the (sometimes 1-5s) bridge transport.
+  const ACCENT_DEBOUNCE_MS = 100;
   let accentTimer: ReturnType<typeof setTimeout> | null = null;
-  let accentPending: { slideId: string; ranges: Array<[number, number]> } | null = null;
-
-  let accentPostedAt = 0;
+  let accentPendingPost: { slideId: string; ranges: Array<[number, number]> } | null = null;
+  let accentInFlight = 0;
+  const accentPending = ref<boolean>(false);
 
   function flushAccent(): void {
     if (accentTimer !== null) {
       clearTimeout(accentTimer);
       accentTimer = null;
     }
-    if (accentPending === null) return;
-    const p = accentPending;
-    accentPending = null;
-    accentPostedAt = performance.now();
-    console.log('[accent-perf] debounce fired → bridge.post · ranges=' + p.ranges.length);
+    if (accentPendingPost === null) return;
+    const p = accentPendingPost;
+    accentPendingPost = null;
+    accentInFlight += 1;
     tracker.register();
     bridge.post({
       type: 'update-accent',
@@ -146,18 +150,23 @@ export function useTitleDescriptionEditor() {
 
     td.headingDim = ranges;
 
-    accentPending = { slideId: slideId, ranges: ranges };
+    accentPendingPost = { slideId: slideId, ranges: ranges };
+    accentPending.value = true;
     if (accentTimer !== null) clearTimeout(accentTimer);
     accentTimer = setTimeout(flushAccent, ACCENT_DEBOUNCE_MS);
-    console.log('[accent-perf] composable received · scheduled flush in ' + ACCENT_DEBOUNCE_MS + 'ms');
   }
 
-  // Surface roundtrip latency for the user-visible apply.
+  // Clear the "saving" dot as each in-flight accent post is acked.
+  // Multiple debounces can fire while the user is mid-edit; we only
+  // clear when every in-flight one has come back AND no pending
+  // debounce remains.
   bridge.onMessage(function (msg) {
-    if (msg.type === 'target-updated' && accentPostedAt > 0) {
-      const dt = performance.now() - accentPostedAt;
-      accentPostedAt = 0;
-      console.log('[accent-perf] target-updated received · bridge+apply ' + dt.toFixed(1) + 'ms');
+    if (msg.type !== 'target-updated') return;
+    if (accentInFlight > 0) {
+      accentInFlight -= 1;
+      if (accentInFlight === 0 && accentPendingPost === null && accentTimer === null) {
+        accentPending.value = false;
+      }
     }
   });
 
@@ -167,6 +176,7 @@ export function useTitleDescriptionEditor() {
   return reactive({
     model,
     pending: tracker.pending,
+    accentPending,
     update,
     updateHeadingDim,
     commitSize,

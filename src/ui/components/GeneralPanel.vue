@@ -110,6 +110,7 @@ function onThemeChange(modeId: string | null): void {
         <section v-if="hasTitleDesc" class="px-5 py-4">
           <TitleDescriptionEditor
             :model-value="titleDescriptionEditor.model!"
+            :accent-pending="titleDescriptionEditor.accentPending"
             @update:model-value="titleDescriptionEditor.update"
             @update:heading-dim="titleDescriptionEditor.updateHeadingDim"
             @commit:size="titleDescriptionEditor.commitSize"

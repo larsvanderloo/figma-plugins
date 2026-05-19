@@ -26,6 +26,8 @@ export interface TitleDescriptionValue {
 
 interface Props {
   modelValue: TitleDescriptionValue;
+  /** True between an accent edit and the sandbox-side acknowledgement. */
+  accentPending?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -196,21 +198,11 @@ function onParagraphVisibilityToggle(next: boolean): void {
 }
 
 function toggleWord(wordIndex: number): void {
-  const t0 = performance.now();
   const next = new Set(dimWords.value);
   if (next.has(wordIndex)) next.delete(wordIndex);
   else next.add(wordIndex);
   dimWords.value = next;
-  const t1 = performance.now();
-  const ranges = buildCharRanges();
-  const t2 = performance.now();
-  emit('update:headingDim', ranges);
-  const t3 = performance.now();
-  console.log(
-    '[accent-perf] click → set-flip ' + (t1 - t0).toFixed(1) + 'ms · build-ranges ' +
-      (t2 - t1).toFixed(1) + 'ms · emit ' + (t3 - t2).toFixed(1) + 'ms · words=' +
-      next.size + ' · ranges=' + ranges.length,
-  );
+  emit('update:headingDim', buildCharRanges());
 }
 </script>
 
@@ -283,7 +275,21 @@ function toggleWord(wordIndex: number): void {
 
     <div v-if="modelValue.headingDim !== null" class="space-y-1.5">
       <div class="flex items-center justify-between gap-2 h-6">
-        <label class="text-sm font-medium text-default">Accent</label>
+        <label class="text-sm font-medium text-default flex items-center gap-2">
+          Accent
+          <Transition
+            enter-active-class="transition-opacity duration-150"
+            enter-from-class="opacity-0"
+            leave-active-class="transition-opacity duration-300"
+            leave-to-class="opacity-0"
+          >
+            <span
+              v-if="accentPending"
+              class="size-1.5 rounded-full bg-primary animate-pulse"
+              aria-hidden="true"
+            />
+          </Transition>
+        </label>
       </div>
       <div class="flex flex-wrap gap-2">
         <template v-for="(tok, i) in tokens" :key="i">
