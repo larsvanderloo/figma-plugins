@@ -10,11 +10,35 @@ The full product specification is in [`docs/product/specs/spec.md`](./docs/produ
 npm install
 npm run build          # vite (UI) + esbuild (sandbox)
 npm run watch          # parallel watch mode
+npm run debug:session  # local log collector + debug watch
+npm run debug:watch    # watch mode with debug logs + inline sourcemaps
+npm run debug:manifests # write manifest-cache/*/manifest.json for Figma import
+npm run debug:logs     # local Figma runtime log collector only
 npm run dev:ui         # vite dev server for UI iteration
+npm run typecheck      # plugin sandbox + UI type checks
 npm run typecheck:ui   # vue-tsc strict
+npm run release:check  # typecheck, production build, and debug-leak assertions
 ```
 
 Load in Figma → Plugins → Development → Import plugin from manifest → point at `manifest.json`.
+
+## Debugging
+
+Use VS Code for source edits and the `Figma: debug session` task. That task runs the build watcher and a local log collector at `http://localhost:4789/log`, so Figma runtime logs also stream into the VS Code terminal and `.local/figma-debug.log`.
+
+For this terminal log bridge, import `manifest-cache/debug/manifest.json` in Figma Desktop. Figma requires the imported file to be named `manifest.json`, with `main` and `ui` inside that manifest directory; `manifest.debug.json` is only the checked-in source template. Use Figma Desktop Developer Tools for runtime inspection: open `Plugins → Development → Open Console...` (`Option+Cmd+I`), enable `Plugins → Development → Use Developer VM` only when stepping through source, and add temporary `debugger;` statements where needed. See [`docs/debugging/figma-plugin-debug-setup.md`](./docs/debugging/figma-plugin-debug-setup.md) for the full setup details.
+
+For read-only Figma-for-VS-Code / Dev Mode diagnostics, import `manifest-cache/dev/manifest.json`. That manifest runs the same bundle with `editorType: ["dev"]`; document-mutating bridge commands are blocked with a `target-updated` error.
+
+## Release
+
+Before tagging or handing off a VS Code release, stop any active `npm run watch`, `npm run debug:session`, or `npm run debug:watch` terminals, then run:
+
+```bash
+npm run release:check
+```
+
+In VS Code, run the `Figma: release check` task. This gate type-checks, builds a production `dist/`, and fails if sourcemaps or the localhost debug endpoint are present. See [`docs/release/figma-plugin-release.md`](./docs/release/figma-plugin-release.md) for the full release checklist.
 
 ## Architecture
 

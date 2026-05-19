@@ -18,6 +18,8 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 const pkg = JSON.parse(
   readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf-8'),
 ) as { version: string };
+const isDebug = process.env.PLUGIN_DEBUG === '1';
+const debugLogEndpoint = isDebug ? (process.env.PLUGIN_DEBUG_LOG_ENDPOINT ?? '') : '';
 
 /**
  * Vite's input is src/ui/index.html; plugin-side esbuild importeert
@@ -53,6 +55,9 @@ export default defineConfig({
   define: {
     // Replaced verbatim at bundle-time. Type declared in ui/env.d.ts.
     __APP_VERSION__: JSON.stringify(pkg.version),
+    __PLUGIN_DEBUG__: JSON.stringify(isDebug),
+    __PLUGIN_DEBUG_SOURCE__: JSON.stringify('ui'),
+    __PLUGIN_DEBUG_LOG_ENDPOINT__: JSON.stringify(debugLogEndpoint),
   },
   plugins: [
     vue(),
@@ -83,6 +88,7 @@ export default defineConfig({
     // ondersteunt ES2020+ ruimschoots (plugin-sandbox is de ES2017-restrictie,
     // niet de iframe).
     target: 'es2020',
+    sourcemap: isDebug ? 'inline' : false,
     cssCodeSplit: false,
     assetsInlineLimit: 100_000_000,
     rollupOptions: {

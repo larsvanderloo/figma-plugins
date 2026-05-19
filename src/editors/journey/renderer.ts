@@ -260,7 +260,7 @@ async function getJourneyItemComponent(): Promise<ComponentNode | null> {
 function findNestedIconInstance(item: InstanceNode): InstanceNode | null {
   // Primair: directe INSTANCE-kinderen.
   if ('children' in item) {
-    var children = (item as FrameNode).children;
+    var children = (item as ChildrenMixin).children;
     for (var i = 0; i < children.length; i++) {
       if (children[i].type === 'INSTANCE') {
         return children[i] as InstanceNode;

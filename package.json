@@ -9,8 +9,19 @@
     "build:ui": "vite build",
     "build:widget": "node esbuild.config.mjs",
     "watch": "npm run build:aliases && npm run build:svgs && concurrently --kill-others-on-fail \"vite build --watch\" \"node esbuild.config.mjs --watch\"",
+    "debug:manifests": "node scripts/write-debug-manifests.mjs",
+    "debug:build": "PLUGIN_DEBUG=1 PLUGIN_DEBUG_LOG_ENDPOINT=http://localhost:4789/log npm run build && npm run debug:manifests",
+    "debug:watch": "npm run debug:manifests && concurrently --kill-others-on-fail \"PLUGIN_DEBUG=1 PLUGIN_DEBUG_LOG_ENDPOINT=http://localhost:4789/log npm run watch\" \"node scripts/write-debug-manifests.mjs --watch\"",
+    "debug:logs": "node scripts/debug-log-server.mjs --clear",
+    "debug:session": "concurrently --kill-others-on-fail \"npm run debug:logs\" \"npm run debug:watch\"",
     "dev:ui": "vite",
-    "typecheck:ui": "vue-tsc --noEmit -p tsconfig.ui.json"
+    "typecheck:plugin": "tsc --noEmit -p tsconfig.json",
+    "typecheck:ui": "vue-tsc --noEmit -p tsconfig.ui.json",
+    "typecheck": "npm run typecheck:plugin && npm run typecheck:ui",
+    "release:guard": "node scripts/assert-no-build-watchers.mjs",
+    "release:assert": "node scripts/assert-production-build.mjs",
+    "release:build": "npm run release:guard && npm run build && npm run release:assert",
+    "release:check": "npm run release:guard && npm run typecheck && npm run build && npm run release:assert && git diff --check"
   },
   "devDependencies": {
     "@figma/plugin-typings": "^1.100.0",

@@ -13,9 +13,18 @@
 
 import { reactive, computed } from 'vue';
 import { defineStore } from 'pinia';
-import type { ContentItems, GeneralSections, GraphItems, SlideSummary, TabId } from '../../types';
+import type {
+  ContentItems,
+  GeneralSections,
+  GraphItems,
+  PluginRuntimeInfo,
+  SlideSummary,
+  TabId,
+} from '../../types';
 
 export interface PluginViewState {
+  /** Runtime metadata posted by the sandbox during init. */
+  runtime: PluginRuntimeInfo | null;
   /** Current slide summary; null when no slide is selected on the canvas. */
   currentSummary: SlideSummary | null;
   /** Mirrors currentSummary.id for the editor composables that read it. */
@@ -28,6 +37,7 @@ export interface PluginViewState {
 
 export const usePluginView = defineStore('pluginView', () => {
   const state = reactive<PluginViewState>({
+    runtime: null,
     currentSummary: null,
     currentSlideId: null,
     activeTab: 'general',
@@ -60,6 +70,10 @@ export const usePluginView = defineStore('pluginView', () => {
   // ── Actions ────────────────────────────────────────────────────────────
   function setActiveTab(tab: TabId): void {
     state.activeTab = tab;
+  }
+
+  function setRuntime(runtime: PluginRuntimeInfo): void {
+    state.runtime = runtime;
   }
 
   /** Apply a full slide-loaded payload from the sandbox. */
@@ -103,6 +117,7 @@ export const usePluginView = defineStore('pluginView', () => {
     allEmpty,
     // actions
     setActiveTab,
+    setRuntime,
     setSlideLoaded,
     setSummary,
     clearSlide,

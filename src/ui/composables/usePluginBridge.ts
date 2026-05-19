@@ -22,6 +22,7 @@
 // ============================================================
 
 import { computed, getCurrentInstance, onUnmounted, ref, type ComputedRef } from 'vue';
+import { debugMessage } from '../../debug';
 import type { PluginToUIMessage, UIToPluginMessage } from '../../types';
 
 /** Handler voor een inkomend plugin-bericht. */
@@ -47,6 +48,7 @@ export interface PluginBridge {
 }
 
 function post(msg: UIToPluginMessage): void {
+  debugMessage('ui->plugin', msg);
   parent.postMessage({ pluginMessage: msg }, '*');
 }
 
@@ -96,6 +98,7 @@ export function usePluginBridge(): PluginBridge {
       const raw = envelope.pluginMessage;
       if (raw === undefined || raw === null || typeof raw !== 'object') return;
 
+      debugMessage('plugin->ui', raw);
       handler(raw as PluginToUIMessage);
     };
 

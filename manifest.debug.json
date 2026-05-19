@@ -1,0 +1,16 @@
+{
+  "name": "Welder Editor Debug",
+  "id": "1634482764229929106",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["figma", "slides"],
+  "documentAccess": "dynamic-page",
+  "permissions": ["teamlibrary"],
+  "networkAccess": {
+    "allowedDomains": ["http://localhost:4789"],
+    "reasoning": "Allows this development-only debug plugin to send runtime logs to a local collector."
+  },
+  "menu": [{ "name": "Open Welder Editor", "command": "open" }],
+  "relaunchButtons": [{ "command": "open", "name": "Edit with Welder Editor" }]
+}

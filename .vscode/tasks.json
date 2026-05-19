@@ -1,0 +1,52 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Figma: debug session",
+      "type": "shell",
+      "command": "npm run debug:session",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Figma: debug watch",
+      "type": "shell",
+      "command": "npm run debug:watch",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Figma: build",
+      "type": "shell",
+      "command": "npm run build",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "label": "Figma: release check",
+      "type": "shell",
+      "command": "npm run release:check",
+      "group": "test",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Figma: typecheck UI",
+      "type": "shell",
+      "command": "npm run typecheck:ui",
+      "group": "test",
+      "problemMatcher": []
+    }
+  ]
+}

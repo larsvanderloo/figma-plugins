@@ -454,6 +454,14 @@ export interface JourneyWrapModel {
 // over dezelfde shape praten.
 // ============================================================
 
+export interface PluginRuntimeInfo {
+  editorType: string;
+  mode: string;
+  command: string;
+  vscode: boolean;
+  debug: boolean;
+}
+
 /**
  * UI-iframe → main-thread (`parent.postMessage({ pluginMessage })`).
  * Main-thread ontvangt via `figma.ui.onmessage`.
@@ -661,6 +669,7 @@ export type UIToPluginMessage =
 export type PluginToUIMessage =
   | {
       type: 'init';
+      runtime?: PluginRuntimeInfo;
     }
   | {
       /**

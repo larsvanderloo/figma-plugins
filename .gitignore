@@ -17,7 +17,9 @@ node_modules/
 .DS_Store
 Thumbs.db
 *.swp
-.vscode/
+.vscode/*
+!.vscode/
+!.vscode/tasks.json
 .idea/
 *.code-workspace
 

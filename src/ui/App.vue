@@ -266,6 +266,9 @@ function submitExport(): void {
 // bericht niet missen (main kan onmiddellijk terugantwoorden).
 bridge.onMessage((msg) => {
   if (msg.type === 'init') {
+    if (msg.runtime !== undefined) {
+      view.setRuntime(msg.runtime);
+    }
     initializing.value = false;
     return;
   }

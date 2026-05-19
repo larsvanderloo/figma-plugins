@@ -28,6 +28,8 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isWatch = process.argv.includes('--watch');
+const isDebug = process.env.PLUGIN_DEBUG === '1';
+const debugLogEndpoint = isDebug ? (process.env.PLUGIN_DEBUG_LOG_ENDPOINT ?? '') : '';
 
 const distDir = path.join(__dirname, 'dist');
 if (!fs.existsSync(distDir)) {
@@ -71,16 +73,21 @@ const codeContext = await esbuild.context({
   platform: 'browser',
   target: 'es2017',
   format: 'iife',
-  sourcemap: false,
+  sourcemap: isDebug ? 'inline' : false,
+  define: {
+    __PLUGIN_DEBUG__: isDebug ? 'true' : 'false',
+    __PLUGIN_DEBUG_SOURCE__: JSON.stringify('sandbox'),
+    __PLUGIN_DEBUG_LOG_ENDPOINT__: JSON.stringify(debugLogEndpoint),
+  },
   logLevel: 'info',
   plugins: [chunkedTextLoader({ chunkSize: 60000 })],
 });
 
 if (isWatch) {
   await codeContext.watch();
-  console.log('[esbuild] Watching src/code.ts...');
+  console.log('[esbuild] Watching src/code.ts...' + (isDebug ? ' (debug)' : ''));
 } else {
   await codeContext.rebuild();
   await codeContext.dispose();
-  console.log('[esbuild] Plugin build complete.');
+  console.log('[esbuild] Plugin build complete.' + (isDebug ? ' (debug)' : ''));
 }

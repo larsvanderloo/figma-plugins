@@ -1,0 +1,15 @@
+{
+  "name": "Welder Editor Dev Diagnostics",
+  "id": "1634482764229929106",
+  "api": "1.0.0",
+  "main": "dist/code.js",
+  "ui": "dist/ui.html",
+  "editorType": ["dev"],
+  "capabilities": ["inspect", "vscode"],
+  "documentAccess": "dynamic-page",
+  "permissions": ["teamlibrary"],
+  "networkAccess": {
+    "allowedDomains": ["http://localhost:4789"],
+    "reasoning": "Allows this development-only diagnostics plugin to send runtime logs to a local collector."
+  }
+}

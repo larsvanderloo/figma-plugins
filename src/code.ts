@@ -19,6 +19,7 @@
 
 import uiHtml from '../dist/ui.html';
 import { REQUIRED_FONTS } from './constants';
+import { debugLog, debugMessage, isPluginDebugEnabled } from './debug';
 import {
   findSlidesOnPage,
   slideSummary,
@@ -60,6 +61,7 @@ import type {
   JourneyWrapModel,
   UIToPluginMessage,
   PluginToUIMessage,
+  PluginRuntimeInfo,
 } from './types';
 
 // ============================================================
@@ -67,6 +69,22 @@ import type {
 // ============================================================
 
 figma.showUI(uiHtml, { width: 520, height: 760, themeColors: true });
+
+function isDevModeRuntime(): boolean {
+  return figma.editorType === 'dev';
+}
+
+function getRuntimeInfo(): PluginRuntimeInfo {
+  return {
+    editorType: figma.editorType,
+    mode: figma.mode,
+    command: figma.command,
+    vscode: figma.vscode !== undefined && figma.vscode !== null,
+    debug: isPluginDebugEnabled(),
+  };
+}
+
+debugLog('sandbox', 'startup', getRuntimeInfo());
 
 // Restore last-saved iframe size (clientStorage, per-user). Async so the
 // UI shows immediately at the default; the resize is a no-op flicker if
@@ -222,9 +240,14 @@ async function backfillAllIcons(): Promise<void> {
 // Fire-and-forget — happens in the background after the UI is shown.
 // Plugin-data writes are cheap and the user is unlikely to accept a
 // library update within the first ~second of opening the plugin.
-backfillAllIcons().catch(function (e: unknown) {
-  console.log('[icon-backfill] failed:', e);
-});
+// Dev Mode is read-only for this debug manifest, so skip backfills there.
+if (!isDevModeRuntime()) {
+  backfillAllIcons().catch(function (e: unknown) {
+    console.log('[icon-backfill] failed:', e);
+  });
+} else {
+  debugLog('icon-backfill', 'skipped-dev-mode');
+}
 
 // ============================================================
 // Accent (Text Dimmer) — library-variable helpers (spec §13 T30)
@@ -809,7 +832,11 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
     }
     // Backfill: if no record yet but the slot already shows a real
     // icon, capture it so the next library update can reconcile.
-    if (badgeIconIntended.length === 0 && currentBadgeIcon.length > 0) {
+    if (
+      !isDevModeRuntime() &&
+      badgeIconIntended.length === 0 &&
+      currentBadgeIcon.length > 0
+    ) {
       try {
         badge.setSharedPluginData('welder', 'icon', currentBadgeIcon);
         badgeIconIntended = currentBadgeIcon;
@@ -1178,6 +1205,7 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
     // iconIntended is set, subsequent scans skip this branch.
     const currentSlotIcon = isImageType ? null : readCardIcon(card, slide);
     if (
+      !isDevModeRuntime() &&
       iconIntended === null &&
       currentSlotIcon !== null &&
       currentSlotIcon.length > 0
@@ -1556,9 +1584,13 @@ async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideScan): P
 }
 
 async function scanSlide(slide: InstanceNode): Promise<SlideScan> {
-  const visibilityChanged = await normalizeCopyWrapVisibility(slide);
-  if (visibilityChanged) {
-    await refreshTablesOnSlide(slide);
+  if (!isDevModeRuntime()) {
+    const visibilityChanged = await normalizeCopyWrapVisibility(slide);
+    if (visibilityChanged) {
+      await refreshTablesOnSlide(slide);
+    }
+  } else {
+    debugLog('sandbox', 'scan-readonly', { slideId: slide.id });
   }
   const general = await scanGeneral(slide);
   return {
@@ -1687,6 +1719,7 @@ function findFocusedWelderSlide(): InstanceNode | null {
 }
 
 function postToUI(msg: PluginToUIMessage): void {
+  debugMessage('plugin->ui', msg);
   figma.ui.postMessage(msg);
 }
 
@@ -1869,6 +1902,12 @@ function postSlideContent(): void {
         });
         if (sig === lastSentSlideContentSignature) return;
         lastSentSlideContentSignature = sig;
+        debugLog('sandbox', 'post-slide-content', {
+          slideId: slide.id,
+          hasGeneral: scan.general !== null,
+          cardCount: scan.content !== null ? scan.content.cards.length : 0,
+          graphCount: scan.graphs !== null ? scan.graphs.instances.length : 0,
+        });
         postToUI({
           type: 'slide-loaded',
           summary: summaryForSlide(slide),
@@ -1877,6 +1916,7 @@ function postSlideContent(): void {
           graphs: scan.graphs,
         });
       } catch (err: unknown) {
+        debugLog('sandbox', 'post-slide-content:error', err);
         console.log('[welder-slide-editor] postSlideContent failed:', err);
       }
     })();
@@ -1909,8 +1949,10 @@ function postSlideSummary(): void {
       const sig = summary.id + '|' + summary.name + '|' + String(summary.isSkipped);
       if (sig === lastSentSummarySignature) return;
       lastSentSummarySignature = sig;
+      debugLog('sandbox', 'post-slide-summary', summary);
       postToUI({ type: 'slide-summary', summary: summary });
     } catch (err: unknown) {
+      debugLog('sandbox', 'post-slide-summary:error', err);
       console.log('[welder-slide-editor] postSlideSummary failed:', err);
     }
   }, 200) as unknown as number;
@@ -1924,6 +1966,10 @@ function postSlideSummary(): void {
  */
 async function emitSlideLoaded(slide: InstanceNode): Promise<void> {
   try {
+    debugLog('sandbox', 'emit-slide-loaded:start', {
+      slideId: slide.id,
+      slideName: slide.name,
+    });
     const scan = await scanSlide(slide);
     lastDisplayedSlideId = slide.id;
     lastSentSlideContentSignature = JSON.stringify({
@@ -1940,14 +1986,25 @@ async function emitSlideLoaded(slide: InstanceNode): Promise<void> {
       content: scan.content,
       graphs: scan.graphs,
     });
+    debugLog('sandbox', 'emit-slide-loaded:posted', {
+      slideId: slide.id,
+      hasGeneral: scan.general !== null,
+      cardCount: scan.content !== null ? scan.content.cards.length : 0,
+      graphCount: scan.graphs !== null ? scan.graphs.instances.length : 0,
+    });
     void postInitialSlidePreviews(slide, scan);
-    void primeIconCacheForSlide(scan);
+    if (!isDevModeRuntime()) {
+      void primeIconCacheForSlide(scan);
+    }
     void preloadSlideFonts(slide);
     // Pre-warm the Text/Text Dimmer variable imports so the first
     // heading-accent edit doesn't pay the importVariableByKeyAsync cost.
     // loadAccentVars is Promise-cached, so subsequent edits are free.
-    void loadAccentVars();
+    if (!isDevModeRuntime()) {
+      void loadAccentVars();
+    }
   } catch (err: unknown) {
+    debugLog('sandbox', 'emit-slide-loaded:error', err);
     console.log('[welder-slide-editor] emitSlideLoaded failed:', err);
   }
 }
@@ -2025,6 +2082,7 @@ async function primeIconCacheForSlide(scan: SlideScan): Promise<void> {
 }
 
 function clearDisplayedSlide(): void {
+  debugLog('sandbox', 'slide-deselected');
   lastDisplayedSlideId = null;
   lastSentSlideContentSignature = '';
   lastSentSummarySignature = '';
@@ -2035,12 +2093,31 @@ function clearDisplayedSlide(): void {
 // Bridge-message-loop (spec §5)
 // ============================================================
 
+function isMutatingMessage(msg: UIToPluginMessage): boolean {
+  if (msg.type === 'ui-ready') return false;
+  if (msg.type === 'set-icon-recents') return false;
+  if (msg.type === 'resize-ui') return false;
+  if (msg.type === 'export-document') return false;
+  if (msg.type === 'close') return false;
+  return true;
+}
+
 async function handleMessage(msg: UIToPluginMessage): Promise<void> {
+  if (isDevModeRuntime() && isMutatingMessage(msg)) {
+    const text =
+      'Read-only Dev Mode diagnostics: "' +
+      msg.type +
+      '" is disabled. Use manifest.json in Figma Desktop for document edits.';
+    debugLog('sandbox', 'dev-mode-command-blocked', { type: msg.type });
+    postToUI({ type: 'target-updated', ok: false, error: text });
+    return;
+  }
+
   if (msg.type === 'ui-ready') {
     // Selection-driven: post init, then if there's a currently-focused
     // slide on the active page, scan + emit slide-loaded. Otherwise the
     // iframe stays in its empty state until the user clicks a slide.
-    postToUI({ type: 'init' });
+    postToUI({ type: 'init', runtime: getRuntimeInfo() });
 
     const focused = findFocusedWelderSlide();
     if (focused !== null) {
@@ -2419,7 +2496,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         });
         const resolved = await Promise.all(fieldFetches);
         for (let i = 0; i < resolved.length; i++) {
-          (result as Record<string, PaddingSource>)[resolved[i].field] =
+          (result as unknown as Record<string, PaddingSource>)[resolved[i].field] =
             resolved[i].source;
         }
         return result;
@@ -2920,7 +2997,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         const c = collections[i];
         if (msg.modeId === null) {
           // Clear: slide inherits the page-level mode for this collection.
-          themeSlide.setExplicitVariableModeForCollection(c, null);
+          themeSlide.clearExplicitVariableModeForCollection(c);
           continue;
         }
         const matching = c.modes.find((m) => m.name === targetName);
@@ -3302,6 +3379,7 @@ async function main(): Promise<void> {
   // betekent dat de plugin via een ander event is gestart; we tonen
   // dan alsnog de UI (defensief).
   const cmd = figma.command;
+  debugLog('sandbox', 'main:start', getRuntimeInfo());
   if (cmd !== '' && cmd !== 'open') {
     // Onbekend command: log maar blijf draaien zodat de UI debugbaar is.
     console.log('[welder-slide-editor] Unknown command:', cmd);
@@ -3326,25 +3404,31 @@ async function main(): Promise<void> {
   // (or done) by the time the iframe sends ui-ready. The post-slide-
   // loaded primeIconCache call is now a no-op safety net — it
   // short-circuits on the existing prefValueBuildPromise.
-  (async function () {
-    try {
-      const slides = findSlidesOnPage();
-      for (let i = 0; i < slides.length; i++) {
-        const card = slides[i].findOne((n: SceneNode) => n.type === 'INSTANCE' && n.name === 'Card');
-        if (card !== null && card.type === 'INSTANCE') {
-          primeIconCache(card as InstanceNode).catch(() => {});
-          return;
+  if (!isDevModeRuntime()) {
+    (async function () {
+      try {
+        const slides = findSlidesOnPage();
+        for (let i = 0; i < slides.length; i++) {
+          const card = slides[i].findOne((n: SceneNode) => n.type === 'INSTANCE' && n.name === 'Card');
+          if (card !== null && card.type === 'INSTANCE') {
+            primeIconCache(card as InstanceNode).catch(() => {});
+            return;
+          }
         }
+      } catch (_e) {
+        // Fall back to the post-slide-loaded prime path; nothing to do here.
       }
-    } catch (_e) {
-      // Fall back to the post-slide-loaded prime path; nothing to do here.
-    }
-  })();
+    })();
+  } else {
+    debugLog('sandbox', 'prime-icon-cache-skipped-dev-mode');
+  }
 
   figma.ui.onmessage = (raw: unknown) => {
     const msg = raw as UIToPluginMessage;
+    debugMessage('ui->plugin', msg);
     handleMessage(msg).catch((err: unknown) => {
       const text = err instanceof Error ? err.message : String(err);
+      debugLog('sandbox', 'handler-error', { type: msg.type, error: text });
       figma.notify('Slide editor error: ' + text, { error: true });
       postToUI({ type: 'target-updated', ok: false, error: text });
     });
@@ -3382,9 +3466,15 @@ async function main(): Promise<void> {
           summaryDirty = true;
         }
       }
+      debugLog('figma-event', 'nodechange', {
+        pageId: figma.currentPage.id,
+        changeCount: changes.length,
+        summaryDirty: summaryDirty,
+      });
       if (summaryDirty) postSlideSummary();
       postSlideContent();
     } catch (err: unknown) {
+      debugLog('figma-event', 'nodechange:error', err);
       console.log('[welder-slide-editor] nodechange handler failed:', err);
     }
   }
@@ -3403,7 +3493,12 @@ async function main(): Promise<void> {
     try {
       newPage.on('nodechange', onPageNodeChange);
       subscribedPage = newPage;
+      debugLog('figma-event', 'nodechange:attached', {
+        pageId: newPage.id,
+        pageName: newPage.name,
+      });
     } catch (err: unknown) {
+      debugLog('figma-event', 'nodechange:attach-error', err);
       console.log('[welder-slide-editor] page.on(nodechange) failed:', err);
     }
   }
@@ -3411,6 +3506,10 @@ async function main(): Promise<void> {
 
   figma.on('currentpagechange', () => {
     try {
+      debugLog('figma-event', 'currentpagechange', {
+        pageId: figma.currentPage.id,
+        pageName: figma.currentPage.name,
+      });
       // Swap the nodechange subscription to the new current page first
       // so any edits there reach the iframe.
       attachNodeChangeListener();
@@ -3423,9 +3522,14 @@ async function main(): Promise<void> {
         clearDisplayedSlide();
         return;
       }
+      debugLog('figma-event', 'currentpagechange:focused-slide', {
+        slideId: focused.id,
+        slideName: focused.name,
+      });
       if (focused.id === lastDisplayedSlideId) return;
       void emitSlideLoaded(focused);
     } catch (err: unknown) {
+      debugLog('figma-event', 'currentpagechange:error', err);
       console.log('[welder-slide-editor] currentpagechange handler failed:', err);
     }
   });
@@ -3439,6 +3543,11 @@ async function main(): Promise<void> {
     figma.on('selectionchange', () => {
       try {
         const focused = findFocusedWelderSlide();
+        debugLog('figma-event', 'selectionchange', {
+          selectionCount: figma.currentPage.selection.length,
+          focusedSlideId: focused !== null ? focused.id : null,
+          focusedSlideName: focused !== null ? focused.name : null,
+        });
         if (focused === null) {
           if (lastDisplayedSlideId !== null) clearDisplayedSlide();
           return;
@@ -3446,14 +3555,17 @@ async function main(): Promise<void> {
         if (focused.id === lastDisplayedSlideId) return;
         void emitSlideLoaded(focused);
       } catch (err: unknown) {
+        debugLog('figma-event', 'selectionchange:error', err);
         console.log('[welder-slide-editor] selectionchange handler failed:', err);
       }
     });
   } catch (err: unknown) {
+    debugLog('figma-event', 'selectionchange:registration-error', err);
     console.log('[welder-slide-editor] selectionchange not available:', err);
   }
 
   figma.on('close', () => {
+    debugLog('figma-event', 'close');
     // Cleanup hook — Figma ruimt listeners automatisch op. FIG-CLOSE-01.
     if (pendingSlideContentUpdate !== null) {
       clearTimeout(pendingSlideContentUpdate);
@@ -3468,6 +3580,7 @@ async function main(): Promise<void> {
 
 main().catch((err: unknown) => {
   const text = err instanceof Error ? err.message : String(err);
+  debugLog('sandbox', 'startup-error', err);
   figma.notify('Slide editor failed to start: ' + text, { error: true });
   figma.closePlugin();
 });
