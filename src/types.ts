@@ -212,6 +212,15 @@ export interface BadgeSection {
   /** Lucide-icon-key, zie constants.BADGE_ICON_OPTIONS. */
   icon: string;
   /**
+   * Persisted-via-plugin-data Lucide slug of the icon the user last
+   * picked for this Badge. Survives library-master republishes (Figma
+   * resets icon-slot child overrides on master update; plugin data
+   * stays put). When non-empty AND different from `icon`, the iframe
+   * detects a stale slot and re-applies the user's pick automatically.
+   * Empty when no icon was ever picked / backfilled.
+   */
+  iconIntended: string;
+  /**
    * Driven by `showBadge` BOOLEAN on CopyWrap (Slide Machine canonical).
    * Null when the master has no such property — the iframe hides the
    * switch then but keeps the label / icon editors active.
@@ -284,6 +293,15 @@ export interface CardItem {
    *              verborgen in de UI (zelfde pattern als paragraph-hide T19).
    */
   icon: string | null;
+  /**
+   * Persisted-via-plugin-data Lucide slug of the icon the user last
+   * picked for this Card. Survives library-master republishes (Figma
+   * resets icon-slot child overrides on master update; plugin data
+   * stays put). When non-null AND different from `icon`, the iframe
+   * detects a stale slot and re-applies the user's pick automatically.
+   * Null when no icon was ever picked for this card via the plugin.
+   */
+  iconIntended: string | null;
   /**
    * ImagePaint-hash op het image-slot; null wanneer de card een image-slot
    * heeft maar nog leeg is. Undefined wanneer de card geen slot heeft
@@ -643,6 +661,21 @@ export type UIToPluginMessage =
 export type PluginToUIMessage =
   | {
       type: 'init';
+    }
+  | {
+      /**
+       * Posted once on plugin startup after the sandbox has walked
+       * every slide and built a list of Card/Badge instances whose
+       * persisted-via-plugin-data icon disagrees with their currently-
+       * visible slot child. The iframe receives the list, looks up the
+       * SVG body for each, and posts one update-card / update-general
+       * per entry — sandbox then applies the canonical icon back to
+       * each stale slot. This is what makes library-update recovery
+       * work for ALL slides instead of just the one the user opens.
+       */
+      type: 'stale-icons';
+      cards: Array<{ slideId: string; cardNodeId: string; iconIntended: string }>;
+      badges: Array<{ slideId: string; iconIntended: string }>;
     }
   | {
       /**

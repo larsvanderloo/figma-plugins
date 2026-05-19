@@ -24,6 +24,9 @@ export function useBadgeEditor() {
 
     b.label = next.label;
     b.icon = next.icon;
+    // Also sync iconIntended so the reconcile watcher (below) doesn't
+    // fire on the optimistic update after a user pick.
+    b.iconIntended = next.icon;
 
     // Include the resolved SVG body so the sandbox can render the icon via
     // its slot without an INSTANCE_SWAP + library import. Sandbox falls back
@@ -41,6 +44,9 @@ export function useBadgeEditor() {
       },
     });
   }
+
+  // NOTE: badge-icon reconcile lives at App.vue scope (useIconReconcile)
+  // so it runs regardless of which tab is mounted.
 
   function commitVisibility(next: boolean): void {
     const slideId = view.state.currentSlideId;

@@ -64,6 +64,8 @@ import GeneralPanel from './components/GeneralPanel.vue';
 import ContentPanel from './components/ContentPanel.vue';
 import GraphsPanel from './components/GraphsPanel.vue';
 import { usePluginBridge } from './composables/usePluginBridge';
+import { useIconReconcile } from './composables/useIconReconcile';
+import { getLucideSvg } from './lucide-svgs';
 import { useExport } from './composables/useExport';
 import { usePluginView } from './stores/usePluginView';
 import { useIconRecents } from './stores/useIconRecents';
@@ -86,8 +88,48 @@ const notifications = useNotifications();
 // component setup. Doing it once at app root.
 notifications.init(useToast());
 
+// Auto-reconcile Card + Badge icons after library republishes wipe
+// their icon-slot child overrides. Mounted at app root (not inside the
+// per-tab editors) so it fires even when the user is on a tab whose
+// panel isn't currently displaying the affected section.
+useIconReconcile();
+
 // true until the first 'init' message arrives from main thread
 const initializing = ref<boolean>(true);
+
+// Cross-slide icon reconcile state. Sandbox walks every slide on
+// startup and posts `stale-icons` with the list of stale cards/badges.
+// While this is in flight (between ui-ready and the all-clear), the
+// splash stays visible so the user opens a fully-reconciled file
+// instead of seeing master defaults flash before getting fixed.
+const reconciling = ref<boolean>(true);
+// Hard cap on splash time, in case the stale-icons message never
+// arrives (e.g. very old sandbox build, or scan errors out silently).
+const STALE_DEADLINE_MS = 8000;
+// Grace period after the LAST update-card post is fired — we don't
+// wait for every individual target-updated ack, we assume the bridge
+// processes them in order and 1.5s is plenty for the queue to drain.
+const STALE_FALLBACK_MS = 1500;
+// Show the splash while EITHER init is pending OR reconcile is in
+// flight (capped by the safety timer below).
+const showSplash = computed<boolean>(() => initializing.value || reconciling.value);
+
+let reconcileFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+let reconcileDeadlineTimer: ReturnType<typeof setTimeout> | null = null;
+function finishReconcile(): void {
+  if (reconcileFallbackTimer !== null) {
+    clearTimeout(reconcileFallbackTimer);
+    reconcileFallbackTimer = null;
+  }
+  if (reconcileDeadlineTimer !== null) {
+    clearTimeout(reconcileDeadlineTimer);
+    reconcileDeadlineTimer = null;
+  }
+  reconciling.value = false;
+}
+// Safety: never trap the user behind the splash if `stale-icons`
+// somehow never arrives.
+reconcileDeadlineTimer = setTimeout(finishReconcile, STALE_DEADLINE_MS);
 
 // ── Resize handle ──────────────────────────────────────────────────
 // Drag the bottom-right corner to resize the plugin window. Posts a
@@ -232,6 +274,52 @@ bridge.onMessage((msg) => {
     initializing.value = false;
     return;
   }
+  if (msg.type === 'stale-icons') {
+    // Re-apply each stale entry by sending the same update messages
+    // the picker uses. Sandbox handles them per-slide. After firing
+    // the batch, start a short grace timer so the splash stays
+    // visible while the bridge drains — sandbox applies are async.
+    const cardCount = msg.cards.length;
+    const badgeCount = msg.badges.length;
+    console.log(
+      '[icon-reconcile] sandbox flagged ' +
+        cardCount +
+        ' card icon(s) + ' +
+        badgeCount +
+        ' badge icon(s) as stale',
+    );
+    for (let i = 0; i < msg.cards.length; i++) {
+      const entry = msg.cards[i];
+      const svg = getLucideSvg(entry.iconIntended);
+      if (svg === null) continue;
+      bridge.post({
+        type: 'update-card',
+        slideId: entry.slideId,
+        cardNodeId: entry.cardNodeId,
+        payload: { icon: entry.iconIntended, iconSvg: svg },
+      });
+    }
+    for (let i = 0; i < msg.badges.length; i++) {
+      const entry = msg.badges[i];
+      const svg = getLucideSvg(entry.iconIntended);
+      if (svg === null) continue;
+      bridge.post({
+        type: 'update-general',
+        slideId: entry.slideId,
+        section: 'badge',
+        payload: { icon: entry.iconIntended, iconSvg: svg },
+      });
+    }
+    // Even with zero stale entries we still need to clear the splash —
+    // the sandbox always posts stale-icons (possibly empty) once its
+    // scan finishes.
+    if (cardCount === 0 && badgeCount === 0) {
+      finishReconcile();
+    } else {
+      reconcileFallbackTimer = setTimeout(finishReconcile, STALE_FALLBACK_MS);
+    }
+    return;
+  }
   if (msg.type === 'slide-summary') {
     view.setSummary(msg.summary);
     return;
@@ -363,19 +451,20 @@ onMounted(() => {
          image-preview prefetch) before posting init, so when this
          hides the UI is already populated. -->
     <div
-      v-if="initializing"
+      v-if="showSplash"
       class="flex h-full flex-col items-center justify-center bg-elevated text-default"
     >
       <div class="flex flex-col items-center gap-4">
         <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
         <div class="flex items-center gap-2 text-sm text-muted">
           <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-          <span>Voorbereiden…</span>
+          <span>{{ initializing ? 'Voorbereiden…' : 'Iconen synchroniseren…' }}</span>
         </div>
       </div>
     </div>
 
-    <!-- Real UI — shown once 'init' received -->
+    <!-- Real UI — shown once 'init' received AND the cross-slide
+         icon-reconcile pass finishes (or its deadline times out). -->
     <div v-else class="relative flex h-full flex-col bg-elevated text-default">
       <main class="flex-1 overflow-y-auto">
         <div class="mx-auto max-w-2xl space-y-3 p-3 pb-28">
@@ -630,6 +719,18 @@ onMounted(() => {
           <UIcon name="i-lucide-download" class="size-5" />
         </button>
       </nav>
+
+      <!--
+        Version label — tiny muted text centered at the very bottom of
+        the iframe, below the floating navbar. Just enough to identify
+        which build is running without competing with the controls.
+      -->
+      <div
+        class="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center"
+        aria-hidden="true"
+      >
+        <span class="text-[10px] text-muted/50 tracking-wide">v{{ appVersion }}</span>
+      </div>
 
       <!--
         Resize handle — drag the bottom-right corner to resize the plugin

@@ -93,6 +93,140 @@ figma.showUI(uiHtml, { width: 520, height: 760, themeColors: true });
 })();
 
 // ============================================================
+// Proactive icon backfill — walks every Welder Slide on every page,
+// captures each Card's currently-visible icon into plugin data when
+// it has no record yet. One-shot per plugin session, fire-and-forget.
+//
+// Why: the reconcile fix only protects icons that already have plugin
+// data. Cards on slides the user hasn't visited via the new plugin yet
+// have no record, so a subsequent library update wipes their slot
+// child without anything to restore from. Running this on startup
+// ensures every card in the file is protected before the user gets a
+// chance to accept the next library update.
+// ============================================================
+async function backfillAllIcons(): Promise<void> {
+  try {
+    await figma.loadAllPagesAsync();
+  } catch (e) {
+    console.log('[icon-backfill] loadAllPagesAsync failed: ' + String(e));
+    return;
+  }
+  let cardsVisited = 0;
+  let cardsWritten = 0;
+  let badgesVisited = 0;
+  let badgesWritten = 0;
+  const staleCards: Array<{ slideId: string; cardNodeId: string; iconIntended: string }> = [];
+  const staleBadges: Array<{ slideId: string; iconIntended: string }> = [];
+  const pages = figma.root.children;
+  for (let p = 0; p < pages.length; p++) {
+    const page = pages[p];
+    if (page.type !== 'PAGE') continue;
+    let slides: InstanceNode[];
+    try {
+      slides = findSlidesOnPage(page);
+    } catch (_e) {
+      continue;
+    }
+    for (let s = 0; s < slides.length; s++) {
+      const slide = slides[s];
+      // ── Cards ──
+      let cards: SceneNode[];
+      try {
+        cards = slide.findAll(function (n: SceneNode) {
+          return n.type === 'INSTANCE' && n.name === 'Card';
+        });
+      } catch (_e) {
+        cards = [];
+      }
+      for (let c = 0; c < cards.length; c++) {
+        const card = cards[c];
+        if (card.type !== 'INSTANCE') continue;
+        const cardInst = card as InstanceNode;
+        cardsVisited++;
+        let stored = '';
+        try {
+          stored = cardInst.getSharedPluginData('welder', 'icon');
+        } catch (_e) {
+          continue;
+        }
+        const current = readCardIcon(card, slide);
+        if (typeof stored === 'string' && stored.length > 0) {
+          // Already persisted — flag stale when slot diverged from the
+          // record (library republish wiped the override).
+          if (current !== null && current.length > 0 && current !== stored) {
+            staleCards.push({
+              slideId: slide.id,
+              cardNodeId: cardInst.id,
+              iconIntended: stored,
+            });
+          }
+          continue;
+        }
+        // No record yet — backfill from current slot value.
+        if (current === null || current.length === 0) continue;
+        try {
+          cardInst.setSharedPluginData('welder', 'icon', current);
+          cardsWritten++;
+        } catch (_e) {
+          /* silent */
+        }
+      }
+      // ── Badges ──
+      let badges: SceneNode[];
+      try {
+        badges = slide.findAll(function (n: SceneNode) {
+          return n.type === 'INSTANCE' && n.name === 'Badge';
+        });
+      } catch (_e) {
+        badges = [];
+      }
+      for (let b = 0; b < badges.length; b++) {
+        const badge = badges[b];
+        if (badge.type !== 'INSTANCE') continue;
+        const badgeInst = badge as InstanceNode;
+        badgesVisited++;
+        let stored = '';
+        try {
+          stored = badgeInst.getSharedPluginData('welder', 'icon');
+        } catch (_e) {
+          continue;
+        }
+        const current = readBadgeIcon(badgeInst);
+        if (typeof stored === 'string' && stored.length > 0) {
+          if (current.length > 0 && current !== stored) {
+            staleBadges.push({ slideId: slide.id, iconIntended: stored });
+          }
+          continue;
+        }
+        if (current.length === 0) continue;
+        try {
+          badgeInst.setSharedPluginData('welder', 'icon', current);
+          badgesWritten++;
+        } catch (_e) {
+          /* silent */
+        }
+      }
+    }
+  }
+  console.log(
+    '[icon-backfill] cards: visited ' + cardsVisited + ', wrote ' + cardsWritten +
+      ', stale ' + staleCards.length +
+      ' · badges: visited ' + badgesVisited + ', wrote ' + badgesWritten +
+      ', stale ' + staleBadges.length,
+  );
+  // Post stale list (always — possibly empty) so the iframe can dismiss
+  // its "reconciling" splash phase once it sees this message.
+  postToUI({ type: 'stale-icons', cards: staleCards, badges: staleBadges });
+}
+
+// Fire-and-forget — happens in the background after the UI is shown.
+// Plugin-data writes are cheap and the user is unlikely to accept a
+// library update within the first ~second of opening the plugin.
+backfillAllIcons().catch(function (e: unknown) {
+  console.log('[icon-backfill] failed:', e);
+});
+
+// ============================================================
 // Accent (Text Dimmer) — library-variable helpers (spec §13 T30)
 //
 // T34.2: `loadAccentVars`, `resolveColor`, `TEXT_KEY`, `TEXT_DIMMER_KEY`,
@@ -658,15 +792,42 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
       badgeVisible = v === null ? true : v;
     }
   }
-  const badgeSection =
-    badge === null
-      ? null
-      : {
-          badgeNodeId: badge.id,
-          label: readTextByName(badge, 'Label') || badge.name,
-          icon: readBadgeIcon(badge),
-          visible: badgeVisible,
-        };
+  let badgeSection: GeneralSections['badge'] = null;
+  if (badge !== null) {
+    const currentBadgeIcon = readBadgeIcon(badge);
+    // Plugin data — same pattern as Card. Survives library republishes
+    // that wipe the slot child. The iframe compares with `icon` and
+    // re-applies on mismatch.
+    let badgeIconIntended = '';
+    try {
+      const stored = badge.getSharedPluginData('welder', 'icon');
+      if (typeof stored === 'string' && stored.length > 0) {
+        badgeIconIntended = stored;
+      }
+    } catch (_e) {
+      /* silent */
+    }
+    // Backfill: if no record yet but the slot already shows a real
+    // icon, capture it so the next library update can reconcile.
+    if (badgeIconIntended.length === 0 && currentBadgeIcon.length > 0) {
+      try {
+        badge.setSharedPluginData('welder', 'icon', currentBadgeIcon);
+        badgeIconIntended = currentBadgeIcon;
+        console.log(
+          '[badge-scan] backfilled iconIntended="' + currentBadgeIcon + '" for ' + badge.id,
+        );
+      } catch (_e) {
+        /* silent */
+      }
+    }
+    badgeSection = {
+      badgeNodeId: badge.id,
+      label: readTextByName(badge, 'Label') || badge.name,
+      icon: currentBadgeIcon,
+      iconIntended: badgeIconIntended,
+      visible: badgeVisible,
+    };
+  }
 
   const imageSection =
     imageWrap === null
@@ -981,13 +1142,51 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
     const isIconType = cardType === 'Stack Icon' || cardType === 'Icon Side';
     const isImageType = cardType === 'Image' || cardType === 'User';
 
+    // Persisted-by-the-plugin icon slug. Survives library-master
+    // republishes (Figma resets icon-slot child overrides on master
+    // update; plugin data stays). The iframe compares this with the
+    // current visible `icon` and re-applies the user's pick when they
+    // diverge (auto-reconcile after library updates).
+    let iconIntended: string | null = null;
+    try {
+      const stored = card.getSharedPluginData('welder', 'icon');
+      if (typeof stored === 'string' && stored.length > 0) {
+        iconIntended = stored;
+      }
+    } catch (_e) {
+      /* silent — plugin data unreadable */
+    }
+    // Backfill: cards whose icons were picked in plugin builds older
+    // than 0.5.149 have no plugin-data record. The next library update
+    // would wipe their slot child without any way to restore. Capture
+    // the currently-visible icon as the user's intent NOW so the next
+    // republish doesn't lose them too. One-time per card — once
+    // iconIntended is set, subsequent scans skip this branch.
+    const currentSlotIcon = isImageType ? null : readCardIcon(card, slide);
+    if (
+      iconIntended === null &&
+      currentSlotIcon !== null &&
+      currentSlotIcon.length > 0
+    ) {
+      try {
+        (card as InstanceNode).setSharedPluginData('welder', 'icon', currentSlotIcon);
+        iconIntended = currentSlotIcon;
+        console.log(
+          '[card-scan] backfilled iconIntended="' + currentSlotIcon + '" for ' + card.id,
+        );
+      } catch (_e) {
+        /* silent */
+      }
+    }
+
     items.push({
       cardNodeId: card.id,
       heading: heading,
       paragraph: readTextByName(card, 'Paragraph') || '',
       // Icon picker shows iff the variant carries an icon. On unknown
       // variants we fall back to the scan (cardType === null).
-      icon: isImageType ? null : readCardIcon(card, slide),
+      icon: currentSlotIcon,
+      iconIntended: iconIntended,
       // Image picker shows iff the variant carries an image. On
       // unknown variants we fall back to the scan.
       visualHash: isIconType ? undefined : readCardVisualHash(card),
@@ -2000,11 +2199,6 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
-    // Side variants are forced to Heading4-xs regardless of which tile the
-    // user picked — the side layout has less horizontal room for text. Soft
-    // fallback to the picker's style if the helper isn't registered yet.
-    const resolvedSideStyleId = await resolveTextStyleByName('Heading4-xs');
-    const sideStyleId = resolvedSideStyleId !== null ? resolvedSideStyleId : styleId;
     figma.commitUndo();
     markSelfWrite();
 
@@ -2015,11 +2209,12 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     // if they're present) so the new spacing flows through Welder's
     // existing layout system.
     let targetSpacingVariable: Variable | null = null;
-    let sidePaddingVariable: Variable | null = null;
-    // Side variants always rebind paddingLeft/Right to a Spacing-collection
-    // variable: "7" (28px) for Text-only, "4" (16px) for Compact/Default.
-    // Top variants leave padding alone.
-    const sidePaddingName = msg.iconVisible === false ? '7' : '4';
+    let compactSidePaddingVariable: Variable | null = null;
+    // Compact (= iconVisible AND gapModeName "4") is the only side-card
+    // case that overrides the master padding — to variable "4" (16px).
+    // Default and Text-only let the master's binding (variable "8" =
+    // 32px) flow through unchanged.
+    const wantsCompactSidePadding = msg.iconVisible === true && msg.gapModeName === '4';
     let firstSpacingFields: string[] = [];
     try {
       const firstCard = slide.findOne(function (n: SceneNode) {
@@ -2077,25 +2272,29 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
                   targetSpacingVariable = v;
                 }
                 if (
-                  sidePaddingVariable === null &&
-                  (v.name === sidePaddingName || v.name.endsWith('/' + sidePaddingName))
+                  wantsCompactSidePadding &&
+                  compactSidePaddingVariable === null &&
+                  (v.name === '4' || v.name.endsWith('/4'))
                 ) {
-                  sidePaddingVariable = v;
+                  compactSidePaddingVariable = v;
                 }
-                if (targetSpacingVariable !== null && sidePaddingVariable !== null) {
+                if (
+                  targetSpacingVariable !== null &&
+                  (!wantsCompactSidePadding || compactSidePaddingVariable !== null)
+                ) {
                   break;
                 }
+              }
+              if (wantsCompactSidePadding && compactSidePaddingVariable === null) {
+                console.log(
+                  '[set-card-size] compact-side-padding variable "4" not found in collection "' +
+                    collection.name + '"',
+                );
               }
               if (targetSpacingVariable === null) {
                 console.log(
                   '[set-card-size] variable "' + msg.gapModeName +
                     '" not found in collection "' + collection.name + '" — available: [' + tried.join(', ') + ']',
-                );
-              }
-              if (sidePaddingVariable === null) {
-                console.log(
-                  '[set-card-size] side-padding variable "' + sidePaddingName +
-                    '" not found in collection "' + collection.name + '"',
                 );
               }
             }
@@ -2117,16 +2316,18 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       if (card.type !== 'INSTANCE') continue;
       const cardInst = card as InstanceNode;
 
-      // Side variants wrap the icon in `icon-border-wrap` to hold a
-      // divider/border. Two things follow from "is this a side variant":
-      //   - in Text-only mode we hide that wrapper too (otherwise an empty
-      //     bordered column lingers);
-      //   - the heading is always Heading4-xs on side variants (less room).
-      // Top variants don't have this node — findOne returns null.
-      const borderWrap = cardInst.findOne(function (n: SceneNode) {
-        return n.name === 'icon-border-wrap';
-      });
-      const isSideVariant = borderWrap !== null;
+      // Side-variant detection — read the canonical `Type` VARIANT
+      // property on the Card instance. "Icon Side" is the only value
+      // that gets side-specific treatment (smaller heading style,
+      // horizontal-padding rebind, hide the icon-border-wrap in
+      // text-only mode). All other Types (Stack Icon, Image, User)
+      // stay on the master-defined padding/heading.
+      const isSideVariant = readCardTypeVariant(cardInst) === 'Icon Side';
+      const borderWrap = isSideVariant
+        ? cardInst.findOne(function (n: SceneNode) {
+            return n.name === 'icon-border-wrap';
+          })
+        : null;
       if (borderWrap !== null) {
         try {
           borderWrap.visible = msg.iconVisible;
@@ -2182,6 +2383,29 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
               /* silent — auto-layout-locked slots may reject */
             }
           }
+          // The slot's own geometric box is master-locked; calling
+          // .resize() on it is silently rejected. The smaller icon
+          // (e.g. 58 in Compact) sits inside the master-sized slot
+          // (68), so center it manually rather than letting it stick
+          // to (0,0). Master-side fix would be a Card `Size` variant
+          // that defines a different slot size per mode.
+          if (
+            'x' in child &&
+            'y' in child &&
+            'width' in slotNode &&
+            'height' in slotNode
+          ) {
+            const slotW = (slotNode as SceneNode & { width: number }).width;
+            const slotH = (slotNode as SceneNode & { height: number }).height;
+            try {
+              (child as SceneNode & { x: number; y: number }).x =
+                (slotW - msg.iconSize) / 2;
+              (child as SceneNode & { x: number; y: number }).y =
+                (slotH - msg.iconSize) / 2;
+            } catch (_e) {
+              /* silent — child may be locked by parent auto-layout */
+            }
+          }
         }
       }
 
@@ -2189,9 +2413,8 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         return n.type === 'TEXT' && n.name === 'Heading';
       });
       if (headingNode !== null && headingNode.type === 'TEXT') {
-        const targetStyleId = isSideVariant ? sideStyleId : styleId;
         try {
-          await (headingNode as TextNode).setTextStyleIdAsync(targetStyleId);
+          await (headingNode as TextNode).setTextStyleIdAsync(styleId);
         } catch (e) {
           console.log('[set-card-size] setTextStyleIdAsync failed: ' + String(e));
         }
@@ -2210,20 +2433,76 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         }
       }
 
-      // Side-variant horizontal padding follows the picker mode:
-      //   - Text-only       → variable "7" (28px)
-      //   - Compact/Default → variable "6" (24px)
-      // sidePaddingVariable was resolved up front from sidePaddingName.
-      // Top variants leave padding alone — no rebind, no clear.
-      if (isSideVariant && sidePaddingVariable !== null) {
-        const paddingFields = ['paddingLeft', 'paddingRight'];
+      // Reset paddingLeft/Right to match the variant master exactly.
+      // Earlier picker builds wrote per-card overrides on these fields
+      // ("4" = 16px). `setBoundVariable(field, null)` alone wouldn't
+      // restore the master value (Figma keeps the last resolved literal
+      // as the override), so we read the master's binding (or literal)
+      // and mirror it on the instance.
+      try {
+        const mainComp = await cardInst.getMainComponentAsync();
+        if (mainComp !== null) {
+          const paddingFields: VariableBindableNodeField[] = ['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom'];
+          for (let f = 0; f < paddingFields.length; f++) {
+            const field = paddingFields[f];
+            const masterBound = (mainComp as ComponentNode).boundVariables;
+            const masterAlias =
+              masterBound !== null && masterBound !== undefined
+                ? (masterBound as { [k: string]: unknown })[field]
+                : undefined;
+            if (
+              masterAlias !== undefined &&
+              masterAlias !== null &&
+              typeof masterAlias === 'object' &&
+              'id' in (masterAlias as object)
+            ) {
+              // Master variable-bound → mirror the same variable.
+              try {
+                const masterVar = await figma.variables.getVariableByIdAsync(
+                  (masterAlias as VariableAlias).id,
+                );
+                if (masterVar !== null) {
+                  cardInst.setBoundVariable(field, masterVar);
+                }
+              } catch (_e) {
+                /* silent */
+              }
+            } else {
+              // Master uses literal value → clear instance binding and
+              // copy the literal so the instance no longer overrides.
+              try {
+                cardInst.setBoundVariable(field, null);
+              } catch (_e) {
+                /* silent */
+              }
+              try {
+                const masterValue = (mainComp as unknown as { [k: string]: number })[field];
+                if (typeof masterValue === 'number') {
+                  (cardInst as unknown as { [k: string]: number })[field] = masterValue;
+                }
+              } catch (_e) {
+                /* silent */
+              }
+            }
+          }
+        }
+      } catch (e) {
+        console.log('[set-card-size] padding-reset failed: ' + String(e));
+      }
+
+      // Compact side variant override — after mirroring master (above),
+      // rebind paddingLeft/Right to variable "4" (16px). Only applies
+      // to Icon Side cards in Compact mode; Default and Text-only let
+      // the master padding stand.
+      if (isSideVariant && wantsCompactSidePadding && compactSidePaddingVariable !== null) {
+        const paddingFields: VariableBindableNodeField[] = ['paddingLeft', 'paddingRight', 'paddingTop', 'paddingBottom'];
         for (let f = 0; f < paddingFields.length; f++) {
-          const field = paddingFields[f] as VariableBindableNodeField;
+          const field = paddingFields[f];
           try {
-            cardInst.setBoundVariable(field, sidePaddingVariable);
+            cardInst.setBoundVariable(field, compactSidePaddingVariable);
           } catch (e) {
             console.log(
-              '[set-card-size] setBoundVariable ' + field + ' side-padding failed: ' + String(e),
+              '[set-card-size] compact side-padding rebind ' + field + ' failed: ' + String(e),
             );
           }
         }

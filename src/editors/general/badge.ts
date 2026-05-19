@@ -206,5 +206,18 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
     if (!handled) {
       await applyIconSwap(badge, payload.icon);
     }
+    // Persist the picked icon as plugin data on the Badge instance —
+    // mirrors the Card-side fix. Slot-child overrides do NOT survive
+    // a library-master republish; plugin data does. Scan side reads it
+    // and the iframe auto-reconciles if slot.child.name diverges.
+    try {
+      const desiredIconKey = normalizeIconKey(payload.icon);
+      badge.setSharedPluginData('welder', 'icon', desiredIconKey);
+      console.log(
+        '[badge] persisted icon="' + desiredIconKey + '" to plugin data on ' + badge.id,
+      );
+    } catch (e) {
+      console.log('[badge] setSharedPluginData failed: ' + String(e));
+    }
   }
 }

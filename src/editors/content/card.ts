@@ -314,6 +314,20 @@ export async function applyCard(slide: InstanceNode, payload: CardPayload): Prom
           await applyCardIconSwap(cardInst, payload.icon);
         }
       }
+      // Persist the picked icon as plugin data on the Card instance.
+      // Slot-child overrides do NOT survive a library-master republish
+      // (Figma resets them to the master's default), but plugin data
+      // does — so this is the durable "what icon did the user pick?"
+      // record. The scan side reads it and the iframe auto-reconciles
+      // by re-applying when slot.child.name diverges from this value.
+      try {
+        cardInst.setSharedPluginData('welder', 'icon', desiredIconKey);
+        console.log(
+          '[card] persisted icon="' + desiredIconKey + '" to plugin data on ' + cardInst.id,
+        );
+      } catch (e) {
+        console.log('[card] setSharedPluginData failed: ' + String(e));
+      }
     }
   }
 

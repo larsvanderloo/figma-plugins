@@ -118,7 +118,9 @@ export function useCardEditor() {
     if (Object.keys(payload).length === 0) return;
 
     // Optimistic local update — always write all fields so the store
-    // matches what the user sees, even when we only emit a delta.
+    // matches what the user sees, even when we only emit a delta. Also
+    // sync `iconIntended` so the reconcile watcher (further down)
+    // doesn't see a spurious mismatch on the next tick.
     const list = view.state.content?.cards ?? null;
     if (list !== null) {
       const idx = list.findIndex((c) => c.cardNodeId === value.cardNodeId);
@@ -127,6 +129,9 @@ export function useCardEditor() {
         list[idx].paragraph = value.paragraph;
         list[idx].icon = value.icon;
         list[idx].style = value.style;
+        if (value.icon !== null) {
+          list[idx].iconIntended = value.icon;
+        }
       }
     }
 
@@ -214,6 +219,11 @@ export function useCardEditor() {
     }
   });
   onUnmounted(unsubCardSizeAck);
+
+  // NOTE: card-icon reconcile lives at App.vue scope (useIconReconcile)
+  // so it runs regardless of which tab is mounted. Previously this
+  // watcher sat here and required the user to open the Inhoud tab
+  // before stale icons would restore.
 
   return reactive({
     cards,
