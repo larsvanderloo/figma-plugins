@@ -36,9 +36,9 @@ function onCardSizeChange(value: string | number | undefined): void {
       variant="naked"
     />
 
-    <EditorWrapper v-if="cardEditor.cards.length > 0" title="Kaarten">
+    <EditorWrapper v-if="cardEditor.cards.length > 0" title="Kaarten" data-tour="kaarten">
       <WCard>
-        <UFormField label="Kaartweergave">
+        <UFormField label="Kaartweergave" data-tour="kaartweergave">
         <URadioGroup
           :model-value="cardEditor.cardSize"
           :items="sizeOptions"
@@ -99,7 +99,7 @@ function onCardSizeChange(value: string | number | undefined): void {
       </WCard>
     </EditorWrapper>
 
-    <EditorWrapper v-if="timelineEditor.items.length > 0" title="Tijdlijn">
+    <EditorWrapper v-if="timelineEditor.items.length > 0" title="Tijdlijn" data-tour="tijdlijn">
       <WCard>
         <template
           v-for="(item, idx) in timelineEditor.items"

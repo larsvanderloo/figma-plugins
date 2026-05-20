@@ -543,6 +543,14 @@ export type UIToPluginMessage =
    */
   | { type: 'set-icon-recents'; items: string[] }
   /**
+   * Persist that the user has seen the first-run onboarding walkthrough.
+   * Single-shot command (no payload) — sandbox writes `true` to
+   * `figma.clientStorage` under `ONBOARDING_SEEN_KEY`. UI never un-sets
+   * during normal use; bumping the storage key suffix is how we
+   * re-trigger onboarding on a future version.
+   */
+  | { type: 'set-onboarding-seen' }
+  /**
    * Resize the plugin iframe. Fired continuously while the user drags
    * the resize handle; sandbox calls `figma.ui.resize` and persists the
    * final size via `figma.clientStorage` so subsequent plugin opens
@@ -664,6 +672,14 @@ export type PluginToUIMessage =
    * first run.
    */
   | { type: 'icon-recents'; items: string[] }
+  /**
+   * Hydration of the first-run onboarding flag. Sandbox reads
+   * `ONBOARDING_SEEN_KEY` from `figma.clientStorage` on `ui-ready` and
+   * posts the boolean. `useOnboarding` opens the modal automatically
+   * when `seen === false`. Missing/unreadable storage is treated as
+   * `seen: false` (first run).
+   */
+  | { type: 'onboarding-seen'; seen: boolean }
   /**
    * Result of an `export-document` request. Bytes are PDF or PNG
    * depending on `format`; iframe wraps them in a Blob with the

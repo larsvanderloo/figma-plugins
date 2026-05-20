@@ -60,6 +60,7 @@ function onThemeChange(modeId: string | null): void {
           v-if="showVisibilitySection"
           :model-value="!view.currentSummary!.isSkipped"
           label="In presentatie tonen"
+          data-tour="presentatie-tonen"
           :ui="{ root: 'flex-row-reverse justify-between w-full', wrapper: 'ms-0' }"
           @update:model-value="toggleSkip"
         />
@@ -72,7 +73,7 @@ function onThemeChange(modeId: string | null): void {
       </fieldset>
     </EditorWrapper>
 
-    <EditorWrapper v-if="showImageWrap" title="Afbeelding">
+    <EditorWrapper v-if="showImageWrap" title="Afbeelding" data-tour="afbeelding">
       <fieldset :disabled="editingDisabled" class="m-0 min-w-0 border-0 p-0">
         <ImageEditor />
       </fieldset>

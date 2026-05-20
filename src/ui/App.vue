@@ -13,7 +13,9 @@ import { APP_VERSION } from './generated/app-version';
 import { getLucideSvg } from './lucide-svgs';
 import { useIconRecents } from './stores/useIconRecents';
 import { useNotifications } from './stores/useNotifications';
+import { useOnboarding } from './stores/useOnboarding';
 import { usePluginView } from './stores/usePluginView';
+import OnboardingTour from './components/ui/OnboardingTour.vue';
 const PDF_AUTHOR = 'Welder B.V.';
 const PDF_CREATOR = 'Welder Slide Editor';
 const PDF_PRODUCER = 'Welder Slide Editor';
@@ -56,6 +58,7 @@ const exporter = useExport();
 const appVersion = APP_VERSION;
 const iconRecents = useIconRecents();
 const notifications = useNotifications();
+const onboarding = useOnboarding();
 notifications.init(useToast());
 useIconReconcile();
 const initializing = ref<boolean>(true);
@@ -139,6 +142,12 @@ watch(
   },
   { immediate: true },
 );
+
+watch(
+  activeTab,
+  (next) => onboarding.notifyTabChange(next),
+  { immediate: true },
+);
 let skipIconRecentsSave = false;
 const exportModalOpen = ref<boolean>(false);
 const exportTarget = ref<'slide' | 'presentation'>('slide');
@@ -182,7 +191,10 @@ const bottomTabItems = [
 ];
 
 function onActiveTabChange(value: string | number): void {
-  if (value === 'general' || value === 'content') activeTab.value = value;
+  if (value === 'general' || value === 'content') {
+    activeTab.value = value;
+    onboarding.notifyTabChange(value);
+  }
 }
 
 function onExportTargetChange(value: string | number | undefined): void {
@@ -287,6 +299,10 @@ bridge.onMessage((msg) => {
     }
     skipIconRecentsSave = true;
     iconRecents.setItems(msg.items);
+    return;
+  }
+  if (msg.type === 'onboarding-seen') {
+    onboarding.setSeenFromSandbox(msg.seen);
     return;
   }
   if (msg.type === 'presentation-pdf-parts') {
@@ -484,7 +500,9 @@ onMounted(() => {
             </div>
           </template>
         </UModal>
+
       </main>
+      <OnboardingTour />
 
       <div
         class="pointer-events-none absolute inset-x-0 bottom-0 h-32 bg-linear-to-t from-elevated from-30% to-transparent"
@@ -519,9 +537,22 @@ onMounted(() => {
             :items="bottomTabItems"
             :content="false"
             variant="pill"
+            data-tour="tabs"
             @update:model-value="onActiveTabChange"
           />
         </div>
+
+        <UButton
+          color="neutral"
+          variant="ghost"
+          square
+          icon="i-lucide-circle-help"
+          class="pointer-events-auto size-12 rounded-full bg-default/65 backdrop-blur-xl shadow-[0_12px_32px_-12px_rgba(0,0,0,0.18)] ring-1 ring-default/40 text-muted hover:text-primary hover:bg-default/70 transition-colors flex items-center justify-center"
+          title="Uitleg"
+          aria-label="Uitleg"
+          data-tour="help-button"
+          @click="onboarding.open()"
+        />
 
         <UButton
           color="neutral"
@@ -531,6 +562,7 @@ onMounted(() => {
           class="pointer-events-auto size-12 rounded-full bg-default/65 backdrop-blur-xl shadow-[0_12px_32px_-12px_rgba(0,0,0,0.18)] ring-1 ring-default/40 text-muted hover:text-primary hover:bg-default/70 transition-colors flex items-center justify-center"
           :title="'Exporteer · v' + appVersion"
           aria-label="Exporteer"
+          data-tour="export-button"
           @click="openExportModal"
         />
       </nav>

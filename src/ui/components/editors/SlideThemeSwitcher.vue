@@ -82,6 +82,7 @@ function onThemeChange(value: string | number | undefined): void {
       variant="ghost"
       block
       class="-mx-2 w-[calc(100%+1rem)] px-2 py-1"
+      data-tour="kleurthema"
       :ui="{ base: 'justify-between' }"
       :aria-label="activeMode ? 'Kleurthema: ' + activeMode.name + ' — wijzigen' : 'Kleurthema kiezen'"
     >

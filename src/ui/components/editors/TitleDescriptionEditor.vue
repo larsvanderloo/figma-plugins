@@ -224,12 +224,13 @@ function onBadgeVisibilityToggle(next: boolean): void {
 <template>
   <WCard v-if="td.model !== null || bd.model !== null">
     <template v-if="td.model !== null">
-    <UFormField label="Titel">
+    <UFormField label="Titel" data-tour="titel">
       <template #hint>
         <USwitch
           :model-value="td.model.headingVisible"
           label="Tonen"
           size="xs"
+          data-tour="titel-tonen"
           :ui="{ root: 'flex-row-reverse gap-2' }"
           @update:model-value="onHeadingVisibilityToggle"
         />
@@ -243,7 +244,7 @@ function onBadgeVisibilityToggle(next: boolean): void {
       />
     </UFormField>
 
-    <UFormField v-if="td.model.size !== null && showHeadingFields" label="Tekstgrootte">
+    <UFormField v-if="td.model.size !== null && showHeadingFields" label="Tekstgrootte" data-tour="tekstgrootte">
       <UTabs
         :model-value="td.model.size.current"
         :items="sizeRadioItems"
@@ -269,7 +270,7 @@ function onBadgeVisibilityToggle(next: boolean): void {
       </UTabs>
     </UFormField>
 
-    <UFormField v-if="showAccentFields" label="Accenten">
+    <UFormField v-if="showAccentFields" label="Accenten" data-tour="accenten">
       <template #hint>
         <div class="h-5 min-w-20 flex justify-end">
           <Transition
@@ -336,7 +337,7 @@ function onBadgeVisibilityToggle(next: boolean): void {
       </div>
     </UFormField>
 
-    <UFormField v-if="showParagraphSection" label="Omschrijving">
+    <UFormField v-if="showParagraphSection" label="Omschrijving" data-tour="omschrijving">
       <template v-if="td.model.paragraphVisible !== null" #hint>
         <USwitch
           :model-value="td.model.paragraphVisible"
@@ -359,7 +360,7 @@ function onBadgeVisibilityToggle(next: boolean): void {
     </UFormField>
     </template>
 
-    <UFormField v-if="bd.model !== null" label="Badge">
+    <UFormField v-if="bd.model !== null" label="Badge" data-tour="badge">
       <template v-if="bd.model.visible !== null" #hint>
         <USwitch
           :model-value="bd.model.visible"

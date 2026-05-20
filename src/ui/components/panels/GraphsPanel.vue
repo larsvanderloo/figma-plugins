@@ -27,7 +27,7 @@ const selectorItems = computed(() => {
       variant="naked"
     />
 
-    <EditorWrapper v-else title="Tabel">
+    <EditorWrapper v-else title="Tabel" data-tour="tabel">
       <WCard v-if="showSelector" title="Selectie">
         <UFormField name="graph-instance" label="Tabel">
           <USelectMenu

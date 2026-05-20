@@ -1830,6 +1830,14 @@ var lastSentPreviewHash: Map<string, string> = new Map();
 const ICON_RECENTS_KEY = 'icon-recents';
 
 /**
+ * clientStorage key for the first-run onboarding flag. Versioned suffix:
+ * bumping `-v1` → `-v2` re-triggers the walkthrough for every user when
+ * a refreshed onboarding ships. Old keys can be left orphaned (single
+ * boolean per user — no quota concern).
+ */
+const ONBOARDING_SEEN_KEY = 'welder-onboarding-seen-v1';
+
+/**
  * Iframe's currently-displayed slide id. Set on every `pick-slide`
  * message; consumed by `postSlideContent()` so the sandbox can re-emit
  * `slide-loaded` when the canvas mutates externally (native Cmd+Z,
@@ -2186,6 +2194,7 @@ function clearDisplayedSlide(): void {
 function isMutatingMessage(msg: UIToPluginMessage): boolean {
   if (msg.type === 'ui-ready') return false;
   if (msg.type === 'set-icon-recents') return false;
+  if (msg.type === 'set-onboarding-seen') return false;
   if (msg.type === 'resize-ui') return false;
   if (msg.type === 'export-document') return false;
   if (msg.type === 'close') return false;
@@ -2232,6 +2241,18 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         console.log('[welder-slide-editor] icon-recents load failed:', err);
         postToUI({ type: 'icon-recents', items: [] });
       });
+
+    // Hydrate the first-run onboarding flag. Missing/unreadable storage
+    // is treated as `seen: false` so the UI shows the walkthrough.
+    figma.clientStorage
+      .getAsync(ONBOARDING_SEEN_KEY)
+      .then((value: unknown) => {
+        postToUI({ type: 'onboarding-seen', seen: value === true });
+      })
+      .catch((err: unknown) => {
+        console.log('[welder-slide-editor] onboarding-seen load failed:', err);
+        postToUI({ type: 'onboarding-seen', seen: false });
+      });
     return;
   }
 
@@ -2241,6 +2262,13 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     // affects the next plugin open.
     figma.clientStorage.setAsync(ICON_RECENTS_KEY, msg.items).catch((err: unknown) => {
       console.log('[welder-slide-editor] icon-recents save failed:', err);
+    });
+    return;
+  }
+
+  if (msg.type === 'set-onboarding-seen') {
+    figma.clientStorage.setAsync(ONBOARDING_SEEN_KEY, true).catch((err: unknown) => {
+      console.log('[welder-slide-editor] onboarding-seen save failed:', err);
     });
     return;
   }

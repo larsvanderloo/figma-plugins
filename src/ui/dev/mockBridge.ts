@@ -102,4 +102,5 @@ export function installMockBridge(): void {
 
   devPost({ type: 'icons-ready' }, 800);
   devPost({ type: 'icon-recents', items: ['trending-up', 'monitor', 'users'] }, 900);
+  devPost({ type: 'onboarding-seen', seen: false }, 950);
 }
