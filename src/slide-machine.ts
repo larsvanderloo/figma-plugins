@@ -348,6 +348,34 @@ export function getPropertyKey(instance: InstanceNode, logicalName: string): str
   }
   return null;
 }
+
+/**
+ * Variant van `getPropertyKey` voor properties waarvan de casing of exacte
+ * naam uit de Figma library kan verschillen. Probeert eerst exacte matches,
+ * daarna case-insensitive op de logische naam vóór een eventuele `#hash`.
+ */
+export function getPropertyKeyAny(instance: InstanceNode, logicalNames: string[]): string | null {
+  for (let i = 0; i < logicalNames.length; i++) {
+    const exact = getPropertyKey(instance, logicalNames[i]);
+    if (exact !== null) return exact;
+  }
+
+  const props = instance.componentProperties;
+  if (props === null || props === undefined) return null;
+  const wanted: { [k: string]: boolean } = {};
+  for (let j = 0; j < logicalNames.length; j++) {
+    wanted[logicalNames[j].toLowerCase()] = true;
+  }
+
+  const keys = Object.keys(props);
+  for (let k = 0; k < keys.length; k++) {
+    const key = keys[k];
+    const hashIndex = key.indexOf('#');
+    const bare = hashIndex >= 0 ? key.slice(0, hashIndex) : key;
+    if (wanted[bare.toLowerCase()] === true) return key;
+  }
+  return null;
+}
 /**
  * Zet een instance-property op een logische naam.
  * Retourneert true bij succes, false wanneer de key niet bestond (caller
