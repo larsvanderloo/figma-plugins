@@ -92,6 +92,30 @@ export default defineConfig({
       components: {
         dts: uiComponentsDts,
       },
+      ui: {
+        colors: {
+          primary: 'orange',
+          neutral: 'neutral',
+        },
+        container: {
+          base: 'w-full mx-auto px-2 pt-1 pb-6',
+        },
+        card: {
+          slots: {
+            header: 'p-5',
+            body: 'p-5 space-y-4',
+          },
+          variants: {
+            variant: {
+              solid: {
+                root: 'bg-default text-default shadow-[0_1px_2px_0_rgb(0_0_0/0.03),0_4px_16px_-4px_rgb(0_0_0/0.04)]',
+                title: 'text-default',
+                description: 'text-muted',
+              },
+            },
+          },
+        },
+      },
     }),
     viteSingleFile(),
     renameIndexToUi(),

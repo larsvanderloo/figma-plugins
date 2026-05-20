@@ -1,7 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
+import WCard from '../ui/WCard.vue';
 import WInput from '../ui/WInput.vue';
 import WTextarea from '../ui/WTextarea.vue';
+import IconPicker from '../ui/IconPicker.vue';
+import { useTitleDescriptionEditor } from '../../composables/useTitleDescriptionEditor';
+import { useBadgeEditor } from '../../composables/useBadgeEditor';
 
 export interface TitleDescriptionValue {
   heading: string;
@@ -12,35 +16,29 @@ export interface TitleDescriptionValue {
   size: { current: string; options: ReadonlyArray<string> } | null;
 }
 
-interface Props {
-  modelValue: TitleDescriptionValue;
-  accentPending?: boolean;
+export interface BadgeValue {
+  label: string;
+  icon: string;
+  visible: boolean | null;
 }
 
-const props = defineProps<Props>();
+const td = useTitleDescriptionEditor();
+const bd = useBadgeEditor();
 
-const emit = defineEmits<{
-  'update:modelValue': [value: TitleDescriptionValue];
-  'update:headingDim': [ranges: Array<[number, number]>];
-  'commit:headingDim': [];
-  'commit:size': [size: string];
-  'commit:visibility': [field: 'heading' | 'paragraph', visible: boolean];
-}>();
-
-const hasParagraph = computed<boolean>(() => props.modelValue.paragraph !== null);
-const showHeadingFields = computed<boolean>(() => props.modelValue.headingVisible);
+const hasParagraph = computed<boolean>(() => td.model !== null && td.model.paragraph !== null);
+const showHeadingFields = computed<boolean>(() => td.model !== null && td.model.headingVisible);
 const showAccentFields = computed<boolean>(
-  () => props.modelValue.headingVisible && props.modelValue.headingDim !== null,
+  () => td.model !== null && td.model.headingVisible && td.model.headingDim !== null,
 );
 const showParagraphSection = computed<boolean>(
-  () => hasParagraph.value && props.modelValue.headingVisible,
+  () => hasParagraph.value && td.model !== null && td.model.headingVisible,
 );
 const showParagraphInput = computed<boolean>(
-  () => showParagraphSection.value && props.modelValue.paragraphVisible !== false,
+  () => showParagraphSection.value && td.model !== null && td.model.paragraphVisible !== false,
 );
 
 const sizeRadioItems = computed<Array<{ value: string; label: string }>>(() => {
-  const s = props.modelValue.size;
+  const s = td.model?.size ?? null;
   if (s === null) return [];
   return s.options.map((option) => ({ value: option, label: option }));
 });
@@ -54,23 +52,23 @@ function segmentSizePx(idx: number, total: number): number {
 }
 
 function onSizePick(idx: number): void {
-  const s = props.modelValue.size;
+  const s = td.model?.size ?? null;
   if (s === null) return;
   const next = s.options[idx];
   if (typeof next === 'string' && next !== s.current) {
-    emit('commit:size', next);
+    td.commitSize(next);
   }
 }
 
 function onSizeChange(value: string | number | undefined): void {
-  const s = props.modelValue.size;
+  const s = td.model?.size ?? null;
   if (s === null || typeof value !== 'string') return;
   const idx = s.options.indexOf(value);
   if (idx >= 0) onSizePick(idx);
 }
 
 function sizeLabelPx(value: string): number {
-  const s = props.modelValue.size;
+  const s = td.model?.size ?? null;
   if (s === null) return SEGMENT_MAX_PX;
   const idx = s.options.indexOf(value);
   return segmentSizePx(idx >= 0 ? idx : 0, s.options.length);
@@ -94,7 +92,8 @@ interface SpaceToken {
 type Token = WordToken | SpaceToken;
 
 const tokens = computed<Token[]>(() => {
-  const parts = props.modelValue.heading.split(/(\s+)/);
+  if (td.model === null) return [];
+  const parts = td.model.heading.split(/(\s+)/);
   const out: Token[] = [];
   let cursor = 0;
   let wordIdx = 0;
@@ -150,21 +149,22 @@ function buildCharRanges(): Array<[number, number]> {
   return out;
 }
 
-hydrateDimWords(props.modelValue.headingDim);
+hydrateDimWords(td.model?.headingDim ?? null);
 watch(
-  () => props.modelValue.headingDim,
+  () => td.model?.headingDim ?? null,
   (next) => hydrateDimWords(next),
 );
 
 function onHeadingCommit(value: string): void {
-  const headingChangedLength = value.length !== props.modelValue.heading.length;
-  emit('update:modelValue', {
+  if (td.model === null) return;
+  const headingChangedLength = value.length !== td.model.heading.length;
+  td.update({
     heading: value,
-    paragraph: props.modelValue.paragraph,
-    headingVisible: props.modelValue.headingVisible,
-    paragraphVisible: props.modelValue.paragraphVisible,
-    headingDim: headingChangedLength ? [] : props.modelValue.headingDim,
-    size: props.modelValue.size,
+    paragraph: td.model.paragraph,
+    headingVisible: td.model.headingVisible,
+    paragraphVisible: td.model.paragraphVisible,
+    headingDim: headingChangedLength ? [] : td.model.headingDim,
+    size: td.model.size,
   });
   if (headingChangedLength && dimWords.value.size > 0) {
     dimWords.value = new Set();
@@ -172,22 +172,23 @@ function onHeadingCommit(value: string): void {
 }
 
 function onParagraphCommit(value: string): void {
-  emit('update:modelValue', {
-    heading: props.modelValue.heading,
+  if (td.model === null) return;
+  td.update({
+    heading: td.model.heading,
     paragraph: hasParagraph.value ? value : null,
-    headingVisible: props.modelValue.headingVisible,
-    paragraphVisible: props.modelValue.paragraphVisible,
-    headingDim: props.modelValue.headingDim,
-    size: props.modelValue.size,
+    headingVisible: td.model.headingVisible,
+    paragraphVisible: td.model.paragraphVisible,
+    headingDim: td.model.headingDim,
+    size: td.model.size,
   });
 }
 
 function onHeadingVisibilityToggle(next: boolean): void {
-  emit('commit:visibility', 'heading', next);
+  td.commitVisibility('heading', next);
 }
 
 function onParagraphVisibilityToggle(next: boolean): void {
-  emit('commit:visibility', 'paragraph', next);
+  td.commitVisibility('paragraph', next);
 }
 
 function toggleWord(wordIndex: number): void {
@@ -195,147 +196,193 @@ function toggleWord(wordIndex: number): void {
   if (next.has(wordIndex)) next.delete(wordIndex);
   else next.add(wordIndex);
   dimWords.value = next;
-  emit('update:headingDim', buildCharRanges());
+  td.updateHeadingDim(buildCharRanges());
 }
 
 function onAccentFocusOut(event: FocusEvent): void {
   const current = event.currentTarget;
   const next = event.relatedTarget;
   if (current instanceof Node && next instanceof Node && current.contains(next)) return;
-  emit('commit:headingDim');
+  td.flushHeadingDim();
+}
+
+function onBadgeLabelCommit(value: string): void {
+  if (bd.model === null) return;
+  bd.update({ label: value, icon: bd.model.icon, visible: bd.model.visible });
+}
+
+function onBadgeIconChange(value: string): void {
+  if (bd.model === null) return;
+  bd.update({ label: bd.model.label, icon: value, visible: bd.model.visible });
+}
+
+function onBadgeVisibilityToggle(next: boolean): void {
+  bd.commitVisibility(next);
 }
 </script>
 
 <template>
-  <UFormField v-if="modelValue.size !== null" label="Grootte">
-    <URadioGroup
-      :model-value="modelValue.size.current"
-      :items="sizeRadioItems"
-      value-key="value"
-      variant="table"
-      orientation="horizontal"
-      indicator="hidden"
-      @update:model-value="onSizeChange"
-    >
-      <template #label="{ item }">
-        <span
-          class="flex h-9 items-center justify-center transition-colors"
-          :class="item.value === modelValue.size.current ? 'bg-default text-default' : 'text-muted hover:text-default'"
-          :title="item.label"
-          :aria-label="item.label"
-        >
+  <WCard v-if="td.model !== null || bd.model !== null">
+    <template v-if="td.model !== null">
+    <UFormField label="Titel">
+      <template #hint>
+        <USwitch
+          :model-value="td.model.headingVisible"
+          label="Tonen"
+          size="xs"
+          :ui="{ root: 'flex-row-reverse gap-2' }"
+          @update:model-value="onHeadingVisibilityToggle"
+        />
+      </template>
+      <WInput
+        v-if="showHeadingFields"
+        :model-value="td.model.heading"
+        placeholder="Bijv. Onze missie voor 2026"
+        class="w-full"
+        @update:model-value="onHeadingCommit"
+      />
+    </UFormField>
+
+    <UFormField v-if="td.model.size !== null && showHeadingFields" label="Tekstgrootte">
+      <UTabs
+        :model-value="td.model.size.current"
+        :items="sizeRadioItems"
+        value-key="value"
+        color="neutral"
+        variant="pill"
+        size="xs"
+        :content="false"
+        :ui="{
+          trigger: 'h-7 px-2 py-0',
+          indicator: 'bg-inverted/15',
+        }"
+        @update:model-value="onSizeChange"
+      >
+        <template #default="{ item }">
           <span
             class="font-semibold leading-none"
             :style="{ fontSize: sizeLabelPx(item.value) + 'px' }"
+            :title="item.label"
+            :aria-label="item.label"
           >A</span>
-        </span>
-      </template>
-    </URadioGroup>
-  </UFormField>
-
-  <UFormField label="Titel">
-    <template #hint>
-      <USwitch
-        :model-value="modelValue.headingVisible"
-        label="Tonen"
-        @update:model-value="onHeadingVisibilityToggle"
-      />
-    </template>
-    <WInput
-      v-if="showHeadingFields"
-      :model-value="modelValue.heading"
-      placeholder="Bijv. Onze missie voor 2026"
-      class="w-full"
-      @update:model-value="onHeadingCommit"
-    />
-  </UFormField>
-
-  <UFormField v-if="showAccentFields" label="Accenten">
-    <template #hint>
-      <div class="h-5 min-w-20 flex justify-end">
-        <Transition
-          enter-active-class="transition-opacity duration-150"
-          enter-from-class="opacity-0"
-          leave-active-class="transition-opacity duration-300"
-          leave-to-class="opacity-0"
-        >
-          <span
-            v-if="accentPending"
-            class="inline-flex h-5 items-center gap-1 rounded-full bg-elevated px-2 text-[11px] font-medium text-muted ring-1 ring-default"
-            role="status"
-            aria-live="polite"
-          >
-            <UIcon
-              name="i-lucide-loader-circle"
-              class="size-3 text-primary animate-spin"
-              aria-hidden="true"
-            />
-            Verwerken...
-          </span>
-        </Transition>
-      </div>
-    </template>
-    <div
-      class="-m-1 rounded-md p-1 ring-1 ring-transparent transition-[background-color,box-shadow]"
-      :class="accentPending ? 'bg-elevated/60 ring-primary/30' : ''"
-      :aria-busy="accentPending ? 'true' : 'false'"
-    >
-      <div
-        class="flex flex-wrap items-center gap-2"
-        role="group"
-        aria-label="Accentwoorden"
-        @focusout="onAccentFocusOut"
-      >
-        <template v-for="(tok, i) in tokens" :key="i">
-          <UButton
-            v-if="tok.type === 'word'"
-            type="button"
-            size="xs"
-            :color="dimWords.has(tok.wordIndex) ? 'primary' : 'neutral'"
-            :variant="dimWords.has(tok.wordIndex) ? 'solid' : 'subtle'"
-            :aria-pressed="dimWords.has(tok.wordIndex)"
-            @click="toggleWord(tok.wordIndex)"
-          >
-            {{ tok.text }}
-          </UButton>
         </template>
-      </div>
-      <div class="mt-2 h-0.5 overflow-hidden">
-        <Transition
-          enter-active-class="transition-opacity duration-150"
-          enter-from-class="opacity-0"
-          leave-active-class="transition-opacity duration-200"
-          leave-to-class="opacity-0"
-        >
-          <UProgress
-            v-if="accentPending"
-            :model-value="null"
-            size="xs"
-            color="primary"
-            animation="carousel"
-          />
-        </Transition>
-      </div>
-    </div>
-  </UFormField>
+      </UTabs>
+    </UFormField>
 
-  <UFormField v-if="showParagraphSection" label="Omschrijving">
-    <template v-if="modelValue.paragraphVisible !== null" #hint>
-      <USwitch
-        :model-value="modelValue.paragraphVisible"
-        :disabled="!modelValue.headingVisible"
-        label="Tonen"
-        @update:model-value="onParagraphVisibilityToggle"
+    <UFormField v-if="showAccentFields" label="Accenten">
+      <template #hint>
+        <div class="h-5 min-w-20 flex justify-end">
+          <Transition
+            enter-active-class="transition-opacity duration-150"
+            enter-from-class="opacity-0"
+            leave-active-class="transition-opacity duration-300"
+            leave-to-class="opacity-0"
+          >
+            <span
+              v-if="td.accentPending"
+              class="inline-flex h-5 items-center gap-1 rounded-full bg-elevated px-2 text-[11px] font-medium text-muted ring-1 ring-default"
+              role="status"
+              aria-live="polite"
+            >
+              <UIcon
+                name="i-lucide-loader-circle"
+                class="size-3 text-primary animate-spin"
+                aria-hidden="true"
+              />
+              Verwerken...
+            </span>
+          </Transition>
+        </div>
+      </template>
+      <div
+        class="-m-1 rounded-md p-1 ring-1 ring-transparent transition-[background-color,box-shadow]"
+        :class="td.accentPending ? 'bg-elevated/60 ring-primary/30' : ''"
+        :aria-busy="td.accentPending ? 'true' : 'false'"
+      >
+        <div
+          class="flex flex-wrap items-center gap-2"
+          role="group"
+          aria-label="Accentwoorden"
+          @focusout="onAccentFocusOut"
+        >
+          <template v-for="(tok, i) in tokens" :key="i">
+            <UButton
+              v-if="tok.type === 'word'"
+              type="button"
+              :color="dimWords.has(tok.wordIndex) ? 'primary' : 'neutral'"
+              :variant="dimWords.has(tok.wordIndex) ? 'solid' : 'subtle'"
+              :aria-pressed="dimWords.has(tok.wordIndex)"
+              @click="toggleWord(tok.wordIndex)"
+            >
+              {{ tok.text }}
+            </UButton>
+          </template>
+        </div>
+        <div class="mt-2 h-0.5 overflow-hidden">
+          <Transition
+            enter-active-class="transition-opacity duration-150"
+            enter-from-class="opacity-0"
+            leave-active-class="transition-opacity duration-200"
+            leave-to-class="opacity-0"
+          >
+            <UProgress
+              v-if="td.accentPending"
+              :model-value="null"
+              color="primary"
+              animation="carousel"
+            />
+          </Transition>
+        </div>
+      </div>
+    </UFormField>
+
+    <UFormField v-if="showParagraphSection" label="Omschrijving">
+      <template v-if="td.model.paragraphVisible !== null" #hint>
+        <USwitch
+          :model-value="td.model.paragraphVisible"
+          :disabled="!td.model.headingVisible"
+          label="Tonen"
+          size="xs"
+          :ui="{ root: 'flex-row-reverse gap-2' }"
+          @update:model-value="onParagraphVisibilityToggle"
+        />
+      </template>
+      <WTextarea
+        v-if="showParagraphInput"
+        :model-value="td.model.paragraph ?? ''"
+        :rows="3"
+        :autoresize="true"
+        placeholder="Een korte toelichting onder de titel"
+        class="w-full"
+        @update:model-value="onParagraphCommit"
       />
+    </UFormField>
     </template>
-    <WTextarea
-      v-if="showParagraphInput"
-      :model-value="modelValue.paragraph ?? ''"
-      :rows="3"
-      :autoresize="true"
-      placeholder="Een korte toelichting onder de titel"
-      class="w-full"
-      @update:model-value="onParagraphCommit"
-    />
-  </UFormField>
+
+    <UFormField v-if="bd.model !== null" label="Badge">
+      <template v-if="bd.model.visible !== null" #hint>
+        <USwitch
+          :model-value="bd.model.visible"
+          label="Tonen"
+          size="xs"
+          :ui="{ root: 'flex-row-reverse gap-2' }"
+          @update:model-value="onBadgeVisibilityToggle"
+        />
+      </template>
+      <div class="flex items-center gap-2">
+        <IconPicker
+          :model-value="bd.model.icon"
+          :disabled="bd.model.visible === false"
+          @update:model-value="onBadgeIconChange"
+        />
+        <WInput
+          :model-value="bd.model.label"
+          placeholder="Bijv. Belangrijk"
+          :disabled="bd.model.visible === false"
+          class="flex-1"
+          @update:model-value="onBadgeLabelCommit"
+        />
+      </div>
+    </UFormField>
+  </WCard>
 </template>

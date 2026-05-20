@@ -71,11 +71,13 @@ async function onVisualFileChange(file: File | null | undefined): Promise<void> 
 </script>
 
 <template>
-  <UCard :title="`Kaart ${index}`">
+  <div class="space-y-4">
+    <h3 class="text-sm font-semibold text-highlighted">Kaart {{ index }}</h3>
     <USwitch
       v-if="modelValue.style !== null"
       :model-value="modelValue.style === 'Outline'"
-      label="Rand"
+      label="Outline"
+      :ui="{ root: 'flex-row-reverse justify-between w-full', wrapper: 'ms-0' }"
       @update:model-value="onOutlineToggle"
     />
 
@@ -146,5 +148,5 @@ async function onVisualFileChange(file: File | null | undefined): Promise<void> 
         @update:model-value="onParagraphCommit"
       />
     </UFormField>
-  </UCard>
+  </div>
 </template>

@@ -1,6 +1,6 @@
 {
   "name": "welder-editor",
-  "version": "0.5.212",
+  "version": "0.5.218",
   "type": "module",
   "scripts": {
     "build:version": "node scripts/write-app-version.mjs",
@@ -32,7 +32,7 @@
   "devDependencies": {
     "@figma/plugin-typings": "^1.100.0",
     "@iconify-json/lucide": "^1.2.102",
-    "@nuxt/ui": "^4.6.1",
+    "@nuxt/ui": "^4.7.1",
     "@vitejs/plugin-vue": "^6.0.0",
     "concurrently": "^9.2.1",
     "esbuild": "^0.28.0",
@@ -45,6 +45,7 @@
     "vue-tsc": "^3.2.7"
   },
   "dependencies": {
+    "@fontsource/inter": "^5.2.8",
     "cropperjs": "^1",
     "pdf-lib": "^1.17.1",
     "pinia": "^3.0.4",

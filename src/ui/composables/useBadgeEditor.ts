@@ -4,7 +4,7 @@ import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import { getLucideSvg } from '../lucide-svgs';
-import type { BadgeValue } from '../components/editors/BadgeEditor.vue';
+import type { BadgeValue } from '../components/editors/TitleDescriptionEditor.vue';
 
 export function useBadgeEditor() {
   const view = usePluginView();

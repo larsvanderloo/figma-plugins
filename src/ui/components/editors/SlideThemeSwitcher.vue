@@ -49,7 +49,13 @@ function swatchBackground(mode: ThemeMode): string {
 }
 
 function previewBg(mode: ThemeMode): string {
-  return mode.swatchPrimary !== null ? mode.swatchPrimary : '#e5e7eb';
+  // When both swatches exist, primary is the light page bg.
+  if (mode.swatchSecondary !== null && mode.swatchPrimary !== null) return mode.swatchPrimary;
+  // Single-swatch modes: primary is the brand color; derive a soft tint for the bg.
+  if (mode.swatchPrimary !== null) {
+    return 'color-mix(in srgb, ' + mode.swatchPrimary + ' 14%, white)';
+  }
+  return '#e5e7eb';
 }
 
 function previewLine(mode: ThemeMode): string {
@@ -76,6 +82,7 @@ function onThemeChange(value: string | number | undefined): void {
       variant="ghost"
       block
       class="-mx-2 w-[calc(100%+1rem)] px-2 py-1"
+      :ui="{ base: 'justify-between' }"
       :aria-label="activeMode ? 'Kleurthema: ' + activeMode.name + ' — wijzigen' : 'Kleurthema kiezen'"
     >
       <span class="text-sm font-medium text-default">Kleurthema</span>
@@ -112,6 +119,7 @@ function onThemeChange(value: string | number | undefined): void {
           variant="card"
           orientation="horizontal"
           indicator="hidden"
+          :ui="{ fieldset: 'grid grid-cols-2 gap-2', item: 'min-w-0' }"
           @update:model-value="onThemeChange"
         >
           <template #label="{ item }">

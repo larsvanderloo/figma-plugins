@@ -24,7 +24,8 @@ function onParagraphCommit(value: string): void {
 </script>
 
 <template>
-  <UCard :title="`Item ${index}`">
+  <div class="space-y-4">
+    <h3 class="text-sm font-semibold text-highlighted">Item {{ index }}</h3>
     <UFormField label="Titel">
       <WInput
         :model-value="modelValue.heading"
@@ -44,5 +45,5 @@ function onParagraphCommit(value: string): void {
         @update:model-value="onParagraphCommit"
       />
     </UFormField>
-  </UCard>
+  </div>
 </template>

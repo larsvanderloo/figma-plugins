@@ -360,136 +360,130 @@ onMounted(() => {
   <UApp>
     <div
       v-if="showSplash"
-      class="flex h-full flex-col items-center justify-center bg-elevated text-default"
+      class="flex h-full flex-col items-center justify-center gap-4 bg-elevated text-default"
     >
-      <div class="flex flex-col items-center gap-4">
-        <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
-        <div class="flex items-center gap-2 text-sm text-muted">
-          <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
-          <span>{{ initializing ? 'Voorbereiden…' : 'Iconen synchroniseren…' }}</span>
-        </div>
+      <img :src="welderLogo" alt="Welder" class="h-12 w-auto" />
+      <div class="flex items-center gap-2 text-sm text-muted">
+        <UIcon name="i-lucide-loader-circle" class="h-4 w-4 animate-spin" />
+        <span>{{ initializing ? 'Voorbereiden…' : 'Iconen synchroniseren…' }}</span>
       </div>
     </div>
 
     <div v-else class="relative flex h-full flex-col bg-elevated text-default">
-      <main class="flex-1 overflow-y-auto">
-        <div class="mx-auto max-w-2xl space-y-3 p-3 pb-28">
-          <UEmpty
-            v-if="view.noSlide"
-            icon="i-lucide-mouse-pointer-click"
-            description="Klik op een slide in Figma om te beginnen met bewerken."
-            variant="subtle"
-            size="sm"
-          />
+      <main class="flex-1 overflow-y-auto mx-auto w-full max-w-2xl space-y-3 p-3 pb-28">
+        <UEmpty
+          v-if="view.noSlide"
+          icon="i-lucide-mouse-pointer-click"
+          description="Klik op een slide in Figma om te beginnen met bewerken."
+          variant="subtle"
+        />
 
-          <UEmpty
-            v-else-if="view.allEmpty"
-            icon="i-lucide-file-x"
-            description="Geen bewerkbare inhoud op deze slide."
-            variant="subtle"
-            size="sm"
-          />
+        <UEmpty
+          v-else-if="view.allEmpty"
+          icon="i-lucide-file-x"
+          description="Geen bewerkbare inhoud op deze slide."
+          variant="subtle"
+        />
 
-          <template v-else>
-            <Transition
-              mode="out-in"
-              enter-active-class="transition duration-150 ease-out"
-              enter-from-class="opacity-0 translate-y-1"
-              leave-active-class="transition duration-100 ease-in"
-              leave-to-class="opacity-0 translate-y-1"
-            >
-              <div v-if="activeTab === 'general' && view.hasGeneral" key="general">
-                <GeneralPanel />
-              </div>
-              <fieldset
-                v-else-if="activeTab === 'content' && hasContentOrGraphs"
-                key="content"
-                :disabled="view.isSkipped"
-                :class="
-                  view.isSkipped
-                    ? 'space-y-3 opacity-50 pointer-events-none'
-                    : 'space-y-3'
-                "
-                style="border: 0; padding: 0; margin: 0; min-width: 0"
-              >
-                <ContentPanel v-if="view.hasContent" />
-                <GraphsPanel v-if="view.hasGraphs" />
-              </fieldset>
-              <UEmpty
-                v-else
-                key="empty-tab"
-                icon="i-lucide-circle-off"
-                :description="
-                  activeTab === 'general'
-                    ? 'Geen algemene instellingen voor deze slide.'
-                    : 'Geen kaarten of grafieken op deze slide.'
-                "
-                variant="subtle"
-                size="sm"
-              />
-            </Transition>
-          </template>
-
-          <UModal
-            v-model:open="exportModalOpen"
-            title="Exporteren"
+        <template v-else>
+          <Transition
+            mode="out-in"
+            enter-active-class="transition duration-150 ease-out"
+            enter-from-class="opacity-0 translate-y-1"
+            leave-active-class="transition duration-100 ease-in"
+            leave-to-class="opacity-0 translate-y-1"
           >
-            <template #body>
-              <UFormField label="Wat wil je exporteren?" name="export-target">
-                <URadioGroup
-                  :model-value="exportTarget"
-                  :items="exportTargetItems"
-                  value-key="value"
-                  variant="card"
-                  orientation="horizontal"
-                  indicator="hidden"
-                  @update:model-value="onExportTargetChange"
-                >
-                  <template #label="{ item }">
-                    <span
-                      class="flex flex-col items-start gap-2 p-3 text-left transition-colors"
-                      :class="
-                        exportTarget === item.value
-                          ? 'bg-primary/5 text-primary'
-                          : 'bg-default text-default hover:bg-elevated'
-                      "
-                    >
-                      <UIcon :name="item.icon" class="h-5 w-5" />
-                      <span>
-                        <span class="block text-sm font-medium">{{ item.label }}</span>
-                        <span class="block text-xs text-muted">{{ item.description }}</span>
-                      </span>
+            <GeneralPanel
+              v-if="activeTab === 'general' && view.hasGeneral"
+              key="general"
+            />
+            <fieldset
+              v-else-if="activeTab === 'content' && hasContentOrGraphs"
+              key="content"
+              :disabled="view.isSkipped"
+              :class="
+                view.isSkipped
+                  ? 'space-y-3 opacity-50 pointer-events-none'
+                  : 'space-y-3'
+              "
+              style="border: 0; padding: 0; margin: 0; min-width: 0"
+            >
+              <ContentPanel v-if="view.hasContent" />
+              <GraphsPanel v-if="view.hasGraphs" />
+            </fieldset>
+            <UEmpty
+              v-else
+              key="empty-tab"
+              icon="i-lucide-circle-off"
+              :description="
+                activeTab === 'general'
+                  ? 'Geen algemene instellingen voor deze slide.'
+                  : 'Geen kaarten of grafieken op deze slide.'
+              "
+              variant="subtle"
+            />
+          </Transition>
+        </template>
+
+        <UModal
+          v-model:open="exportModalOpen"
+          title="Exporteren"
+        >
+          <template #body>
+            <UFormField label="Wat wil je exporteren?" name="export-target">
+              <URadioGroup
+                :model-value="exportTarget"
+                :items="exportTargetItems"
+                value-key="value"
+                variant="card"
+                orientation="horizontal"
+                indicator="hidden"
+                @update:model-value="onExportTargetChange"
+              >
+                <template #label="{ item }">
+                  <span
+                    class="flex flex-col items-start gap-2 p-3 text-left transition-colors"
+                    :class="
+                      exportTarget === item.value
+                        ? 'bg-primary/5 text-primary'
+                        : 'bg-default text-default hover:bg-elevated'
+                    "
+                  >
+                    <UIcon :name="item.icon" class="h-5 w-5" />
+                    <span>
+                      <span class="block text-sm font-medium">{{ item.label }}</span>
+                      <span class="block text-xs text-muted">{{ item.description }}</span>
                     </span>
-                  </template>
-                </URadioGroup>
-              </UFormField>
-              <UFormField label="Formaat" name="export-format">
-                <USelect
-                  v-model="exportFormat"
-                  :items="formatItems"
-                  icon="i-lucide-file"
-                  class="w-full"
-                />
-              </UFormField>
-            </template>
-            <template #footer>
-              <div class="flex w-full items-center justify-end gap-2">
-                <UButton color="neutral" variant="ghost" @click="exportModalOpen = false">
-                  Annuleren
-                </UButton>
-                <UButton
-                  color="primary"
-                  variant="solid"
-                  icon="i-lucide-download"
-                  :disabled="exportTarget === 'slide' && view.state.currentSlideId === null"
-                  @click="submitExport"
-                >
-                  Exporteer
-                </UButton>
-              </div>
-            </template>
-          </UModal>
-        </div>
+                  </span>
+                </template>
+              </URadioGroup>
+            </UFormField>
+            <UFormField label="Formaat" name="export-format">
+              <USelect
+                v-model="exportFormat"
+                :items="formatItems"
+                icon="i-lucide-file"
+                class="w-full"
+              />
+            </UFormField>
+          </template>
+          <template #footer>
+            <div class="flex w-full items-center justify-end gap-2">
+              <UButton color="neutral" variant="ghost" @click="exportModalOpen = false">
+                Annuleren
+              </UButton>
+              <UButton
+                color="primary"
+                variant="solid"
+                icon="i-lucide-download"
+                :disabled="exportTarget === 'slide' && view.state.currentSlideId === null"
+                @click="submitExport"
+              >
+                Exporteer
+              </UButton>
+            </div>
+          </template>
+        </UModal>
       </main>
 
       <div
@@ -525,7 +519,6 @@ onMounted(() => {
             :items="bottomTabItems"
             :content="false"
             variant="pill"
-            size="lg"
             @update:model-value="onActiveTabChange"
           />
         </div>
@@ -542,12 +535,10 @@ onMounted(() => {
         />
       </nav>
 
-      <div
-        class="pointer-events-none absolute inset-x-0 bottom-1 flex justify-center"
+      <span
+        class="pointer-events-none absolute inset-x-0 bottom-1 text-center text-[10px] text-muted/50 tracking-wide"
         aria-hidden="true"
-      >
-        <span class="text-[10px] text-muted/50 tracking-wide">v{{ appVersion }}</span>
-      </div>
+      >v{{ appVersion }}</span>
 
       <div
         :class="[

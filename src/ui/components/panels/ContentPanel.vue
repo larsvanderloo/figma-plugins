@@ -4,6 +4,8 @@ import TimelineItemEditor from '../editors/TimelineItemEditor.vue';
 import type { TimelineItem } from '../../../types';
 import { useCardEditor } from '../../composables/useCardEditor';
 import { useTimelineEditor } from '../../composables/useTimelineEditor';
+import EditorWrapper from '../ui/EditorWrapper.vue';
+import WCard from '../ui/WCard.vue';
 
 const cardEditor = useCardEditor();
 const timelineEditor = useTimelineEditor();
@@ -23,7 +25,7 @@ function onCardSizeChange(value: string | number | undefined): void {
 </script>
 
 <template>
-  <div class="space-y-4">
+  <UContainer class="space-y-4">
     <UEmpty
       v-if="
         cardEditor.cards.length === 0 &&
@@ -34,9 +36,9 @@ function onCardSizeChange(value: string | number | undefined): void {
       variant="naked"
     />
 
-    <section v-if="cardEditor.cards.length > 0" class="space-y-4">
-      <h2 class="text-base font-semibold text-highlighted px-1">Kaarten</h2>
-      <UCard title="Kaartweergave">
+    <EditorWrapper v-if="cardEditor.cards.length > 0" title="Kaarten">
+      <WCard>
+        <UFormField label="Kaartweergave">
         <URadioGroup
           :model-value="cardEditor.cardSize"
           :items="sizeOptions"
@@ -44,6 +46,7 @@ function onCardSizeChange(value: string | number | undefined): void {
           variant="card"
           orientation="horizontal"
           indicator="hidden"
+          :ui="{ fieldset: 'grid grid-cols-3 gap-2', item: 'min-w-0' }"
           @update:model-value="onCardSizeChange"
         >
           <template #label="{ item }">
@@ -51,8 +54,8 @@ function onCardSizeChange(value: string | number | undefined): void {
               class="relative flex flex-col items-center justify-center gap-1.5 px-3 py-3 transition-colors"
               :class="
                 cardEditor.cardSize === item.value
-                  ? 'bg-primary/10 text-primary'
-                  : 'bg-default text-default hover:bg-elevated'
+                  ? 'text-primary'
+                  : 'text-default'
               "
             >
               <UIcon
@@ -76,30 +79,40 @@ function onCardSizeChange(value: string | number | undefined): void {
             </span>
           </template>
         </URadioGroup>
-      </UCard>
-      <CardItemEditor
-        v-for="(card, idx) in cardEditor.cards"
-        :key="card.cardNodeId"
-        :model-value="card"
-        :index="idx + 1"
-        :preview-url="cardEditor.previewUrls[card.cardNodeId] || null"
-        :size-bytes="cardEditor.previewSizes[card.cardNodeId] || null"
-        :icon-disabled="cardEditor.cardSize === 'NO_ICON'"
-        @update:model-value="cardEditor.update"
-        @upload-visual="(bytes) => cardEditor.uploadVisual(card.cardNodeId, bytes)"
-      />
-    </section>
+        </UFormField>
 
-    <section v-if="timelineEditor.items.length > 0" class="space-y-4">
-      <h2 class="text-base font-semibold text-highlighted px-1">Tijdlijn</h2>
-      <TimelineItemEditor
-        v-for="(item, idx) in timelineEditor.items"
-        :key="item.copyWrapNodeId"
-        :model-value="item"
-        :index="idx + 1"
-        @update:model-value="(val: TimelineItem) => timelineEditor.update(item.copyWrapNodeId, val)"
-      />
-    </section>
+        <template
+          v-for="(card, idx) in cardEditor.cards"
+          :key="card.cardNodeId"
+        >
+          <USeparator />
+          <CardItemEditor
+            :model-value="card"
+            :index="idx + 1"
+            :preview-url="cardEditor.previewUrls[card.cardNodeId] || null"
+            :size-bytes="cardEditor.previewSizes[card.cardNodeId] || null"
+            :icon-disabled="cardEditor.cardSize === 'NO_ICON'"
+            @update:model-value="cardEditor.update"
+            @upload-visual="(bytes) => cardEditor.uploadVisual(card.cardNodeId, bytes)"
+          />
+        </template>
+      </WCard>
+    </EditorWrapper>
 
-  </div>
+    <EditorWrapper v-if="timelineEditor.items.length > 0" title="Tijdlijn">
+      <WCard>
+        <template
+          v-for="(item, idx) in timelineEditor.items"
+          :key="item.copyWrapNodeId"
+        >
+          <USeparator v-if="idx > 0" />
+          <TimelineItemEditor
+            :model-value="item"
+            :index="idx + 1"
+            @update:model-value="(val: TimelineItem) => timelineEditor.update(item.copyWrapNodeId, val)"
+          />
+        </template>
+      </WCard>
+    </EditorWrapper>
+  </UContainer>
 </template>

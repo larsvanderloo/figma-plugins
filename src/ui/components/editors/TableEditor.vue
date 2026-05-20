@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../types';
-import { TABLE_MAX_ROWS, TABLE_MAX_COLS, TABLE_WIDTHS } from '../../../constants';
+import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../constants';
 import { tokenize } from '../../../csv';
 import { useNotifications } from '../../stores/useNotifications';
 import WInput from '../ui/WInput.vue';
+import WCard from '../ui/WCard.vue';
 
 const notifications = useNotifications();
 
@@ -45,34 +46,6 @@ function cloneRows(rows: TableRowModel[]): TableRowModel[] {
   }
   return out;
 }
-function estimateRowTruncation(
-  row: TableRowModel,
-  width: SizeKey,
-  cellCount: number,
-  rowCount: number,
-  textSize: SizeKey,
-): boolean {
-  const containerWidth = TABLE_WIDTHS[width];
-  const cellWidth =
-    (containerWidth - 64 - (Math.max(cellCount, 1) - 1) * 56) / Math.max(cellCount, 1);
-  const ASSUMED_SLOT_HEIGHT = 600;
-  const rowHeight = (ASSUMED_SLOT_HEIGHT - 48) / Math.max(rowCount, 1);
-
-  const config =
-    textSize === 'sm'
-      ? { mult: 0.55, bodyMax: 16 }
-      : textSize === 'lg'
-        ? { mult: 1.3, bodyMax: 36 }
-        : { mult: 1.0, bodyMax: 24 };
-  const fs = Math.min(config.bodyMax, Math.round(rowHeight * 0.3 * config.mult));
-
-  const charsPerLine = cellWidth / (fs * 0.55);
-  const maxLines = Math.floor((rowHeight - 56) / (fs * 1.4));
-  const safeChars = Math.max(charsPerLine * Math.max(maxLines, 1), 10);
-
-  return row.cells.some((c) => c.value.length > safeChars);
-}
-
 const localWidth = ref<SizeKey>(props.modelValue.width);
 const localTextSize = ref<SizeKey>(props.modelValue.textSize);
 const localHasColumnHeader = ref<boolean>(props.modelValue.hasColumnHeader);
@@ -87,21 +60,6 @@ const canAddColumn = computed<boolean>(
   () => localRows.value.length > 0 && currentCols.value < maxCols.value,
 );
 const bodyRowOffset = computed<number>(() => (localHasColumnHeader.value ? 1 : 0));
-const truncationFlags = computed<{ header: boolean; body: boolean[] }>(() => {
-  const w = localWidth.value;
-  const ts = localTextSize.value;
-  const cc = currentCols.value;
-  const rc = localRows.value.length;
-  const header =
-    localHasColumnHeader.value && rc > 0
-      ? estimateRowTruncation(localRows.value[0], w, cc, rc, ts)
-      : false;
-  const body: boolean[] = [];
-  for (let i = 0; i < localRows.value.length; i++) {
-    body.push(estimateRowTruncation(localRows.value[i], w, cc, rc, ts));
-  }
-  return { header: header, body: body };
-});
 watch(
   () => props.modelValue.width,
   (next) => {
@@ -315,15 +273,17 @@ watch(csvText, () => {
 </script>
 
 <template>
-  <UCard title="Weergave">
+  <WCard>
     <UFormField name="table-width" label="Breedte">
-      <URadioGroup
+      <UTabs
         :model-value="localWidth"
         :items="SIZE_OPTIONS"
         value-key="value"
-        variant="table"
-        orientation="horizontal"
-        indicator="hidden"
+        color="neutral"
+        variant="pill"
+        size="xs"
+        :content="false"
+        :ui="{ trigger: 'h-7 px-2 py-0', indicator: 'bg-inverted/15' }"
         @update:model-value="onWidthChange"
       />
     </UFormField>
@@ -335,6 +295,7 @@ watch(csvText, () => {
         variant="card"
         orientation="horizontal"
         indicator="hidden"
+        :ui="{ fieldset: 'grid grid-cols-3 gap-2', item: 'min-w-0' }"
         @update:model-value="onTextSizeChange"
       >
         <template #label="{ item }">
@@ -342,8 +303,8 @@ watch(csvText, () => {
             class="flex flex-col items-center gap-1 px-3 py-2 transition-colors"
             :class="
               localTextSize === item.value
-                ? 'bg-primary/5 text-primary'
-                : 'bg-default text-default hover:bg-elevated'
+                ? 'text-primary'
+                : 'text-default'
             "
           >
             <span
@@ -355,162 +316,123 @@ watch(csvText, () => {
         </template>
       </URadioGroup>
     </UFormField>
-  </UCard>
 
-  <UCard title="Rijen &amp; kolommen">
+    <USeparator />
+
     <div class="flex items-center gap-3">
       <span class="text-xs text-muted">{{ localRows.length }} / {{ TABLE_MAX_ROWS }} rijen</span>
       <span class="text-xs text-muted">{{ currentCols }} / {{ maxCols }} kolommen</span>
     </div>
 
-    <div class="space-y-4">
-      <UEmpty
-        v-if="localRows.length === 0"
-        icon="i-lucide-table"
-        description="Tabel is leeg — voeg een rij toe om te starten."
-        variant="naked"
-        size="sm"
-      >
-        <template #actions>
-          <UButton color="neutral" variant="soft" icon="i-lucide-plus" @click="addRow">
-            Eerste rij toevoegen
-          </UButton>
-        </template>
-      </UEmpty>
+    <UEmpty
+      v-if="localRows.length === 0"
+      icon="i-lucide-table"
+      description="Tabel is leeg — voeg een rij toe om te starten."
+      variant="naked"
+    >
+      <template #actions>
+        <UButton color="neutral" variant="soft" icon="i-lucide-plus" @click="addRow">
+          Eerste rij toevoegen
+        </UButton>
+      </template>
+    </UEmpty>
 
-      <template v-else>
-        <div class="space-y-4">
-          <span class="text-xs font-medium text-muted">Kolommen</span>
-          <div class="flex flex-wrap items-center gap-2">
-            <UButton
-              v-for="j in currentCols"
-              :key="'colchip-' + j"
-              color="neutral"
-              variant="subtle"
-              trailing-icon="i-lucide-x"
-              :aria-label="`Verwijder kolom ${j}`"
-              @click="removeColumn(j - 1)"
-              >Kolom {{ j }}</UButton
+    <template v-else>
+      <span class="text-xs font-medium text-muted">Kolommen</span>
+      <div class="flex flex-wrap items-center gap-2">
+        <UButton
+          v-for="j in currentCols"
+          :key="'colchip-' + j"
+          color="neutral"
+          variant="subtle"
+          trailing-icon="i-lucide-x"
+          :aria-label="`Verwijder kolom ${j}`"
+          @click="removeColumn(j - 1)"
+          >Kolom {{ j }}</UButton
+        >
+        <UButton
+          color="neutral"
+          variant="ghost"
+          icon="i-lucide-plus"
+          :disabled="!canAddColumn"
+          @click="addColumn"
+          >Kolom toevoegen</UButton
+        >
+      </div>
+
+      <USeparator />
+
+      <div class="flex items-center justify-between gap-2">
+        <span class="text-sm font-semibold text-default">Koprij</span>
+        <USwitch
+          :model-value="localHasColumnHeader"
+          aria-label="Koprij tonen"
+          size="xs"
+          @update:model-value="(v: boolean) => setHasColumnHeader(v)"
+        />
+      </div>
+      <UCollapsible v-if="localRows.length > 0" :open="localHasColumnHeader">
+        <template #content>
+          <div
+            v-for="(cell, j) in localRows[0].cells"
+            :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'kolomkop-' + j"
+            class="grid grid-cols-[80px_1fr] items-center gap-3"
+          >
+            <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
+            <WInput
+              :model-value="cell.value"
+              :placeholder="`Waarde voor kolom ${j + 1}`"
+              @update:model-value="(v: string) => updateCell(0, j, v)"
+            />
+          </div>
+        </template>
+      </UCollapsible>
+
+      <template
+        v-for="(row, idx) in localRows"
+        :key="row.rowNodeId !== '' ? row.rowNodeId : 'row-' + idx"
+      >
+        <template v-if="idx >= bodyRowOffset">
+          <USeparator />
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-sm font-semibold text-default"
+              >Rij {{ idx + 1 - bodyRowOffset }}</span
             >
             <UButton
               color="neutral"
               variant="ghost"
-              icon="i-lucide-plus"
-              :disabled="!canAddColumn"
-              @click="addColumn"
-              >Kolom toevoegen</UButton
-            >
+              icon="i-lucide-x"
+              :aria-label="`Verwijder rij ${idx + 1 - bodyRowOffset}`"
+              @click="removeRow(idx)"
+            />
           </div>
-        </div>
-
-        <div class="space-y-4">
-          <UCard>
-            <template #title>
-              <div class="flex items-center justify-between gap-2">
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-semibold text-default">Koprij</span>
-                  <UBadge
-                    v-if="truncationFlags.header"
-                    color="secondary"
-                    variant="soft"
-                    icon="i-lucide-alert-triangle"
-                    aria-label="Tekst afgebroken"
-                  />
-                </div>
-                <USwitch
-                  :model-value="localHasColumnHeader"
-                  aria-label="Koprij tonen"
-                  @update:model-value="(v: boolean) => setHasColumnHeader(v)"
-                />
-              </div>
-            </template>
-
-            <UCollapsible :open="localHasColumnHeader">
-              <template #content>
-                <div
-                  v-if="localRows.length > 0"
-                  class="bg-elevated"
-                >
-                  <USeparator />
-                  <div class="space-y-4 px-4 py-3">
-                    <div
-                      v-for="(cell, j) in localRows[0].cells"
-                      :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'kolomkop-' + j"
-                      class="grid grid-cols-[80px_1fr] items-center gap-3"
-                    >
-                      <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-                      <WInput
-                        :model-value="cell.value"
-                        :placeholder="`Waarde voor kolom ${j + 1}`"
-                        @update:model-value="(v: string) => updateCell(0, j, v)"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </template>
-            </UCollapsible>
-          </UCard>
-
-          <template
-            v-for="(row, idx) in localRows"
-            :key="row.rowNodeId !== '' ? row.rowNodeId : 'row-' + idx"
+          <div
+            v-for="(cell, j) in row.cells"
+            :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'row-' + idx + '-' + j"
+            class="grid grid-cols-[80px_1fr] items-center gap-3"
           >
-            <UCard
-              v-if="idx >= bodyRowOffset"
-            >
-              <template #title>
-                <div class="flex items-center justify-between gap-2">
-                  <div class="flex items-center gap-2">
-                    <span class="text-sm font-semibold text-default"
-                      >Rij {{ idx + 1 - bodyRowOffset }}</span
-                    >
-                    <UBadge
-                      v-if="truncationFlags.body[idx]"
-                      color="secondary"
-                      variant="soft"
-                      icon="i-lucide-alert-triangle"
-                      aria-label="Tekst afgebroken"
-                    />
-                  </div>
-                  <UButton
-                    color="neutral"
-                    variant="ghost"
-                    icon="i-lucide-x"
-                    :aria-label="`Verwijder rij ${idx + 1 - bodyRowOffset}`"
-                    @click="removeRow(idx)"
-                  />
-                </div>
-              </template>
-
-              <div
-                v-for="(cell, j) in row.cells"
-                :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'row-' + idx + '-' + j"
-                class="grid grid-cols-[80px_1fr] items-center gap-3"
-              >
-                <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-                <WInput
-                  :model-value="cell.value"
-                  :placeholder="`Waarde voor kolom ${j + 1}`"
-                  @update:model-value="(v: string) => updateCell(idx, j, v)"
-                />
-              </div>
-            </UCard>
-          </template>
-          <UButton
-            color="neutral"
-            variant="subtle"
-            icon="i-lucide-plus"
-            :disabled="!canAddRow"
-            block
-            @click="addRow"
-            >Rij toevoegen</UButton
-          >
-        </div>
+            <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
+            <WInput
+              :model-value="cell.value"
+              :placeholder="`Waarde voor kolom ${j + 1}`"
+              @update:model-value="(v: string) => updateCell(idx, j, v)"
+            />
+          </div>
+        </template>
       </template>
-    </div>
-  </UCard>
+      <UButton
+        color="neutral"
+        variant="subtle"
+        icon="i-lucide-plus"
+        :disabled="!canAddRow"
+        block
+        @click="addRow"
+        >Rij toevoegen</UButton
+      >
+    </template>
 
-  <UCard title="CSV importeren">
+    <USeparator />
+
     <UFileUpload
       v-model="csvUploadFile"
       accept=".csv,text/csv"
@@ -544,5 +466,5 @@ watch(csvText, () => {
     <div v-else class="text-xs text-muted">
       Max {{ TABLE_MAX_ROWS }} rijen · {{ maxCols }} kolommen bij breedte {{ localWidth }}.
     </div>
-  </UCard>
+  </WCard>
 </template>

@@ -4,25 +4,15 @@ import { useCropper } from 'vue-picture-cropper';
 import 'cropperjs/dist/cropper.css';
 import { compressImageForUpload } from '../../utils/image-compress';
 import { formatBytes } from '../../utils/format-bytes';
+import { useImageEditor } from '../../composables/useImageEditor';
+import WCard from '../ui/WCard.vue';
 
 export interface ImageValue {
   hasImage: boolean;
   imageHash: string | null;
 }
 
-interface Props {
-  modelValue: ImageValue;
-  previewUrl: string | null;
-  fillW: number | null;
-  fillH: number | null;
-  sizeBytes?: number | null;
-}
-
-const props = defineProps<Props>();
-
-const emit = defineEmits<{
-  upload: [bytes: Uint8Array];
-}>();
+const e = useImageEditor();
 
 const selectedImageFile = ref<File | null>(null);
 const isUploading = ref<boolean>(false);
@@ -31,8 +21,8 @@ const isCropOpen = ref<boolean>(false);
 const cropSourceUrl = ref<string | null>(null);
 const cropperOptions = computed(() => {
   const aspect =
-    props.fillW !== null && props.fillH !== null && props.fillW > 0 && props.fillH > 0
-      ? props.fillW / props.fillH
+    e.fillW !== null && e.fillH !== null && e.fillW > 0 && e.fillH > 0
+      ? e.fillW / e.fillH
       : NaN;
   return {
     viewMode: 1 as 1,
@@ -48,9 +38,9 @@ const cropperProps = computed(() => ({
 const [CropperComponent, cropperApi] = useCropper(cropperProps);
 const previewBoxStyle = computed<Record<string, string>>(() => {
   const empty: Record<string, string> = {};
-  if (props.fillW === null || props.fillH === null) return empty;
-  if (props.fillW <= 0 || props.fillH <= 0) return empty;
-  const ratio = props.fillW / props.fillH;
+  if (e.fillW === null || e.fillH === null) return empty;
+  if (e.fillW <= 0 || e.fillH <= 0) return empty;
+  const ratio = e.fillW / e.fillH;
   if (ratio < 0.4 || ratio > 3.0) return empty;
   return { aspectRatio: String(ratio) };
 });
@@ -63,8 +53,8 @@ const SOFT_MAX_BYTES = 2 * 1024 * 1024;
 
 const statusLabel = computed<string>(() => {
   if (isUploading.value) return 'Bezig met uploaden…';
-  if (props.modelValue.hasImage) {
-    const size = props.sizeBytes;
+  if (e.model !== null && e.model.hasImage) {
+    const size = e.sizeBytes;
     if (typeof size === 'number' && size > 0) return formatBytes(size);
     return 'Afbeelding ingesteld';
   }
@@ -84,15 +74,15 @@ async function onImageFileChange(file: File | null | undefined): Promise<void> {
     const buffer = await file.arrayBuffer();
     const raw = new Uint8Array(buffer);
     const bytes = await compressImageForUpload(raw);
-    emit('upload', bytes);
+    e.upload(bytes);
   } finally {
     isUploading.value = false;
     selectedImageFile.value = null;
   }
 }
 function openCrop(): void {
-  if (props.previewUrl === null) return;
-  cropSourceUrl.value = props.previewUrl;
+  if (e.previewUrl === null) return;
+  cropSourceUrl.value = e.previewUrl;
   isCropOpen.value = true;
 }
 function cancelCrop(): void {
@@ -106,7 +96,7 @@ async function applyCrop(): Promise<void> {
     const buffer = await blob.arrayBuffer();
     const raw = new Uint8Array(buffer);
     const bytes = await compressImageForUpload(raw);
-    emit('upload', bytes);
+    e.upload(bytes);
   } finally {
     isCropOpen.value = false;
     cropSourceUrl.value = null;
@@ -115,8 +105,8 @@ async function applyCrop(): Promise<void> {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <div v-if="isCropOpen && cropSourceUrl !== null" class="space-y-4">
+  <WCard>
+    <template v-if="isCropOpen && cropSourceUrl !== null">
       <div
         class="w-full overflow-hidden rounded-xl bg-muted"
         :class="{ 'h-64': useFixedHeight }"
@@ -132,21 +122,21 @@ async function applyCrop(): Promise<void> {
           Toepassen
         </UButton>
       </div>
-    </div>
+    </template>
 
     <div
-      v-else-if="previewUrl !== null"
+      v-else-if="e.previewUrl !== null"
       class="relative w-full overflow-hidden rounded-xl bg-muted select-none"
       :class="{ 'h-36': useFixedHeight }"
       :style="previewBoxStyle"
     >
-      <img :src="previewUrl" class="absolute inset-0 h-full w-full object-cover" alt="" />
+      <img :src="e.previewUrl" class="absolute inset-0 h-full w-full object-cover" alt="" />
     </div>
 
     <div class="flex items-center justify-between gap-2">
       <div class="flex min-w-0 items-center gap-1.5 text-xs text-muted">
         <UIcon
-          :name="modelValue.hasImage ? 'i-lucide-image' : 'i-lucide-image-off'"
+          :name="e.model?.hasImage ? 'i-lucide-image' : 'i-lucide-image-off'"
           class="size-4 shrink-0"
           aria-hidden="true"
         />
@@ -154,11 +144,11 @@ async function applyCrop(): Promise<void> {
       </div>
       <div class="flex items-center gap-2">
         <UButton
-          v-if="previewUrl !== null && !isCropOpen"
+          v-if="e.previewUrl !== null && !isCropOpen"
           color="neutral"
           variant="outline"
           icon="i-lucide-crop"
-          :disabled="previewUrl === null"
+          :disabled="e.previewUrl === null"
           @click="openCrop"
         >
           Bijsnijden
@@ -181,7 +171,7 @@ async function applyCrop(): Promise<void> {
               :disabled="isUploading"
               @click="open()"
             >
-              {{ modelValue.hasImage ? 'Vervangen' : 'Uploaden' }}
+              {{ e.model?.hasImage ? 'Vervangen' : 'Uploaden' }}
             </UButton>
           </template>
         </UFileUpload>
@@ -191,5 +181,5 @@ async function applyCrop(): Promise<void> {
     <p v-if="sizeWarning" class="text-xs text-warning">
       {{ sizeWarning }}
     </p>
-  </div>
+  </WCard>
 </template>

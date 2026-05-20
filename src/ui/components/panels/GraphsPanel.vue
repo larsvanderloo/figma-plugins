@@ -3,6 +3,8 @@ import { computed } from 'vue';
 import TableEditor from '../editors/TableEditor.vue';
 import { usePluginView } from '../../stores/usePluginView';
 import { useTableEditor } from '../../composables/useTableEditor';
+import EditorWrapper from '../ui/EditorWrapper.vue';
+import WCard from '../ui/WCard.vue';
 
 const view = usePluginView();
 const tableEditor = useTableEditor();
@@ -17,11 +19,7 @@ const selectorItems = computed(() => {
 </script>
 
 <template>
-  <section class="space-y-4">
-    <h2 class="text-base font-semibold text-highlighted px-1">
-      {{ showSelector ? 'Tabellen' : 'Tabel' }}
-    </h2>
-
+  <UContainer class="space-y-4">
     <UEmpty
       v-if="tableEditor.instances.length === 0"
       icon="i-lucide-table"
@@ -29,8 +27,8 @@ const selectorItems = computed(() => {
       variant="naked"
     />
 
-    <div class="space-y-4">
-      <UCard v-if="showSelector">
+    <EditorWrapper v-else title="Tabel">
+      <WCard v-if="showSelector" title="Selectie">
         <UFormField name="graph-instance" label="Tabel">
           <USelectMenu
             v-model="tableEditor.selectedId"
@@ -39,7 +37,7 @@ const selectorItems = computed(() => {
             class="w-full"
           />
         </UFormField>
-      </UCard>
+      </WCard>
 
       <TableEditor
         v-if="
@@ -51,6 +49,6 @@ const selectorItems = computed(() => {
         @update:model-value="tableEditor.update"
         @import-csv="tableEditor.importCsv"
       />
-    </div>
-  </section>
+    </EditorWrapper>
+  </UContainer>
 </template>

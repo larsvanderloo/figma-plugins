@@ -86,6 +86,7 @@ function onGridScroll(event: Event): void {
 <template>
   <UPopover
     :open="disabled ? false : open"
+    :ui="{ content: 'p-3' }"
     @update:open="onOpenChange"
   >
     <UButton
@@ -106,7 +107,6 @@ function onGridScroll(event: Event): void {
         />
         <UButton
           v-if="search.length > 0"
-          size="xs"
           variant="ghost"
           icon="i-lucide-x"
           @click="clearSearch"
