@@ -1,4 +1,4 @@
-# Welder Editor
+# Welder Editor 
 
 Figma plugin for editing existing Welder-branded slides in Figma Design and Figma Slides. The user selects a slide on the canvas, then edits its content via sub-editors for title/description, badge, image, cards, timeline items, and tables.
 
