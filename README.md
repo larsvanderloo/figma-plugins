@@ -1,5 +1,6 @@
 # Welder Editor 
 
+test
 Figma plugin for editing existing Welder-branded slides in Figma Design and Figma Slides. The user selects a slide on the canvas, then edits its content via sub-editors for title/description, badge, image, cards, timeline items, and tables.
 
 The current repository structure is documented in [`docs/architecture/current-structure.md`](./docs/architecture/current-structure.md). The older product/backlog specification lives in [`docs/product/specs/spec.md`](./docs/product/specs/spec.md) and can contain historical paths or queued ideas.
