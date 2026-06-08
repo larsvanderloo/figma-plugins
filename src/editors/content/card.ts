@@ -32,7 +32,6 @@ import {
 } from '../_shared/icon-swap';
 import { replaceIconViaSlot } from '../_shared/icon-slot';
 import { setTextCharactersSafe } from '../_shared/fonts';
-import { getPropertyKey, getPropertyKeyAny } from '../../slide-machine';
 
 /** Payload-shape voor `update-card` (text-velden) + `upload-image`
  *  (visualBytes wanneer CardItemEditor een file selecteert).
@@ -49,13 +48,9 @@ export interface CardPayload {
   icon?: string;
   iconSvg?: string;
   visualBytes?: Uint8Array;
-  /** Exposed `Klega` component property on Type=User cards. */
-  klega?: string;
   /** Card `Style` VARIANT property — `Default` (filled) of `Outline`. */
   style?: 'Default' | 'Outline';
 }
-
-const CARD_KLEGA_PROPERTY_NAMES = ['Klega', 'klega'];
 
 // ============================================================
 // Card icon helpers — mirror van badge.ts applyIconSwap
@@ -268,38 +263,15 @@ export async function applyCard(slide: InstanceNode, payload: CardPayload): Prom
   let styleJustChanged = false;
   if (payload.style !== undefined && card.type === 'INSTANCE') {
     const cardInst = card as InstanceNode;
-    const styleKey = getPropertyKey(cardInst, 'Style');
     const props = cardInst.componentProperties;
-    const currentStyle =
-      props && styleKey !== null && props[styleKey] ? props[styleKey].value : undefined;
-    if (styleKey !== null && currentStyle !== payload.style) {
+    const currentStyle = props && props['Style'] ? props['Style'].value : undefined;
+    if (currentStyle !== payload.style) {
       try {
-        const stylePatch: { [k: string]: string } = {};
-        stylePatch[styleKey] = payload.style;
-        cardInst.setProperties(stylePatch);
+        cardInst.setProperties({ Style: payload.style });
         styleJustChanged = true;
         console.log('[card] style → ' + payload.style);
       } catch (e) {
         console.log('[card] setProperties Style failed: ' + String(e));
-      }
-    }
-  }
-
-  if (typeof payload.klega === 'string' && card.type === 'INSTANCE') {
-    const cardInst = card as InstanceNode;
-    const klegaKey = getPropertyKeyAny(cardInst, CARD_KLEGA_PROPERTY_NAMES);
-    if (klegaKey !== null) {
-      const props = cardInst.componentProperties;
-      const currentKlega = props && props[klegaKey] ? props[klegaKey].value : undefined;
-      if (currentKlega !== payload.klega) {
-        try {
-          const klegaPatch: { [k: string]: string } = {};
-          klegaPatch[klegaKey] = payload.klega;
-          cardInst.setProperties(klegaPatch);
-          console.log('[card] Klega → ' + payload.klega);
-        } catch (e) {
-          console.log('[card] setProperties Klega failed: ' + String(e));
-        }
       }
     }
   }

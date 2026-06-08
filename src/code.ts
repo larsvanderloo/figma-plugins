@@ -30,8 +30,6 @@ import {
   findTimelineWrap,
   isSlide,
   isEffectivelyVisible,
-  getPropertyKey,
-  getPropertyKeyAny,
   readBooleanProperty,
 } from './slide-machine';
 import {
@@ -54,8 +52,6 @@ import type {
   ContentItems,
   GraphItems,
   CardItem,
-  CardKlegaOption,
-  CardKlegaProperty,
   TimelineItem,
   TableWrapModel,
   UIToPluginMessage,
@@ -1017,196 +1013,6 @@ function readCardVisualHash(card: SceneNode): string | null | undefined {
   return null;
 }
 
-const CARD_KLEGA_PROPERTY_NAMES = ['Klega', 'klega'];
-const klegaPreferredOptionCache: { [cacheKey: string]: Promise<CardKlegaOption | null> } = {};
-
-type ReadableComponentProperty = {
-  type: ComponentPropertyType;
-  value: string | boolean;
-  preferredValues?: InstanceSwapPreferredValue[];
-};
-
-function logicalNameFromPropertyKey(key: string): string {
-  const hashIndex = key.indexOf('#');
-  return hashIndex >= 0 ? key.slice(0, hashIndex) : key;
-}
-
-function cleanKlegaOptionLabel(name: string): string {
-  const slash = name.lastIndexOf('/');
-  const label = slash >= 0 ? name.slice(slash + 1) : name;
-  return label.trim().length > 0 ? label.trim() : name;
-}
-
-function addKlegaOption(
-  options: CardKlegaOption[],
-  seen: { [value: string]: boolean },
-  option: CardKlegaOption | null,
-): void {
-  if (option === null) return;
-  if (option.value.length === 0) return;
-  if (seen[option.value] === true) return;
-  seen[option.value] = true;
-  options.push(option);
-}
-
-async function resolveKlegaPreferredOption(
-  preferred: InstanceSwapPreferredValue,
-): Promise<CardKlegaOption | null> {
-  const cacheKey = preferred.type + ':' + preferred.key;
-  const cached = klegaPreferredOptionCache[cacheKey];
-  if (cached !== undefined) return cached;
-  const resolved = (async function (): Promise<CardKlegaOption | null> {
-    try {
-      if (preferred.type === 'COMPONENT') {
-        const component = await figma.importComponentByKeyAsync(preferred.key);
-        return {
-          label: cleanKlegaOptionLabel(component.name),
-          value: component.id,
-        };
-      }
-      if (preferred.type === 'COMPONENT_SET') {
-        const componentSet = await figma.importComponentSetByKeyAsync(preferred.key);
-        return {
-          label: cleanKlegaOptionLabel(componentSet.name),
-          value: componentSet.defaultVariant.id,
-        };
-      }
-    } catch (_e) {
-      // Missing library permissions or unavailable component: keep scan usable.
-    }
-    return null;
-  })();
-  klegaPreferredOptionCache[cacheKey] = resolved;
-  return resolved;
-}
-
-async function resolveCurrentKlegaOption(value: string): Promise<CardKlegaOption | null> {
-  try {
-    const node = await figma.getNodeByIdAsync(value);
-    if (node !== null && (node.type === 'COMPONENT' || node.type === 'COMPONENT_SET')) {
-      return {
-        label: cleanKlegaOptionLabel(node.name),
-        value: value,
-      };
-    }
-  } catch (_e) {
-    // Fall through to raw label fallback.
-  }
-  return {
-    label: value,
-    value: value,
-  };
-}
-
-function variantOptionsFromDefinitions(
-  definitions: ComponentPropertyDefinitions,
-  logicalName: string,
-): string[] {
-  if (Object.prototype.hasOwnProperty.call(definitions, logicalName)) {
-    const direct = definitions[logicalName];
-    if (direct.type === 'VARIANT' && Array.isArray(direct.variantOptions)) {
-      return direct.variantOptions;
-    }
-  }
-
-  const prefix = logicalName + '#';
-  const lower = logicalName.toLowerCase();
-  const keys = Object.keys(definitions);
-  for (let i = 0; i < keys.length; i++) {
-    const key = keys[i];
-    const hashIndex = key.indexOf('#');
-    const bare = hashIndex >= 0 ? key.slice(0, hashIndex) : key;
-    if (key.indexOf(prefix) !== 0 && bare.toLowerCase() !== lower) continue;
-    const def = definitions[key];
-    if (def.type === 'VARIANT' && Array.isArray(def.variantOptions)) {
-      return def.variantOptions;
-    }
-  }
-  return [];
-}
-
-async function readKlegaVariantOptions(
-  card: InstanceNode,
-  propKey: string,
-): Promise<CardKlegaOption[]> {
-  try {
-    const main = await card.getMainComponentAsync();
-    if (main === null) return [];
-    const logicalName = logicalNameFromPropertyKey(propKey);
-    let definitions: ComponentPropertyDefinitions | null = main.componentPropertyDefinitions;
-    if (main.parent !== null && main.parent.type === 'COMPONENT_SET') {
-      definitions = (main.parent as ComponentSetNode).componentPropertyDefinitions;
-    }
-    const values = variantOptionsFromDefinitions(definitions, logicalName);
-    const options: CardKlegaOption[] = [];
-    for (let i = 0; i < values.length; i++) {
-      options.push({ label: values[i], value: values[i] });
-    }
-    return options;
-  } catch (_e) {
-    return [];
-  }
-}
-
-async function readKlegaInstanceSwapOptions(
-  prop: ReadableComponentProperty,
-  currentValue: string,
-): Promise<CardKlegaOption[]> {
-  const options: CardKlegaOption[] = [];
-  const seen: { [value: string]: boolean } = {};
-
-  if (Array.isArray(prop.preferredValues)) {
-    const resolved = await Promise.all(
-      prop.preferredValues.map(function (preferred) {
-        return resolveKlegaPreferredOption(preferred);
-      }),
-    );
-    for (let i = 0; i < resolved.length; i++) {
-      addKlegaOption(options, seen, resolved[i]);
-    }
-  }
-
-  if (seen[currentValue] !== true) {
-    const current = await resolveCurrentKlegaOption(currentValue);
-    addKlegaOption(options, seen, current);
-  }
-
-  return options;
-}
-
-async function readKlegaProperty(card: InstanceNode): Promise<CardKlegaProperty | null> {
-  const propKey = getPropertyKeyAny(card, CARD_KLEGA_PROPERTY_NAMES);
-  if (propKey === null) return null;
-  const props = card.componentProperties;
-  if (props === null || props === undefined) return null;
-  const prop = props[propKey] as ReadableComponentProperty | undefined;
-  if (prop === undefined || prop === null) return null;
-  if (prop.type !== 'INSTANCE_SWAP' && prop.type !== 'VARIANT' && prop.type !== 'TEXT') {
-    return null;
-  }
-  if (typeof prop.value !== 'string') return null;
-
-  let options: CardKlegaOption[] = [];
-  if (prop.type === 'INSTANCE_SWAP') {
-    options = await readKlegaInstanceSwapOptions(prop, prop.value);
-  } else if (prop.type === 'VARIANT') {
-    options = await readKlegaVariantOptions(card, propKey);
-    let foundCurrent = false;
-    for (let i = 0; i < options.length; i++) {
-      if (options[i].value === prop.value) foundCurrent = true;
-    }
-    if (!foundCurrent && prop.value.length > 0) {
-      options = [{ label: prop.value, value: prop.value }].concat(options);
-    }
-  }
-
-  return {
-    type: prop.type,
-    value: prop.value,
-    options: options,
-  };
-}
-
 /**
  * T31.2: Extraheert Card-instances (recursief via findAll) binnen een
  * wrapper-scope (CardWrap of TimelineWrap). Bounded tot de wrapper-subtree
@@ -1217,15 +1023,16 @@ async function readKlegaProperty(card: InstanceNode): Promise<CardKlegaProperty 
  * T32: `slide` parameter toegevoegd zodat readCardIcon de visibility van de
  * icon-instance kan beoordelen via isEffectivelyVisible.
  */
-async function extractCards(scope: InstanceNode, slide: InstanceNode): Promise<CardItem[]> {
-  if (!('findAll' in scope)) return [];
+function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
+  const items: CardItem[] = [];
+  if (!('findAll' in scope)) return items;
   const cardInstances = scope.findAll(function (n: SceneNode) {
     return n.type === 'INSTANCE' && n.name === 'Card';
   });
-  const itemPromises = cardInstances.map(async function (cardNode): Promise<CardItem | null> {
-    const card = cardNode as InstanceNode;
+  for (let i = 0; i < cardInstances.length; i++) {
+    const card = cardInstances[i] as InstanceNode;
     const heading = readTextByName(card, 'Heading');
-    if (heading === null) return null; // corrupt card: skip
+    if (heading === null) continue; // corrupt card: skip
 
     // Welder Card has a `Type` VARIANT property with values
     // 'Stack Icon' | 'Icon Side' | 'Image' | 'User'. The first two
@@ -1277,9 +1084,8 @@ async function extractCards(scope: InstanceNode, slide: InstanceNode): Promise<C
       }
     }
 
-    return {
+    items.push({
       cardNodeId: card.id,
-      cardType: cardType,
       heading: heading,
       paragraph: readTextByName(card, 'Paragraph') || '',
       // Icon picker shows iff the variant carries an icon. On unknown
@@ -1289,29 +1095,22 @@ async function extractCards(scope: InstanceNode, slide: InstanceNode): Promise<C
       // Image picker shows iff the variant carries an image. On
       // unknown variants we fall back to the scan.
       visualHash: isIconType ? undefined : readCardVisualHash(card),
-      klega: cardType === 'User' ? await readKlegaProperty(card) : null,
       style: readCardStyleVariant(card),
-    };
-  });
-
-  const maybeItems = await Promise.all(itemPromises);
-  const items: CardItem[] = [];
-  for (let i = 0; i < maybeItems.length; i++) {
-    if (maybeItems[i] !== null) items.push(maybeItems[i] as CardItem);
+    });
   }
   return items;
 }
 
 /**
  * Reads the `Type` VARIANT property off a Card instance. The Welder
+ * library's Card master defines this as a flat 'Type' key (no #N:N
+ * suffix) so we look it up by name directly. Returns null when the
  * card has no Type property or it isn't a VARIANT.
  */
 function readCardTypeVariant(card: InstanceNode): string | null {
-  const key = getPropertyKey(card, 'Type');
-  if (key === null) return null;
   const props = card.componentProperties;
   if (props === null || props === undefined) return null;
-  const t = props[key];
+  const t = props['Type'];
   if (t === undefined || t === null) return null;
   if (t.type !== 'VARIANT') return null;
   return typeof t.value === 'string' ? t.value : null;
@@ -1326,11 +1125,9 @@ function readCardTypeVariant(card: InstanceNode): string | null {
  * (e.g. CardWrap layouts that flatten cards into inline divs).
  */
 function readCardStyleVariant(card: InstanceNode): 'Default' | 'Outline' | null {
-  const key = getPropertyKey(card, 'Style');
-  if (key === null) return null;
   const props = card.componentProperties;
   if (props === null || props === undefined) return null;
-  const s = props[key];
+  const s = props['Style'];
   if (s === undefined || s === null) return null;
   if (s.type !== 'VARIANT') return null;
   if (s.value === 'Default') return 'Default';
@@ -1375,7 +1172,7 @@ function extractCopyWrapItems(scope: InstanceNode): TimelineItem[] {
  *
  * Beide worden gevonden via findAll (recursieve descendant-walk, bounded tot wrapper-scope).
  */
-async function scanContent(slide: InstanceNode): Promise<ContentItems | null> {
+function scanContent(slide: InstanceNode): ContentItems | null {
   const cardWrap = findCardWrap(slide);
   const timelineWrap = findTimelineWrap(slide);
 
@@ -1388,7 +1185,7 @@ async function scanContent(slide: InstanceNode): Promise<ContentItems | null> {
   // CardWrap: Cards zijn directe children (Slide Machine-pattern); ook hier
   // gebruiken we extractCards zodat de helper consistent en testbaar blijft.
   if (cardWrap !== null) {
-    const fromCardWrap = await extractCards(cardWrap, slide);
+    const fromCardWrap = extractCards(cardWrap, slide);
     for (let i = 0; i < fromCardWrap.length; i++) {
       cards.push(fromCardWrap[i]);
     }
@@ -1397,7 +1194,7 @@ async function scanContent(slide: InstanceNode): Promise<ContentItems | null> {
   // TimelineWrap: polymorphic — directe Cards (met icon + visual) én genestede
   // CopyWraps (heading + paragraph only) via tussenliggende Frames.
   if (timelineWrap !== null) {
-    const fromTimeline = await extractCards(timelineWrap, slide);
+    const fromTimeline = extractCards(timelineWrap, slide);
     for (let i = 0; i < fromTimeline.length; i++) {
       cards.push(fromTimeline[i]);
     }
@@ -1664,7 +1461,7 @@ async function scanSlide(slide: InstanceNode): Promise<SlideScan> {
   const generalMs = Date.now() - generalStartedAt;
 
   const contentStartedAt = Date.now();
-  const content = await scanContent(slide);
+  const content = scanContent(slide);
   const contentMs = Date.now() - contentStartedAt;
 
   const graphsStartedAt = Date.now();

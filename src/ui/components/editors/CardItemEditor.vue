@@ -25,25 +25,6 @@ const emit = defineEmits<{
 
 const hasVisualSlot = computed<boolean>(() => props.modelValue.visualHash !== undefined);
 const hasImage = computed<boolean>(() => typeof props.modelValue.visualHash === 'string');
-const isUserCard = computed<boolean>(() => props.modelValue.cardType === 'User');
-const showIconPicker = computed<boolean>(() => !isUserCard.value && props.modelValue.icon !== null);
-const showKlegaControl = computed<boolean>(() => isUserCard.value && props.modelValue.klega !== null);
-const showKlegaTextInput = computed<boolean>(() => {
-  return showKlegaControl.value && props.modelValue.klega?.type === 'TEXT';
-});
-const klegaOptions = computed(() => {
-  const klega = props.modelValue.klega;
-  if (klega === null) return [];
-  const options = klega.options.slice();
-  let hasCurrent = false;
-  for (let i = 0; i < options.length; i++) {
-    if (options[i].value === klega.value) hasCurrent = true;
-  }
-  if (!hasCurrent && klega.value.length > 0) {
-    options.unshift({ label: klega.value, value: klega.value });
-  }
-  return options;
-});
 
 const visualStatusLabel = computed<string>(() => {
   if (isUploading.value) return 'Bezig met uploaden…';
@@ -65,11 +46,6 @@ function onParagraphCommit(value: string): void {
 }
 function onIconChange(value: string): void {
   emitWith({ icon: value });
-}
-function onKlegaChange(value: string | number | undefined): void {
-  const klega = props.modelValue.klega;
-  if (klega === null || typeof value !== 'string') return;
-  emitWith({ klega: { ...klega, value: value } });
 }
 function onOutlineToggle(value: boolean): void {
   if (props.modelValue.style === null) return;
@@ -149,26 +125,9 @@ async function onVisualFileChange(file: File | null | undefined): Promise<void> 
     <UFormField label="Titel">
       <div class="flex items-center gap-2">
         <IconPicker
-          v-if="showIconPicker"
           :model-value="modelValue.icon ?? ''"
-          :disabled="iconDisabled"
+          :disabled="iconDisabled || modelValue.icon === null"
           @update:model-value="onIconChange"
-        />
-        <WInput
-          v-else-if="showKlegaTextInput"
-          :model-value="modelValue.klega?.value ?? ''"
-          placeholder="Klega"
-          class="w-32 shrink-0"
-          @update:model-value="onKlegaChange"
-        />
-        <USelectMenu
-          v-else-if="showKlegaControl"
-          :model-value="modelValue.klega?.value ?? ''"
-          :items="klegaOptions"
-          value-key="value"
-          class="w-36 shrink-0"
-          aria-label="Klega"
-          @update:model-value="onKlegaChange"
         />
         <WInput
           :model-value="modelValue.heading"

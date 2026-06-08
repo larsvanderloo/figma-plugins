@@ -279,11 +279,6 @@ export interface ThemeMode {
 
 export interface CardItem {
   cardNodeId: string;
-  /**
-   * Card `Type` VARIANT property. Used by the UI to decide whether this card
-   * should expose an icon picker, image upload, or user/Klega picker.
-   */
-  cardType: string | null;
   heading: string;
   paragraph: string;
   /**
@@ -311,30 +306,12 @@ export interface CardItem {
    */
   visualHash: string | null | undefined;
   /**
-   * Exposed `Klega` component property on Type=User cards. Usually an
-   * INSTANCE_SWAP or VARIANT property; TEXT is supported as a fallback.
-   */
-  klega: CardKlegaProperty | null;
-  /**
    * Card `Style` VARIANT property — `Default` (filled) of `Outline`.
    * `null` wanneer de card-instance geen `Style`-variant blootstelt (sommige
    * CardWrap-layout-varianten bakken Cards plat in zonder variant-prop —
    * de UI verbergt de toggle dan).
    */
   style: 'Default' | 'Outline' | null;
-}
-
-export type CardKlegaPropertyType = 'INSTANCE_SWAP' | 'VARIANT' | 'TEXT';
-
-export interface CardKlegaOption {
-  label: string;
-  value: string;
-}
-
-export interface CardKlegaProperty {
-  type: CardKlegaPropertyType;
-  value: string;
-  options: CardKlegaOption[];
 }
 
 /**
@@ -464,8 +441,6 @@ export type UIToPluginMessage =
          */
         iconSvg: string;
         visualHash: string;
-        /** Exposed `Klega` property value for Type=User cards. */
-        klega: string;
         /** `Default` = filled card; `Outline` = bordered card. */
         style: 'Default' | 'Outline';
       }>;

@@ -82,7 +82,6 @@ export function useCardEditor() {
       paragraph?: string;
       icon?: string;
       iconSvg?: string;
-      klega?: string;
       style?: 'Default' | 'Outline';
     } = {};
     if (prev === undefined || prev.heading !== value.heading) {
@@ -96,9 +95,6 @@ export function useCardEditor() {
       (prev === undefined || prev.icon !== value.icon) && value.icon !== null;
     const styleChanged =
       (prev === undefined || prev.style !== value.style) && value.style !== null;
-    const prevKlega = prev !== undefined && prev.klega !== null ? prev.klega.value : null;
-    const nextKlega = value.klega !== null ? value.klega.value : null;
-    const klegaChanged = prevKlega !== nextKlega && nextKlega !== null;
 
     if (iconChanged) {
       payload.icon = value.icon as string;
@@ -119,9 +115,6 @@ export function useCardEditor() {
         if (svg !== null) payload.iconSvg = svg;
       }
     }
-    if (klegaChanged) {
-      payload.klega = nextKlega as string;
-    }
     if (Object.keys(payload).length === 0) return;
 
     // Optimistic local update — always write all fields so the store
@@ -135,7 +128,6 @@ export function useCardEditor() {
         list[idx].heading = value.heading;
         list[idx].paragraph = value.paragraph;
         list[idx].icon = value.icon;
-        list[idx].klega = value.klega;
         list[idx].style = value.style;
         if (value.icon !== null) {
           list[idx].iconIntended = value.icon;
