@@ -7,12 +7,13 @@ A single-plugin repo. Targets **Figma design** and **Figma Slides** (see `manife
 ```
 manifest.json                    Figma plugin manifest (also: manifest.dev.json / manifest.debug.json variants)
 src/
-  code.ts                        plugin-sandbox entry: bootstrap, message dispatch, listeners (runs figma.*)
-  sandbox/                       sandbox infra: bridge.ts (postToUI + self-write window), slides.ts (slide page cache + finders), runtime.ts (editor-type/runtime info)
-  scan/slide-scan.ts             read side: scans a slide into the typed SlideScan the UI renders
-  ui/                            iframe Vue app (Vue 3 + Nuxt UI v4)
-  editors/                       write side: feature editors dispatched from code.ts (shared helpers in editors/_shared/)
+  code.ts                        plugin-sandbox entry: bootstrap, registry dispatch, figma.on listeners (runs figma.*)
+  sandbox/                       sandbox infra: bridge.ts (postToUI + self-write window), slides.ts (slide page cache + finders), runtime.ts (editor-type info), session.ts (session state + emit helpers), handlers/ (message-handler registry, one module per domain)
+  scan/                          read side: slide-scan.ts composes per-domain scans (general/content/graphs/theme) over shared readers.ts; previews.ts prefetches thumbnails
+  ui/                            iframe Vue app (Vue 3 + Nuxt UI v4); plugin-message handling in composables/usePluginMessages.ts
+  editors/                       write side: feature editors invoked from sandbox/handlers (shared helpers in editors/_shared/)
   csv/                           CSV tokenizer (consumed by table editor)
+  types.ts                       message-bus schema barrel; domain files in types/
   slide-machine.ts               slide-build state machine
   debug.ts                       debugLog helpers, active only in PLUGIN_DEBUG=1 builds
   ...
