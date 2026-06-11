@@ -11,7 +11,7 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { readCardTypeVariant } from '../../scan/slide-scan';
+import { readCardTypeVariant } from '../../scan/readers';
 import { markSelfWrite } from '../../sandbox/bridge';
 import { debugLog } from '../../debug';
 

@@ -46,14 +46,12 @@ import {
   readCardIcon,
   findVisibleTextNodeByName,
   resolveTypHeadingSizeHost,
-  findThemeCollectionsForSlide,
   readCardTypeVariant,
-  postInitialSlidePreviews,
-  scanSlide,
-  refreshTablesOnSlide,
-  lastSentPreviewHash,
-  SlideScan,
-} from './scan/slide-scan';
+} from './scan/readers';
+import { findThemeCollectionsForSlide } from './scan/theme';
+import { postInitialSlidePreviews, lastSentPreviewHash } from './scan/previews';
+import { refreshTablesOnSlide } from './scan/graphs';
+import { scanSlide, SlideScan } from './scan/slide-scan';
 import { loadAccentVars } from './editors/_shared/accent-vars';
 import { applyAccentRanges } from './editors/_shared/accent-ranges';
 import type {
