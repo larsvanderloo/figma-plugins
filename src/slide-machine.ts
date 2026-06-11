@@ -19,6 +19,7 @@
 // ============================================================
 
 import type { SlideSummary } from './types';
+import type { SurfaceSignature } from './constants';
 import { SURFACE_SIGNATURES } from './constants';
 
 // ============================================================
@@ -38,14 +39,47 @@ import { SURFACE_SIGNATURES } from './constants';
  * strikte gelijkheid filtert per ongeluk geschaalde instances uit.
  */
 export function isSlide(node: SceneNode): node is InstanceNode {
-  if (node.type !== 'INSTANCE') return false;
+  return matchSurfaceSignature(node) !== null;
+}
+
+/**
+ * Geeft de SurfaceSignature terug die `node` matcht (Slide of Whitepaper),
+ * of null wanneer het geen herkende surface-instance is. `isSlide` is een
+ * dunne type-guard hierboven; callers die WELKE surface nodig hebben
+ * (bv. de table-renderer voor per-surface breedte-presets) gebruiken deze.
+ */
+export function matchSurfaceSignature(node: SceneNode): SurfaceSignature | null {
+  if (node.type !== 'INSTANCE') return null;
   for (let i = 0; i < SURFACE_SIGNATURES.length; i++) {
     const sig = SURFACE_SIGNATURES[i];
     if (node.name === sig.name && node.width === sig.width && node.height === sig.height) {
-      return true;
+      return sig;
     }
   }
-  return false;
+  return null;
+}
+
+/**
+ * Wandelt vanaf `node` (inclusief) omhoog door de parent-keten en geeft de
+ * naam terug van de eerste omsluitende surface-INSTANCE (Slide/Whitepaper).
+ * Retourneert null wanneer geen surface-ancestor binnen de bound gevonden
+ * wordt. Bounded op 20 hops — een TableWrap-slot zit typisch slide → ... →
+ * TableWrap → Slot, ruim binnen 20, met harde safety-break.
+ *
+ * Gebruikt door de table-renderer om surface-passende breedte-presets te
+ * kiezen (Slide 1920 vs Whitepaper 1240 hebben verschillende Slot-breedtes).
+ */
+export function findEnclosingSurfaceName(node: BaseNode): string | null {
+  let cur: BaseNode | null = node;
+  for (let i = 0; i < 20; i++) {
+    if (cur === null) return null;
+    if (cur.type === 'INSTANCE') {
+      const sig = matchSurfaceSignature(cur as InstanceNode);
+      if (sig !== null) return sig.name;
+    }
+    cur = 'parent' in cur ? (cur as SceneNode).parent : null;
+  }
+  return null;
 }
 
 /**

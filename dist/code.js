@@ -139,6 +139,15 @@
     md: 1119,
     lg: 1728
   };
+  var WHITEPAPER_TABLE_WIDTHS = {
+    sm: 560,
+    md: 720,
+    lg: 1116
+  };
+  function tableWidthsForSurface(surfaceName) {
+    if (surfaceName === WHITEPAPER_NODE_NAME) return WHITEPAPER_TABLE_WIDTHS;
+    return TABLE_WIDTHS;
+  }
 
   // src/debug.ts
   var MAX_STRING_LENGTH = 160;
@@ -327,14 +336,29 @@
 
   // src/slide-machine.ts
   function isSlide(node) {
-    if (node.type !== "INSTANCE") return false;
+    return matchSurfaceSignature(node) !== null;
+  }
+  function matchSurfaceSignature(node) {
+    if (node.type !== "INSTANCE") return null;
     for (let i = 0; i < SURFACE_SIGNATURES.length; i++) {
       const sig = SURFACE_SIGNATURES[i];
       if (node.name === sig.name && node.width === sig.width && node.height === sig.height) {
-        return true;
+        return sig;
       }
     }
-    return false;
+    return null;
+  }
+  function findEnclosingSurfaceName(node) {
+    let cur = node;
+    for (let i = 0; i < 20; i++) {
+      if (cur === null) return null;
+      if (cur.type === "INSTANCE") {
+        const sig = matchSurfaceSignature(cur);
+        if (sig !== null) return sig.name;
+      }
+      cur = "parent" in cur ? cur.parent : null;
+    }
+    return null;
   }
   function findSlidesOnPage(page) {
     const target = page !== void 0 ? page : figma.currentPage;
@@ -2515,7 +2539,8 @@
       } catch (_e) {
       }
     }
-    const desiredWidth = TABLE_WIDTHS[desired.width];
+    const surfaceName = findEnclosingSurfaceName(slot);
+    const desiredWidth = tableWidthsForSurface(surfaceName)[desired.width];
     if (vars.text !== null && vars.dimmer !== null) {
       const textRGB = resolveColor(vars.text, slot, { r: 1, g: 0.957, b: 0.918 });
       const dimmerRGB = resolveColor(vars.dimmer, slot, TEXT_DIMMER_RGB);

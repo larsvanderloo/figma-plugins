@@ -22,7 +22,8 @@
 // ============================================================
 
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../types';
-import { TABLE_WIDTHS } from '../../constants';
+import { tableWidthsForSurface } from '../../constants';
+import { findEnclosingSurfaceName } from '../../slide-machine';
 import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from '../_shared/accent-vars';
 
 type WidthKey = 'sm' | 'md' | 'lg';
@@ -602,7 +603,11 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     }
   }
 
-  const desiredWidth = TABLE_WIDTHS[desired.width];
+  // Surface-aware breedte: een Slide (1920) en een Whitepaper (1240) hebben
+  // verschillende Slot-breedte-presets. Bepaal de omsluitende surface vanaf
+  // de Slot en kies de bijbehorende preset-tabel; onbekend → Slide-default.
+  const surfaceName = findEnclosingSurfaceName(slot);
+  const desiredWidth = tableWidthsForSurface(surfaceName)[desired.width];
 
   if (vars.text !== null && vars.dimmer !== null) {
     const textRGB = resolveColor(vars.text, slot, { r: 1, g: 0.957, b: 0.918 });
