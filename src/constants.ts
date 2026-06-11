@@ -272,7 +272,12 @@ export const BADGE_ICON_OPTIONS = ICON_OPTIONS;
 // ============================================================
 // Slide-detectie constanten (spec §7)
 //
-// Slide Machine-slides zijn vaste 1920×1080 instances met name 'Slide'.
+// De plugin herkent twee bewerkbare "surfaces", elk een vaste-grootte
+// INSTANCE met een eigen naam:
+//   - Slide       1920×1080 (Slide Machine, landscape presentatie)
+//   - Whitepaper  1240×1754 (A4 portret @150 DPI)
+// Beide gebruiken dezelfde wrapper-instances (CopyWrap / Badge /
+// ImageWrap / CardWrap / TableWrap / TimelineWrap) en dezelfde editors.
 // Deze constanten worden door slide-machine.ts gebruikt zodat ze niet
 // verstrooid in de codebase staan.
 // ============================================================
@@ -280,6 +285,26 @@ export const BADGE_ICON_OPTIONS = ICON_OPTIONS;
 export const SLIDE_NODE_NAME = 'Slide';
 export const SLIDE_WIDTH = 1920;
 export const SLIDE_HEIGHT = 1080;
+
+export const WHITEPAPER_NODE_NAME = 'Whitepaper';
+export const WHITEPAPER_WIDTH = 1240;
+export const WHITEPAPER_HEIGHT = 1754;
+
+/**
+ * Alle herkende surface-signatures (naam + exacte afmetingen). `isSlide`
+ * matcht een INSTANCE tegen deze lijst; een nieuwe format toevoegen is
+ * één extra entry hier — geen wijziging aan de detectie-logica.
+ */
+export interface SurfaceSignature {
+  name: string;
+  width: number;
+  height: number;
+}
+
+export const SURFACE_SIGNATURES: ReadonlyArray<SurfaceSignature> = [
+  { name: SLIDE_NODE_NAME, width: SLIDE_WIDTH, height: SLIDE_HEIGHT },
+  { name: WHITEPAPER_NODE_NAME, width: WHITEPAPER_WIDTH, height: WHITEPAPER_HEIGHT },
+];
 
 /** Bounded traversal-diepte bij wrapper-zoeken binnen een slide (FIG-TRAVERSE-01). */
 export const WRAPPER_MAX_DEPTH = 6;

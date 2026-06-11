@@ -19,27 +19,33 @@
 // ============================================================
 
 import type { SlideSummary } from './types';
-import { SLIDE_NODE_NAME, SLIDE_WIDTH, SLIDE_HEIGHT } from './constants';
+import { SURFACE_SIGNATURES } from './constants';
 
 // ============================================================
 // Slide-detectie
 // ============================================================
 
 /**
- * Type-guard — vertelt TS dat `node` een Slide-instance is.
- * Match-criteria per spec §7.1:
+ * Type-guard — vertelt TS dat `node` een bewerkbare surface-instance is
+ * (Slide of Whitepaper). Match-criteria per spec §7.1:
  *   - type === 'INSTANCE'
- *   - name === 'Slide'
- *   - width 1920 × height 1080
+ *   - name + exacte afmetingen matchen één van SURFACE_SIGNATURES:
+ *       'Slide'      1920×1080
+ *       'Whitepaper' 1240×1754
+ *
+ * Figma geeft width/height als number met subpixel-floats bij geschaalde
+ * instances; de Slide Machine-surfaces blijven exact op hun maat, dus de
+ * strikte gelijkheid filtert per ongeluk geschaalde instances uit.
  */
 export function isSlide(node: SceneNode): node is InstanceNode {
   if (node.type !== 'INSTANCE') return false;
-  if (node.name !== SLIDE_NODE_NAME) return false;
-  // Figma geeft width/height als number met subpixel-floats bij
-  // geschaalde instances; Slide Machine blijft exact 1920×1080.
-  if (node.width !== SLIDE_WIDTH) return false;
-  if (node.height !== SLIDE_HEIGHT) return false;
-  return true;
+  for (let i = 0; i < SURFACE_SIGNATURES.length; i++) {
+    const sig = SURFACE_SIGNATURES[i];
+    if (node.name === sig.name && node.width === sig.width && node.height === sig.height) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
