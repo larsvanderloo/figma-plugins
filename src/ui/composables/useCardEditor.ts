@@ -5,6 +5,7 @@ import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import { getLucideSvg } from '../lucide-svgs';
+import { bytesToDataUrl } from '../utils/bytes-to-data-url';
 import type { CardItem } from '../../types';
 
 // Card-size picker state lives at module scope so it survives ContentPanel
@@ -13,22 +14,6 @@ import type { CardItem } from '../../types';
 // resetting any function-local refs). One-iframe-session sticky.
 type CardSize = 'SM' | 'LG' | 'NO_ICON';
 const cardSize = ref<CardSize>('LG');
-
-function bytesToDataUrl(bytes: Uint8Array): string {
-  let mime = 'image/png';
-  if (bytes.length >= 3 && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    mime = 'image/jpeg';
-  }
-  let binary = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode.apply(
-      null,
-      Array.from(bytes.subarray(i, i + chunkSize)) as unknown as number[],
-    );
-  }
-  return 'data:' + mime + ';base64,' + btoa(binary);
-}
 
 export function useCardEditor() {
   const view = usePluginView();
