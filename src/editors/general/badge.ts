@@ -22,73 +22,19 @@
 import { findBadge } from '../../slide-machine';
 import {
   normalizeIconKey,
-  LUCIDE_SLUG_RE,
   trySwapViaInstanceProperty,
   swapComponentByName,
 } from '../_shared/icon-swap';
 import { replaceIconViaSlot } from '../_shared/icon-slot';
+import { findNestedIconInstance, findTextByName } from '../_shared/node-finders';
 import { setTextCharactersSafe } from '../_shared/fonts';
+import { debugLog } from '../../debug';
 
-/** Payload-shape voor `update-general` met section `badge`. */
-export interface BadgePayload {
-  label?: string;
-  icon?: string;
-  /**
-   * Volledig SVG-document voor het gekozen Lucide-icon. Aanwezig wanneer
-   * de iframe het uit `lucide-svgs.ts` heeft kunnen opzoeken. De sandbox
-   * gebruikt dit voor de slot-based swap; bij afwezigheid valt het
-   * terug op de legacy INSTANCE_SWAP-route.
-   */
-  iconSvg?: string;
-}
-
-// ============================================================
-// Badge-specific icon-finding helpers
-// ============================================================
-
-/**
- * Zoekt het icon-INSTANCE-kind dat diep in de badge zit via:
- *   badge → icon_wrapper (FRAME) → eerste INSTANCE-kind
- *
- * Fallback: eerste INSTANCE-descendant wier naam overeenkomt met een
- * Lucide-slug (lowercase + hyphens).
- */
-function findNestedIconInstance(badge: InstanceNode): InstanceNode | null {
-  // Primair pad: directe child met name 'icon_wrapper'
-  if ('findChild' in badge) {
-    const wrapper = badge.findChild((n: SceneNode) => n.name === 'icon_wrapper');
-    if (wrapper !== null && 'children' in wrapper) {
-      const wrapperNode = wrapper as FrameNode | GroupNode | InstanceNode;
-      for (let i = 0; i < wrapperNode.children.length; i++) {
-        const child = wrapperNode.children[i];
-        if (child.type === 'INSTANCE') return child as InstanceNode;
-      }
-    }
-  }
-
-  // Fallback: eerste INSTANCE-descendant wier naam een Lucide-slug is
-  if ('findOne' in badge) {
-    const found = badge.findOne((n: SceneNode) => {
-      if (n.type !== 'INSTANCE') return false;
-      return LUCIDE_SLUG_RE.test(normalizeIconKey(n.name));
-    });
-    if (found !== null && found.type === 'INSTANCE') return found as InstanceNode;
-  }
-
-  return null;
-}
+import type { BadgePayload } from '../../types';
 
 // ============================================================
 // Text helpers  (label + icon-font fallback)
 // ============================================================
-
-function findTextByName(scope: SceneNode, name: string): TextNode | null {
-  if (!('findOne' in scope)) return null;
-  const found = scope.findOne((n: SceneNode) => n.type === 'TEXT' && n.name === name);
-  if (found === null) return null;
-  if (found.type !== 'TEXT') return null;
-  return found as TextNode;
-}
 
 function findFirstText(scope: SceneNode): TextNode | null {
   if (!('findOne' in scope)) return null;
@@ -133,7 +79,7 @@ async function applyIconSwap(badge: InstanceNode, iconName: string): Promise<boo
   const iconTextNode = findTextByName(badge, 'Icon');
   if (iconTextNode !== null) {
     await setTextCharactersSafe(iconTextNode, iconName);
-    console.log('[welder-slide-editor] icon swapped → ' + iconName + ' (via Icon text-node)');
+    debugLog('badge', 'icon swapped → ' + iconName + ' (via Icon text-node)');
     return true;
   }
 
@@ -175,7 +121,7 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
           try {
             badge.setProperties(patch);
             labelSet = true;
-            console.log('[badge] label set via TEXT property "' + propKey + '"');
+            debugLog('badge', 'label set via TEXT property "' + propKey + '"');
             break;
           } catch (e) {
             console.log(
@@ -193,7 +139,7 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
       }
       if (labelNode !== null) {
         await setTextCharactersSafe(labelNode, payload.label);
-        console.log('[badge] label set via text node');
+        debugLog('badge', 'label set via text node');
       }
     }
   }
@@ -213,8 +159,9 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
     try {
       const desiredIconKey = normalizeIconKey(payload.icon);
       badge.setSharedPluginData('welder', 'icon', desiredIconKey);
-      console.log(
-        '[badge] persisted icon="' + desiredIconKey + '" to plugin data on ' + badge.id,
+      debugLog(
+        'badge',
+        'persisted icon="' + desiredIconKey + '" to plugin data on ' + badge.id,
       );
     } catch (e) {
       console.log('[badge] setSharedPluginData failed: ' + String(e));

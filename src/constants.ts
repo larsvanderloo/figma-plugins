@@ -306,9 +306,6 @@ export const SURFACE_SIGNATURES: ReadonlyArray<SurfaceSignature> = [
   { name: WHITEPAPER_NODE_NAME, width: WHITEPAPER_WIDTH, height: WHITEPAPER_HEIGHT },
 ];
 
-/** Bounded traversal-diepte bij wrapper-zoeken binnen een slide (FIG-TRAVERSE-01). */
-export const WRAPPER_MAX_DEPTH = 6;
-
 // ============================================================
 // Table-constanten (T34.6 — Slot-based TableWrap v0.2.0)
 //

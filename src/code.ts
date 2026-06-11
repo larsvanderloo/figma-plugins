@@ -32,12 +32,10 @@ import {
   isEffectivelyVisible,
   readBooleanProperty,
 } from './slide-machine';
-import {
-  applyTitleDescription,
-  TitleDescriptionPayload,
-} from './editors/general/title-description';
-import { applyBadge, BadgePayload } from './editors/general/badge';
-import { applyImage, findImageSlot } from './editors/general/image';
+import { applyTitleDescription } from './editors/general/title-description';
+import { applyBadge } from './editors/general/badge';
+import { applyImage } from './editors/general/image';
+import { findImageSlot } from './editors/_shared/node-finders';
 import { applyCard, applyCardVisual } from './editors/content/card';
 import { normalizeIconKey, LUCIDE_SLUG_RE, primeIconCache } from './editors/_shared/icon-swap';
 import { applyTable, scanTableSlot } from './editors/table/renderer';
@@ -221,8 +219,9 @@ async function backfillAllIcons(): Promise<void> {
       }
     }
   }
-  console.log(
-    '[icon-backfill] cards: visited ' + cardsVisited + ', wrote ' + cardsWritten +
+  debugLog(
+    'icon-backfill',
+    'cards: visited ' + cardsVisited + ', wrote ' + cardsWritten +
       ', stale ' + staleCards.length +
       ' · badges: visited ' + badgesVisited + ', wrote ' + badgesWritten +
       ', stale ' + staleBadges.length,
@@ -518,16 +517,18 @@ async function resolveTypHeadingSizeHost(
       }
     }
     if (key === null) {
-      console.log(
-        '[copywrap-size]   candidate "' + cand.name + '" props=[' + keys.join(', ') + '] — no size key',
+      debugLog(
+        'copywrap-size',
+        '  candidate "' + cand.name + '" props=[' + keys.join(', ') + '] — no size key',
       );
       continue;
     }
     const main = await cand.getMainComponentAsync();
     const parent = main !== null ? main.parent : null;
     if (parent === null || parent.type !== 'COMPONENT_SET') {
-      console.log(
-        '[copywrap-size]   candidate "' + cand.name + '" main parent is ' +
+      debugLog(
+        'copywrap-size',
+        '  candidate "' + cand.name + '" main parent is ' +
           (parent !== null ? parent.type : 'null') + ', not COMPONENT_SET',
       );
       continue;
@@ -535,8 +536,9 @@ async function resolveTypHeadingSizeHost(
     const defs = (parent as ComponentSetNode).componentPropertyDefinitions;
     const def = defs !== null && defs !== undefined ? defs[key] : undefined;
     if (def === undefined || def.type !== 'VARIANT' || !Array.isArray(def.variantOptions)) {
-      console.log(
-        '[copywrap-size]   candidate "' + cand.name + '" def missing variantOptions for key "' +
+      debugLog(
+        'copywrap-size',
+        '  candidate "' + cand.name + '" def missing variantOptions for key "' +
           key + '"',
       );
       continue;
@@ -638,12 +640,13 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
           current: headingHost.value,
           options: headingHost.options,
         };
-        console.log(
-          '[copywrap-size] options=[' + headingHost.options.join(', ') +
+        debugLog(
+          'copywrap-size',
+          'options=[' + headingHost.options.join(', ') +
             '], current=' + headingHost.value,
         );
       } else {
-        console.log('[copywrap-size] TypHeading + size property not resolved');
+        debugLog('copywrap-size', 'TypHeading + size property not resolved');
       }
     } catch (e) {
       console.log('[copywrap-size] lookup failed:', e);
@@ -703,8 +706,9 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
       try {
         badge.setSharedPluginData('welder', 'icon', currentBadgeIcon);
         badgeIconIntended = currentBadgeIcon;
-        console.log(
-          '[badge-scan] backfilled iconIntended="' + currentBadgeIcon + '" for ' + badge.id,
+        debugLog(
+          'badge-scan',
+          'backfilled iconIntended="' + currentBadgeIcon + '" for ' + badge.id,
         );
       } catch (_e) {
         /* silent */
@@ -901,31 +905,11 @@ function rgbToHex(c: RGB): string {
 
 /**
  * Leest de huidige ImagePaint-hash van het image-slot binnen de ImageWrap.
- * Hergebruikt dezelfde heuristiek als findImageSlot in editors/general/image.ts.
+ * Slot-detectie via de shared findImageSlot (editors/_shared/node-finders.ts).
  * Returns null wanneer het slot leeg is of geen IMAGE-fill draagt.
  */
 function readImageWrapHash(imageWrap: InstanceNode): string | null {
-  if (!('findOne' in imageWrap)) return null;
-
-  // Strategie 1: naam-gebaseerd
-  var byName = imageWrap.findOne(function (n: SceneNode) {
-    if (n.name !== 'Image' && n.name !== 'Visual' && n.name !== 'ImageSlot') return false;
-    return 'fills' in n;
-  });
-  // Strategie 2: bestaande IMAGE-fill
-  var slot =
-    byName !== null
-      ? byName
-      : imageWrap.findOne(function (n: SceneNode) {
-          if (!('fills' in n)) return false;
-          var fills = (n as GeometryMixin).fills;
-          if (fills === figma.mixed) return false;
-          if (!Array.isArray(fills)) return false;
-          for (var i = 0; i < fills.length; i++) {
-            if (fills[i].type === 'IMAGE') return true;
-          }
-          return false;
-        });
+  var slot = findImageSlot(imageWrap, false);
   if (slot === null) return null;
   if (!('fills' in slot)) return null;
 
@@ -934,8 +918,7 @@ function readImageWrapHash(imageWrap: InstanceNode): string | null {
   if (!Array.isArray(fills)) return null;
   for (var i = 0; i < fills.length; i++) {
     if (fills[i].type === 'IMAGE') {
-      var hash = (fills[i] as ImagePaint).imageHash;
-      return hash !== null ? hash : null;
+      return (fills[i] as ImagePaint).imageHash;
     }
   }
   return null;
@@ -946,58 +929,10 @@ function readImageWrapHash(imageWrap: InstanceNode): string | null {
  * Retourneert de huidige ImagePaint-hash wanneer de slot een IMAGE-fill
  * draagt, null wanneer de slot aanwezig is maar leeg, of undefined
  * wanneer de card geen slot heeft (de UI verbergt dan de upload-knop).
- * Heuristiek matcht editors/content/card.ts:findImageSlot.
+ * Slot-detectie via de shared findImageSlot (editors/_shared/node-finders.ts).
  */
-/**
- * Find the SceneNode that owns the IMAGE fill on a Card — the analogue
- * of `findImageSlot` for slide-level ImageWraps. Used both by the
- * read path (`readCardVisualHash` → hash for the iframe scan) and the
- * preview path (post-slide-loaded byte fetch + thumbnail emit).
- *
- * Strategy is the same as `readCardVisualHash`: prefer a descendant
- * named 'Visual' / 'Image' that has a `fills` property, fall back to
- * any descendant whose fills include an IMAGE paint.
- */
-function findCardVisualSlot(card: SceneNode): SceneNode | null {
-  if (!('findOne' in card)) return null;
-  const byName = card.findOne((n: SceneNode) => {
-    if (n.name !== 'Visual' && n.name !== 'Image') return false;
-    return 'fills' in n;
-  });
-  if (byName !== null) return byName;
-  return card.findOne((n: SceneNode) => {
-    if (!('fills' in n)) return false;
-    const fills = (n as GeometryMixin).fills;
-    if (fills === figma.mixed) return false;
-    if (!Array.isArray(fills)) return false;
-    for (const f of fills) {
-      if (f.type === 'IMAGE') return true;
-    }
-    return false;
-  });
-}
-
 function readCardVisualHash(card: SceneNode): string | null | undefined {
-  if (!('findOne' in card)) return undefined;
-
-  // Strategie 1: descendant met name 'Visual' of 'Image'.
-  const byName = card.findOne((n: SceneNode) => {
-    if (n.name !== 'Visual' && n.name !== 'Image') return false;
-    return 'fills' in n;
-  });
-  const slot: SceneNode | null =
-    byName !== null
-      ? byName
-      : card.findOne((n: SceneNode) => {
-          if (!('fills' in n)) return false;
-          const fills = (n as GeometryMixin).fills;
-          if (fills === figma.mixed) return false;
-          if (!Array.isArray(fills)) return false;
-          for (const f of fills) {
-            if (f.type === 'IMAGE') return true;
-          }
-          return false;
-        });
+  const slot = findImageSlot(card, false);
   if (slot === null) return undefined;
   if (!('fills' in slot)) return undefined;
 
@@ -1006,8 +941,7 @@ function readCardVisualHash(card: SceneNode): string | null | undefined {
   if (!Array.isArray(fills)) return null;
   for (const f of fills) {
     if (f.type === 'IMAGE') {
-      const hash = (f as ImagePaint).imageHash;
-      return hash !== null ? hash : null;
+      return (f as ImagePaint).imageHash;
     }
   }
   return null;
@@ -1076,8 +1010,9 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
       try {
         (card as InstanceNode).setSharedPluginData('welder', 'icon', currentSlotIcon);
         iconIntended = currentSlotIcon;
-        console.log(
-          '[card-scan] backfilled iconIntended="' + currentSlotIcon + '" for ' + card.id,
+        debugLog(
+          'card-scan',
+          'backfilled iconIntended="' + currentSlotIcon + '" for ' + card.id,
         );
       } catch (_e) {
         /* silent */
@@ -1202,14 +1137,11 @@ function scanContent(slide: InstanceNode): ContentItems | null {
     for (let j = 0; j < cwItems.length; j++) {
       timelineItems.push(cwItems[j]);
     }
-    console.log(
-      '[welder-slide-editor] T31.2 timelineWrap scan: ' +
-        String(fromTimeline.length) +
-        ' cards, ' +
-        String(cwItems.length) +
-        ' copyWrap-items on slide ' +
-        slide.id,
-    );
+    debugLog('sandbox', 'timelineWrap scan', {
+      slideId: slide.id,
+      cards: fromTimeline.length,
+      copyWrapItems: cwItems.length,
+    });
   }
 
   if (cards.length === 0 && timelineItems.length === 0) return null;
@@ -1360,7 +1292,7 @@ async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideScan): P
         try {
           const wrapNode = await figma.getNodeByIdAsync(imageWrapId);
           if (wrapNode !== null && wrapNode.type === 'INSTANCE') {
-            const slot = findImageSlot(wrapNode as InstanceNode);
+            const slot = findImageSlot(wrapNode as InstanceNode, true);
             if (slot !== null && 'width' in slot && 'height' in slot) {
               const w = (slot as LayoutMixin).width;
               const h = (slot as LayoutMixin).height;
@@ -1399,7 +1331,7 @@ async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideScan): P
         try {
           const cardNode = await figma.getNodeByIdAsync(ci.cardNodeId);
           if (cardNode === null || cardNode.type !== 'INSTANCE') return;
-          const slot = findCardVisualSlot(cardNode as InstanceNode);
+          const slot = findImageSlot(cardNode as InstanceNode, false);
           if (slot === null) return;
           const fills = (slot as GeometryMixin).fills;
           if (fills === figma.mixed || !Array.isArray(fills)) return;
@@ -1798,10 +1730,7 @@ async function buildTextStyleMap(): Promise<void> {
   }
   textStyleMapBuilt = true;
   const names = Object.keys(textStyleByName);
-  console.log('[text-style-map] built: ' + String(names.length) + ' entries');
-  for (let i = 0; i < names.length; i++) {
-    console.log('[text-style-map]   "' + names[i] + '"');
-  }
+  debugLog('text-style-map', 'built', { entries: names.length, names: names });
 }
 
 async function resolveTextStyleByName(name: string): Promise<string | null> {
@@ -2306,7 +2235,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       return;
     }
     if (msg.section === 'titleDescription') {
-      const payload = msg.payload as TitleDescriptionPayload;
+      const payload = msg.payload;
       figma.commitUndo();
       // Mark BEFORE apply: the apply chain triggers documentchange events
       // that arm postSlideContent's 200ms debounce. If apply takes longer
@@ -2326,7 +2255,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       return;
     }
     if (msg.section === 'badge') {
-      const payload = msg.payload as BadgePayload;
+      const payload = msg.payload;
       // commitUndo before each plugin mutation creates a discrete
       // checkpoint so the iframe's plugin-Undo button reverts EXACTLY
       // this action (and not a coalesced batch with whatever followed).
@@ -2341,8 +2270,6 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       return;
     }
-    // TODO(T10): dispatch naar editors/general/image.ts
-    console.log('[welder-slide-editor] update-general (T10+ placeholder):', msg.section);
     return;
   }
 
@@ -2478,8 +2405,9 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       });
       if (firstCard !== null && firstCard.type === 'INSTANCE') {
         const bound = (firstCard as InstanceNode).boundVariables;
-        console.log(
-          '[set-card-size] card.boundVariables keys=' +
+        debugLog(
+          'set-card-size',
+          'card.boundVariables keys=' +
             (bound !== null && bound !== undefined ? Object.keys(bound).join(',') : 'NONE'),
         );
         // Only true gap fields — paddings on the Card are bound to the
@@ -2502,8 +2430,9 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
             }
           }
         }
-        console.log(
-          '[set-card-size] spacing fields=[' + firstSpacingFields.join(', ') +
+        debugLog(
+          'set-card-size',
+          'spacing fields=[' + firstSpacingFields.join(', ') +
             '], template var=' + (templateAlias !== null ? templateAlias.id : 'NONE'),
         );
 
@@ -2549,14 +2478,16 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
                 }
               }
               if (wantsCompactSidePadding && compactSidePaddingVariable === null) {
-                console.log(
-                  '[set-card-size] compact-side-padding variable "4" not found in collection "' +
+                debugLog(
+                  'set-card-size',
+                  'compact-side-padding variable "4" not found in collection "' +
                     collection.name + '"',
                 );
               }
               if (targetSpacingVariable === null) {
-                console.log(
-                  '[set-card-size] variable "' + msg.gapModeName +
+                debugLog(
+                  'set-card-size',
+                  'variable "' + msg.gapModeName +
                     '" not found in collection "' + collection.name + '" — available: [' + tried.join(', ') + ']',
                 );
               }
@@ -3001,7 +2932,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       let cardFillW = 0;
       let cardFillH = 0;
       if (target.type === 'INSTANCE') {
-        const cardSlot = findCardVisualSlot(target as InstanceNode);
+        const cardSlot = findImageSlot(target as InstanceNode, false);
         if (cardSlot !== null && 'width' in cardSlot && 'height' in cardSlot) {
           const w = (cardSlot as LayoutMixin).width;
           const h = (cardSlot as LayoutMixin).height;
@@ -3043,7 +2974,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     var previewFillH = 0;
     try {
       if (target.type === 'INSTANCE') {
-        var previewSlot = findImageSlot(target as InstanceNode);
+        var previewSlot = findImageSlot(target as InstanceNode, true);
         if (previewSlot !== null && 'width' in previewSlot && 'height' in previewSlot) {
           var previewSlotW = (previewSlot as LayoutMixin).width;
           var previewSlotH = (previewSlot as LayoutMixin).height;

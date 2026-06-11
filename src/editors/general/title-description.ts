@@ -21,34 +21,10 @@
 
 import { findCopyWrap, findEnclosingInstanceByName } from '../../slide-machine';
 import { applyAccentRanges } from '../_shared/accent-ranges';
+import { findTextByName } from '../_shared/node-finders';
 import { setTextCharactersSafe } from '../_shared/fonts';
 
-/** Payload-shape voor `update-general` met section `titleDescription`. */
-export interface TitleDescriptionPayload {
-  heading?: string;
-  paragraph?: string;
-  /** Optional heading accent ranges to apply after a heading text write. */
-  headingDim?: Array<[number, number]>;
-  /** Explicit heading visibility — toggled by the iframe switch. */
-  headingVisible?: boolean;
-  /** Explicit paragraph visibility — toggled by the iframe switch. */
-  paragraphVisible?: boolean;
-}
-
-/**
- * Zoekt het eerste descendant-text-node met de opgegeven naam binnen
- * `scope` en retourneert het als TextNode of null. Bounded — blijft
- * binnen de CopyWrap-subtree.
- */
-function findTextByName(scope: SceneNode, name: string): TextNode | null {
-  if (!('findOne' in scope)) return null;
-  const found = scope.findOne((n: SceneNode) => {
-    return n.type === 'TEXT' && n.name === name;
-  });
-  if (found === null) return null;
-  if (found.type !== 'TEXT') return null;
-  return found;
-}
+import type { TitleDescriptionPayload } from '../../types';
 
 /**
  * Past een TitleDescription-payload toe op de CopyWrap van `slide`.

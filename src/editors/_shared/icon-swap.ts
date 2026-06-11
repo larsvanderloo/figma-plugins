@@ -130,8 +130,9 @@ function startHydrateFromStorage(): Promise<void> {
         }
       }
       if (added > 0) {
-        console.log(
-          '[icon-swap] hydrated prefValueCache from clientStorage: ' +
+        debugLog(
+          'icon-swap',
+          'hydrated prefValueCache from clientStorage: ' +
             String(added) +
             ' entries (total ' +
             String(prefValueCache.size) +
@@ -171,8 +172,9 @@ function persistPrefValueCacheToStorage(): void {
         serialized[key] = value;
       });
       await figma.clientStorage.setAsync(PREF_VALUE_STORAGE_KEY, serialized);
-      console.log(
-        '[icon-swap] persisted prefValueCache to clientStorage: ' +
+      debugLog(
+        'icon-swap',
+        'persisted prefValueCache to clientStorage: ' +
           String(prefValueCache.size) +
           ' entries',
       );
@@ -233,7 +235,7 @@ async function buildPrefValueCache(
       }
     }
   }
-  console.log('[icon-swap] prefValueCache built: ' + String(prefValueCache.size) + ' entries');
+  debugLog('icon-swap', 'prefValueCache built: ' + String(prefValueCache.size) + ' entries');
   debugLog('perf', 'icon-cache-build', {
     preferredCount: entries.length,
     componentCount: components.length,
@@ -284,7 +286,7 @@ export async function swapComponentByName(
 
   var cachedKey = prefValueCache.get(target);
   if (cachedKey === undefined) {
-    console.log('[icon-swap] swapComponentByName: "' + target + '" not in cache');
+    debugLog('icon-swap', 'swapComponentByName: "' + target + '" not in cache');
     debugLog('perf', 'icon-swap-direct', {
       icon: target,
       ok: false,
@@ -321,8 +323,9 @@ export async function swapComponentByName(
 
   try {
     instance.swapComponent(comp);
-    console.log(
-      '[icon-swap] swapComponentByName: swapped "' + instance.name + '" → "' + iconName + '"',
+    debugLog(
+      'icon-swap',
+      'swapComponentByName: swapped "' + instance.name + '" → "' + iconName + '"',
     );
     debugLog('perf', 'icon-swap-direct', {
       icon: target,
@@ -441,8 +444,9 @@ export async function primeIconCache(instance: InstanceNode): Promise<void> {
     if (preferred === null || preferred === undefined || preferred.length === 0) continue;
 
     // Start the background build and return the promise.
-    console.log(
-      '[icon-swap] primeIconCache: starting background build (' +
+    debugLog(
+      'icon-swap',
+      'primeIconCache: starting background build (' +
         String(preferred.length) +
         ' entries)',
     );
@@ -514,7 +518,7 @@ export async function trySwapViaInstanceProperty(
     return false;
   }
   if (main === null) {
-    console.log('[icon-swap] getMainComponentAsync → null for "' + instance.name + '"');
+    debugLog('icon-swap', 'getMainComponentAsync → null for "' + instance.name + '"');
     debugLog('perf', 'icon-swap-instance-property', {
       icon: target,
       instanceId: instance.id,
@@ -525,8 +529,9 @@ export async function trySwapViaInstanceProperty(
     });
     return false;
   }
-  console.log(
-    '[icon-swap] getMainComponentAsync → name: ' +
+  debugLog(
+    'icon-swap',
+    'getMainComponentAsync → name: ' +
       main.name +
       ', key: ' +
       main.key +
@@ -555,7 +560,7 @@ export async function trySwapViaInstanceProperty(
       freshMain.parent.type === 'COMPONENT_SET'
     ) {
       owner = freshMain.parent as ComponentSetNode;
-      console.log('[icon-swap] owner resolved via fresh import: ' + owner.name);
+      debugLog('icon-swap', 'owner resolved via fresh import: ' + owner.name);
     } else {
       // Laatste fallback: gebruik main zelf als owner.
       owner = main;
@@ -564,8 +569,9 @@ export async function trySwapViaInstanceProperty(
 
   const ownerDefs = owner.componentPropertyDefinitions;
   const ownerDefKeys = ownerDefs !== null && ownerDefs !== undefined ? Object.keys(ownerDefs) : [];
-  console.log(
-    '[icon-swap] owner type: ' +
+  debugLog(
+    'icon-swap',
+    'owner type: ' +
       owner.type +
       ', name: ' +
       owner.name +
@@ -600,8 +606,9 @@ export async function trySwapViaInstanceProperty(
     const preferred = def.preferredValues;
     const hasPreferred =
       preferred !== null && preferred !== undefined && preferred.length > 0;
-    console.log(
-      '[icon-swap] checking INSTANCE_SWAP prop "' +
+    debugLog(
+      'icon-swap',
+      'checking INSTANCE_SWAP prop "' +
         propKey +
         '" on "' +
         owner.name +
@@ -615,8 +622,9 @@ export async function trySwapViaInstanceProperty(
     // picker) kunnen de cache niet zelf zaaien; ze leunen op een eerdere
     // Card-swap die de gedeelde prefValueCache al populated heeft.
     if (hasPreferred && prefValueBuildPromise === null) {
-      console.log(
-        '[icon-swap] starting background prefValueCache build (' +
+      debugLog(
+        'icon-swap',
+        'starting background prefValueCache build (' +
           String(preferred!.length) +
           ' entries)',
       );
@@ -631,7 +639,7 @@ export async function trySwapViaInstanceProperty(
     // we hier als de cache leeg is.
     let cachedKey = prefValueCache.get(target);
     if (cachedKey === undefined && prefValueBuildPromise !== null) {
-      console.log('[icon-swap] cache miss for "' + target + '" — awaiting in-flight build');
+      debugLog('icon-swap', 'cache miss for "' + target + '" — awaiting in-flight build');
       waitedForBuild = true;
       try {
         await prefValueBuildPromise;
@@ -641,7 +649,7 @@ export async function trySwapViaInstanceProperty(
       cachedKey = prefValueCache.get(target);
     }
     if (cachedKey === undefined && prefValueCache.size === 0) {
-      console.log('[icon-swap] cache empty — awaiting clientStorage hydrate');
+      debugLog('icon-swap', 'cache empty — awaiting clientStorage hydrate');
       waitedForHydrate = true;
       await startHydrateFromStorage();
       cachedKey = prefValueCache.get(target);
@@ -654,8 +662,9 @@ export async function trySwapViaInstanceProperty(
       // geen eigen preferredValues had, zou een latere prop met wél een
       // gevulde lijst alsnog kunnen werken — `continue` naar volgende.
       if (hasPreferred) {
-        console.log(
-          '[icon-swap] "' +
+        debugLog(
+          'icon-swap',
+          '"' +
             iconName +
             '" (normalized: "' +
             target +
@@ -678,8 +687,9 @@ export async function trySwapViaInstanceProperty(
         });
         return false;
       }
-      console.log(
-        '[icon-swap] prop "' +
+      debugLog(
+        'icon-swap',
+        'prop "' +
           propKey +
           '" has no preferredValues and shared cache lacks "' +
           target +
@@ -688,7 +698,7 @@ export async function trySwapViaInstanceProperty(
       continue;
     }
 
-    console.log('[icon-swap] cache hit for "' + target + '" → key: ' + cachedKey);
+    debugLog('icon-swap', 'cache hit for "' + target + '" → key: ' + cachedKey);
 
     // Stap 7: import via gecachede key en swap.
     let imported: ComponentNode;
@@ -729,8 +739,9 @@ export async function trySwapViaInstanceProperty(
     patch[propKey] = imported.id;
     try {
       instance.setProperties(patch);
-      console.log(
-        '[icon-swap] icon swapped → ' + iconName + ' (via INSTANCE_SWAP prop "' + propKey + '")',
+      debugLog(
+        'icon-swap',
+        'icon swapped → ' + iconName + ' (via INSTANCE_SWAP prop "' + propKey + '")',
       );
       debugLog('perf', 'icon-swap-instance-property', {
         icon: target,
@@ -771,7 +782,7 @@ export async function trySwapViaInstanceProperty(
   }
 
   if (!foundInstanceSwap) {
-    console.log("[icon-swap] no INSTANCE_SWAP prop found on instance '" + instance.name + "'");
+    debugLog('icon-swap', "no INSTANCE_SWAP prop found on instance '" + instance.name + "'");
   }
 
   // Geen INSTANCE_SWAP-property gevonden.

@@ -9,15 +9,37 @@
 // Zie spec.md §3 (Data-modellen) en §5 (Bridge-messages).
 // ============================================================
 
+/** Payload-shape voor `update-general` met section `titleDescription`. */
+export interface TitleDescriptionPayload {
+  heading?: string;
+  paragraph?: string;
+  /** Optional heading accent ranges to apply after a heading text write. */
+  headingDim?: Array<[number, number]>;
+  /** Explicit heading visibility — toggled by the iframe switch. */
+  headingVisible?: boolean;
+  /** Explicit paragraph visibility — toggled by the iframe switch. */
+  paragraphVisible?: boolean;
+}
+
+/** Payload-shape voor `update-general` met section `badge`. */
+export interface BadgePayload {
+  label?: string;
+  icon?: string;
+  /**
+   * Volledig SVG-document voor het gekozen Lucide-icon. Aanwezig wanneer
+   * de iframe het uit `lucide-svgs.ts` heeft kunnen opzoeken. De sandbox
+   * gebruikt dit voor de slot-based swap; bij afwezigheid valt het
+   * terug op de legacy INSTANCE_SWAP-route.
+   */
+  iconSvg?: string;
+}
+
 // ============================================================
 // Table-editor types — v0.2.0 Slot-based (T34.1)
 //
 // Nieuwe types voor de Slot-gebaseerde TableWrap-rewrite (T34). De
 // plugin bouwt zelf FRAMEs + TEXT-nodes binnen de SlotNode, in plaats
 // van library-components of vaste varianten.
-//
-// Oudere TableData (v0.1.x) is als @deprecated gemarkeerd; de shape
-// blijft behouden voor backward-read-compat (T34.4 migration).
 // ============================================================
 
 /**
@@ -58,71 +80,6 @@ export interface TableCellModel {
   /** FRAME-id van de bestaande cell-FRAME binnen de row; leeg bij nieuwe cellen. */
   cellNodeId: string;
   value: string;
-}
-
-// ============================================================
-// Legacy table-editor types (T14 — 1-op-1 overgenomen uit welder-table v0.2.0)
-//
-// @deprecated — bewaard voor backward-read-compat (T34.4). Nieuwe code
-// gebruikt TableWrapModel / TableRowModel / TableCellModel hierboven.
-// ============================================================
-
-/** @deprecated — legacy v0.1.x shape, behouden voor backward-read-compat (T34.4). */
-export const TABLE_DATA_VERSION = 2 as const; // v2 = plugin-storage-compat met welder-table v0.2.0.
-
-/** @deprecated — legacy v0.1.x shape, behouden voor backward-read-compat (T34.4). */
-export type TableCellType = 'text' | 'number' | 'badge';
-
-/**
- * Badge-cel: vrij tekstlabel + gekozen Lucide-icon-naam. Geen state-map
- * (positief/neutraal/negatief is uit v0.1.0 verwijderd).
- * @deprecated — legacy v0.1.x shape, behouden voor backward-read-compat (T34.4).
- */
-export interface BadgeCell {
-  label: string;
-  icon: string;
-}
-
-/** @deprecated — legacy v0.1.x shape, behouden voor backward-read-compat (T34.4). */
-export interface TableColumn {
-  id: string;
-  label: string;
-  cellType: TableCellType;
-}
-
-/**
- * Cellenwaarde per kolom; null bij leeg.
- * @deprecated — legacy v0.1.x shape, behouden voor backward-read-compat (T34.4).
- */
-export type TableCellValue = string | number | BadgeCell | null;
-
-/** @deprecated — legacy v0.1.x shape, behouden voor backward-read-compat (T34.4). */
-export interface TableRow {
-  id: string;
-  cells: Record<string, TableCellValue>;
-}
-
-/** @deprecated — legacy v0.1.x shape, behouden voor backward-read-compat (T34.4). */
-export type TableSize = 'small' | 'medium' | 'large' | 'fill';
-
-/** @deprecated — legacy v0.1.x shape, behouden voor backward-read-compat (T34.4). */
-export type TextSize = 'small' | 'medium' | 'large' | 'xl';
-
-/**
- * @deprecated — legacy v0.1.x shape, behouden voor backward-read-compat (T34.4).
- *
- * Gebruik TableWrapModel voor nieuwe code (T34.2+).
- */
-export interface TableData {
-  version: number; // TABLE_DATA_VERSION
-  theme: 'orange' | 'blue';
-  size: TableSize;
-  textSize: TextSize;
-  columns: TableColumn[]; // max 6
-  rows: TableRow[]; // effectieve output, bepaald door activeDataTab
-  manualRows: TableRow[];
-  csvRows: TableRow[];
-  activeDataTab: 'manual' | 'csv';
 }
 
 // ============================================================
@@ -406,8 +363,14 @@ export type UIToPluginMessage =
   | {
       type: 'update-general';
       slideId: string;
-      section: 'titleDescription' | 'badge' | 'image';
-      payload: unknown;
+      section: 'titleDescription';
+      payload: TitleDescriptionPayload;
+    }
+  | {
+      type: 'update-general';
+      slideId: string;
+      section: 'badge';
+      payload: BadgePayload;
     }
   | {
       /**

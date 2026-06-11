@@ -23,6 +23,8 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
+import { debugLog } from '../../debug';
+
 const SLOT_NAME = 'icon-slot';
 
 /**
@@ -44,8 +46,9 @@ function findActiveIconSlot(root: InstanceNode): SlotNode | null {
   const all = root.findAll(function (n: SceneNode) {
     return n.type === 'SLOT' && n.name === SLOT_NAME;
   });
-  console.log(
-    '[icon-slot] findActiveIconSlot on "' + root.name + '" → ' + all.length + ' candidate(s)',
+  debugLog(
+    'icon-slot',
+    'findActiveIconSlot on "' + root.name + '" → ' + all.length + ' candidate(s)',
   );
   if (all.length === 0) return null;
   for (let i = 0; i < all.length; i++) {
@@ -62,8 +65,9 @@ function findActiveIconSlot(root: InstanceNode): SlotNode | null {
       }
       cursor = cursor.parent;
     }
-    console.log(
-      '[icon-slot]   #' + i + ' parent="' + (candidate.parent !== null ? candidate.parent.name : 'null') +
+    debugLog(
+      'icon-slot',
+      '  #' + i + ' parent="' + (candidate.parent !== null ? candidate.parent.name : 'null') +
         '" children=' + candidate.children.length + ' visible=' + visible +
         (visible ? '' : ' (hidden by "' + firstInvisibleName + '")'),
     );
@@ -71,7 +75,7 @@ function findActiveIconSlot(root: InstanceNode): SlotNode | null {
   }
   // Fallback: take the first slot even if hidden, so callers can still
   // apply a fresh icon when no variant currently exposes one.
-  console.log('[icon-slot] no visible slot — falling back to slot #0');
+  debugLog('icon-slot', 'no visible slot — falling back to slot #0');
   const first = all[0];
   return first.type === 'SLOT' ? (first as SlotNode) : null;
 }
