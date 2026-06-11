@@ -287,9 +287,41 @@ export interface TimelineItem {
   paragraph: string;
 }
 
+/**
+ * Eén InstructorCard binnen een CardWrap — de Instructor-variant van de
+ * Card-slot. Foto + naam komen uit de `Instructor` VARIANT van de
+ * InstructorCard-component-set (designer-beheerd); de plugin switcht
+ * alleen de variant en bewerkt de list-item-teksten.
+ */
+export interface InstructorCardItem {
+  /** Node-id van de InstructorCard-instance binnen CardWrap. */
+  cardNodeId: string;
+  /** Huidige `Instructor` VARIANT-waarde (bv. 'Gijs', 'Myra'). */
+  instructor: string;
+  /**
+   * Beschikbare `Instructor`-variant-opties uit de component-set, in
+   * library-volgorde. Leeg wanneer de set onbereikbaar is — de UI toont
+   * de picker dan disabled.
+   */
+  instructorOptions: string[];
+  /** Bewerkbare list-item-teksten binnen de card, in document-volgorde. */
+  items: string[];
+  /**
+   * Node-zichtbaarheid van de card. Hidden cards collapsen uit de
+   * CardWrap-auto-layout (overige cards reflowen); de scan blijft ze
+   * meenemen zodat de toggle ze terug kan zetten.
+   */
+  visible: boolean;
+}
+
 export interface ContentItems {
   cardWrapId: string;
   cards: CardItem[];
+  /**
+   * InstructorCards (Instructor-variant van de Card-slot). Lege array
+   * wanneer de CardWrap geen InstructorCards bevat.
+   */
+  instructorCards: InstructorCardItem[];
   /**
    * Timeline-items (spec §13 T31). Lege array wanneer de slide geen
    * TimelineWrap heeft. Slides met alleen TimelineWrap hebben een lege
@@ -406,6 +438,23 @@ export type UIToPluginMessage =
         visualHash: string;
         /** `Default` = filled card; `Outline` = bordered card. */
         style: 'Default' | 'Outline';
+      }>;
+    }
+  | {
+      /**
+       * Muteert één InstructorCard: switcht de `Instructor` VARIANT
+       * (foto + naam volgen de variant) en/of de list-item-teksten.
+       * `items` is de volledige lijst in document-volgorde; de sandbox
+       * skipt ongewijzigde teksten per index.
+       */
+      type: 'update-instructor-card';
+      slideId: string;
+      cardNodeId: string;
+      payload: Partial<{
+        instructor: string;
+        items: string[];
+        /** Card-zichtbaarheid — hidden collapst uit de CardWrap-auto-layout. */
+        visible: boolean;
       }>;
     }
   | {
@@ -693,4 +742,16 @@ export type PluginToUIMessage =
       fillW: number;
       /** Height of the card's image-slot in Figma pixels. 0 = unknown. */
       fillH: number;
+    }
+  /**
+   * Na een instructor-switch: de list-teksten zijn sandbox-side gereset
+   * naar de defaults van de nieuwe variant. Gericht patch-bericht zodat
+   * de iframe alleen deze card bijwerkt — een volledige slide-rescan
+   * (incl. preview-exports) is hier onnodig traag.
+   */
+  | {
+      type: 'instructor-card-updated';
+      cardNodeId: string;
+      instructor: string;
+      items: string[];
     };

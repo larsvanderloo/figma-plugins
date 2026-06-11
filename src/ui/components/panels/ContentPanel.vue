@@ -1,13 +1,16 @@
 <script setup lang="ts">
 import CardItemEditor from '../editors/CardItemEditor.vue';
+import InstructorCardEditor from '../editors/InstructorCardEditor.vue';
 import TimelineItemEditor from '../editors/TimelineItemEditor.vue';
 import type { TimelineItem } from '../../../types';
 import { useCardEditor } from '../../composables/useCardEditor';
+import { useInstructorEditor } from '../../composables/useInstructorEditor';
 import { useTimelineEditor } from '../../composables/useTimelineEditor';
 import EditorWrapper from '../ui/EditorWrapper.vue';
 import WCard from '../ui/WCard.vue';
 
 const cardEditor = useCardEditor();
+const instructorEditor = useInstructorEditor();
 const timelineEditor = useTimelineEditor();
 type CardSize = 'NO_ICON' | 'SM' | 'LG';
 
@@ -29,6 +32,7 @@ function onCardSizeChange(value: string | number | undefined): void {
     <UEmpty
       v-if="
         cardEditor.cards.length === 0 &&
+        instructorEditor.items.length === 0 &&
         timelineEditor.items.length === 0
       "
       icon="i-lucide-layers"
@@ -94,6 +98,22 @@ function onCardSizeChange(value: string | number | undefined): void {
             :icon-disabled="cardEditor.cardSize === 'NO_ICON'"
             @update:model-value="cardEditor.update"
             @upload-visual="(bytes) => cardEditor.uploadVisual(card.cardNodeId, bytes)"
+          />
+        </template>
+      </WCard>
+    </EditorWrapper>
+
+    <EditorWrapper v-if="instructorEditor.items.length > 0" title="Instructeurs">
+      <WCard>
+        <template
+          v-for="(card, idx) in instructorEditor.items"
+          :key="card.cardNodeId"
+        >
+          <USeparator v-if="idx > 0" />
+          <InstructorCardEditor
+            :model-value="card"
+            :index="idx + 1"
+            @update:model-value="instructorEditor.update"
           />
         </template>
       </WCard>

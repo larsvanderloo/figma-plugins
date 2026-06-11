@@ -231,6 +231,19 @@ bridge.onMessage((msg) => {
     initializing.value = false;
     return;
   }
+  if (msg.type === 'instructor-card-updated') {
+    // Gericht patch-bericht na een instructor-switch: de sandbox heeft
+    // de list-teksten gereset naar de defaults van de nieuwe variant.
+    const instructorList = view.state.content?.instructorCards ?? null;
+    if (instructorList !== null) {
+      const cardIdx = instructorList.findIndex((c) => c.cardNodeId === msg.cardNodeId);
+      if (cardIdx >= 0) {
+        instructorList[cardIdx].instructor = msg.instructor;
+        instructorList[cardIdx].items = [...msg.items];
+      }
+    }
+    return;
+  }
   if (msg.type === 'stale-icons') {
     const cardCount = msg.cards.length;
     const badgeCount = msg.badges.length;

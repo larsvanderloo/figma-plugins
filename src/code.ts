@@ -37,6 +37,13 @@ import { applyBadge } from './editors/general/badge';
 import { applyImage } from './editors/general/image';
 import { findImageSlot, findTextByName } from './editors/_shared/node-finders';
 import { applyCard, applyCardVisual } from './editors/content/card';
+import {
+  applyInstructorCard,
+  findInstructorListTexts,
+  readInstructorVariant,
+  readInstructorOptions,
+  INSTRUCTOR_CARD_NODE_NAME,
+} from './editors/content/instructor';
 import { normalizeIconKey, LUCIDE_SLUG_RE, primeIconCache } from './editors/_shared/icon-swap';
 import { applyTable, scanTableSlot } from './editors/table/renderer';
 import { importCSV } from './editors/table/csv';
@@ -50,6 +57,7 @@ import type {
   ContentItems,
   GraphItems,
   CardItem,
+  InstructorCardItem,
   TimelineItem,
   TableWrapModel,
   UIToPluginMessage,
@@ -630,6 +638,14 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
         }
       }
     }
+    debugLog('scan', 'titleDescription', {
+      slideId: slide.id,
+      headingChars: heading.length,
+      paragraph: paragraph === null ? null : paragraph.length,
+      headingVisible: headingVisible,
+      paragraphVisible: paragraphVisible,
+      showParagraphProp: readBooleanProperty(copyWrap, 'showParagraph'),
+    });
 
     // Dim-range scan (spec §13 T30) — heading-only, silent-fail naar null
     // wanneer de library onbereikbaar is of het heading-node ontbreekt.
@@ -1115,6 +1131,52 @@ function extractCopyWrapItems(scope: InstanceNode): TimelineItem[] {
 }
 
 /**
+ * Extraheert InstructorCard-instances binnen een wrapper-scope. De
+ * `Instructor` VARIANT + opties komen uit de component-set (designer-
+ * beheerd, picker-bron in de UI); de list-item-teksten zijn de
+ * bewerkbare content. Async vanwege getMainComponentAsync (opties) —
+ * cards worden parallel gelezen (Promise.all).
+ */
+async function extractInstructorCards(scope: InstanceNode): Promise<InstructorCardItem[]> {
+  if (!('findAll' in scope)) return [];
+  const found = scope.findAll(function (n: SceneNode) {
+    return n.type === 'INSTANCE' && n.name === INSTRUCTOR_CARD_NODE_NAME;
+  });
+  const reads: Array<Promise<InstructorCardItem | null>> = [];
+  for (let i = 0; i < found.length; i++) {
+    const node = found[i];
+    if (node.type !== 'INSTANCE') continue;
+    const card = node as InstanceNode;
+    reads.push(
+      (async function (): Promise<InstructorCardItem | null> {
+        const instructor = readInstructorVariant(card);
+        if (instructor === null) return null; // geen Instructor-variant: skip
+        const options = await readInstructorOptions(card);
+        const textNodes = findInstructorListTexts(card);
+        const items: string[] = [];
+        for (let t = 0; t < textNodes.length; t++) {
+          items.push(textNodes[t].characters);
+        }
+        return {
+          cardNodeId: card.id,
+          instructor: instructor,
+          instructorOptions: options,
+          items: items,
+          visible: card.visible !== false,
+        };
+      })(),
+    );
+  }
+  const resolved = await Promise.all(reads);
+  const out: InstructorCardItem[] = [];
+  for (let r = 0; r < resolved.length; r++) {
+    const item = resolved[r];
+    if (item !== null) out.push(item);
+  }
+  return out;
+}
+
+/**
  * T31.2: Polymorphic scan van CardWrap en TimelineWrap.
  *
  * TimelineWrap kan in productie bevatten:
@@ -1123,7 +1185,7 @@ function extractCopyWrapItems(scope: InstanceNode): TimelineItem[] {
  *
  * Beide worden gevonden via findAll (recursieve descendant-walk, bounded tot wrapper-scope).
  */
-function scanContent(slide: InstanceNode): ContentItems | null {
+async function scanContent(slide: InstanceNode): Promise<ContentItems | null> {
   const cardWrap = findCardWrap(slide);
   const timelineWrap = findTimelineWrap(slide);
 
@@ -1131,14 +1193,21 @@ function scanContent(slide: InstanceNode): ContentItems | null {
   if (cardWrap === null && timelineWrap === null) return null;
 
   const cards: CardItem[] = [];
+  const instructorCards: InstructorCardItem[] = [];
   const timelineItems: TimelineItem[] = [];
 
   // CardWrap: Cards zijn directe children (Slide Machine-pattern); ook hier
   // gebruiken we extractCards zodat de helper consistent en testbaar blijft.
+  // InstructorCards (Instructor-variant van de Card-slot) leven in dezelfde
+  // CardWrap maar heten 'InstructorCard' — aparte extractie.
   if (cardWrap !== null) {
     const fromCardWrap = extractCards(cardWrap, slide);
     for (let i = 0; i < fromCardWrap.length; i++) {
       cards.push(fromCardWrap[i]);
+    }
+    const instructorsFromWrap = await extractInstructorCards(cardWrap);
+    for (let k = 0; k < instructorsFromWrap.length; k++) {
+      instructorCards.push(instructorsFromWrap[k]);
     }
   }
 
@@ -1160,7 +1229,9 @@ function scanContent(slide: InstanceNode): ContentItems | null {
     });
   }
 
-  if (cards.length === 0 && timelineItems.length === 0) return null;
+  if (cards.length === 0 && instructorCards.length === 0 && timelineItems.length === 0) {
+    return null;
+  }
 
   // `cardWrapId` blijft semantisch gebonden aan CardWrap wanneer aanwezig;
   // bij slide-met-alleen-TimelineWrap vallen we terug op de TimelineWrap-id.
@@ -1176,6 +1247,7 @@ function scanContent(slide: InstanceNode): ContentItems | null {
   return {
     cardWrapId: wrapId,
     cards: cards,
+    instructorCards: instructorCards,
     timelineItems: timelineItems,
   };
 }
@@ -1409,7 +1481,7 @@ async function scanSlide(slide: InstanceNode): Promise<SlideScan> {
   const generalMs = Date.now() - generalStartedAt;
 
   const contentStartedAt = Date.now();
-  const content = scanContent(slide);
+  const content = await scanContent(slide);
   const contentMs = Date.now() - contentStartedAt;
 
   const graphsStartedAt = Date.now();
@@ -2371,6 +2443,45 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
       ok: true,
       targetId: msg.cardNodeId,
     });
+    return;
+  }
+
+  if (msg.type === 'update-instructor-card') {
+    const slide = findSlideById(msg.slideId);
+    if (slide === null) {
+      postToUI({
+        type: 'target-updated',
+        ok: false,
+        error: 'Slide not found: ' + msg.slideId,
+      });
+      return;
+    }
+    figma.commitUndo();
+    markSelfWrite();
+    const resetItems = await applyInstructorCard(slide, {
+      cardNodeId: msg.cardNodeId,
+      instructor: msg.payload.instructor,
+      items: msg.payload.items,
+      visible: msg.payload.visible,
+    });
+    markSelfWrite();
+    postToUI({
+      type: 'target-updated',
+      ok: true,
+      targetId: msg.cardNodeId,
+    });
+    if (resetItems !== null && typeof msg.payload.instructor === 'string') {
+      // Instructor-switch reset de list-teksten naar de defaults van de
+      // nieuwe variant — de sandbox is hier de bron, niet de iframe.
+      // Gericht patch-bericht: een volledige emitSlideLoaded (incl.
+      // preview-exports + icon-prime) maakte de switch merkbaar traag.
+      postToUI({
+        type: 'instructor-card-updated',
+        cardNodeId: msg.cardNodeId,
+        instructor: msg.payload.instructor,
+        items: resetItems,
+      });
+    }
     return;
   }
 

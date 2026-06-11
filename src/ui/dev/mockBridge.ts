@@ -87,6 +87,26 @@ export function installMockBridge(): void {
             style: 'Default',
           },
         ],
+        instructorCards: [
+          {
+            cardNodeId: 'instructor-1',
+            instructor: 'Gijs',
+            instructorOptions: ['Gijs', 'Myra', 'Sanne'],
+            items: [
+              'Sterke achtergrond in recruitment',
+              'Houdt liever de achterdeur dicht',
+              'Zal je uitdagen om buiten de paden te denken',
+            ],
+            visible: true,
+          },
+          {
+            cardNodeId: 'instructor-2',
+            instructor: 'Myra',
+            instructorOptions: ['Gijs', 'Myra', 'Sanne'],
+            items: ['Specialist arbeidsrecht', 'Praktijkgericht', 'Scherpe humor'],
+            visible: false,
+          },
+        ],
         timelineItems: [
           {
             copyWrapNodeId: 'timeline-1',
