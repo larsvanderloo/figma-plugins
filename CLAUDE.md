@@ -7,9 +7,11 @@ A single-plugin repo. Targets **Figma design** and **Figma Slides** (see `manife
 ```
 manifest.json                    Figma plugin manifest (also: manifest.dev.json / manifest.debug.json variants)
 src/
-  code.ts                        plugin-sandbox entry (runs figma.*)
+  code.ts                        plugin-sandbox entry: bootstrap, message dispatch, listeners (runs figma.*)
+  sandbox/                       sandbox infra: bridge.ts (postToUI + self-write window), slides.ts (slide page cache + finders), runtime.ts (editor-type/runtime info)
+  scan/slide-scan.ts             read side: scans a slide into the typed SlideScan the UI renders
   ui/                            iframe Vue app (Vue 3 + Nuxt UI v4)
-  editors/                       feature editors composed by the UI (shared helpers in editors/_shared/)
+  editors/                       write side: feature editors dispatched from code.ts (shared helpers in editors/_shared/)
   csv/                           CSV tokenizer (consumed by table editor)
   slide-machine.ts               slide-build state machine
   debug.ts                       debugLog helpers, active only in PLUGIN_DEBUG=1 builds
@@ -44,7 +46,7 @@ Loadable via Figma → Plugins → Development → Import plugin from manifest �
 
 The Figma plugin runtime has two threads with strict separation. Crossing them outside the message bus is a blocking review comment.
 
-**`src/code.ts` (Figma sandbox, runs `figma.*`)**
+**Sandbox bundle (Figma sandbox, runs `figma.*`) — `src/code.ts` plus everything it imports: `sandbox/`, `scan/`, `editors/`, `slide-machine.ts`**
 
 - No DOM — no `document`, `window`, `localStorage`, `fetch` against arbitrary URLs (only `allowedDomains` from manifest; currently `["none"]`).
 - ES2017 target only — no optional chaining, nullish coalescing, or catch-without-binding in the sandbox bundle. The UI bundle (Vite) may use ES2020+.
