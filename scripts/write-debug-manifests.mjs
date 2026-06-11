@@ -1,6 +1,6 @@
-import { watchFile } from 'node:fs';
 import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { createSyncRunner, readPackageVersion, watchPathsForChange } from './lib.mjs';
 
 const rootDir = process.cwd();
 const watchMode = process.argv.includes('--watch');
@@ -15,14 +15,6 @@ const manifests = [
     target: 'manifest-cache/dev/manifest.json',
   },
 ];
-
-async function readPackageVersion() {
-  const pkg = JSON.parse(await readFile(path.resolve(rootDir, 'package.json'), 'utf8'));
-  if (typeof pkg.version !== 'string' || pkg.version.length === 0) {
-    throw new Error('package.json must contain a non-empty version string');
-  }
-  return pkg.version;
-}
 
 function assertLocalManifestPath(manifestPath, field) {
   if (!manifestPath || typeof manifestPath !== 'string') {
@@ -59,7 +51,7 @@ async function assertCopiedBundleVersion(relativePath, version) {
 
 async function writeDebugManifests() {
   const watchedSources = new Set();
-  const version = await readPackageVersion();
+  const version = await readPackageVersion(path.resolve(rootDir, 'package.json'));
 
   for (const { source, target } of manifests) {
     const sourcePath = path.resolve(rootDir, source);
@@ -85,41 +77,11 @@ async function writeDebugManifests() {
 const watchedSources = await writeDebugManifests();
 
 if (watchMode) {
-  let syncing = false;
-  let needsSync = false;
-
-  async function sync() {
-    if (syncing) {
-      needsSync = true;
-      return;
-    }
-
-    syncing = true;
-    try {
-      await writeDebugManifests();
-    } catch (error) {
-      console.error('[debug-manifest] sync failed', error);
-    } finally {
-      syncing = false;
-      if (needsSync) {
-        needsSync = false;
-        await sync();
-      }
-    }
-  }
-
-  for (const sourcePath of watchedSources) {
-    watchFile(sourcePath, { interval: 500 }, (current, previous) => {
-      if (current.mtimeMs === previous.mtimeMs && current.size === previous.size) {
-        return;
-      }
-
-      setTimeout(() => {
-        void sync();
-      }, 200);
-    });
-  }
-
+  watchPathsForChange(
+    [...watchedSources],
+    200,
+    createSyncRunner(writeDebugManifests, '[debug-manifest]'),
+  );
   console.log('[debug-manifest] watching generated manifest assets');
   await new Promise(() => {});
 }
