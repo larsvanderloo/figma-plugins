@@ -23,7 +23,7 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { debugLog } from '../../debug';
+import { debugLog } from '../../../shared/debug';
 
 const SLOT_NAME = 'icon-slot';
 

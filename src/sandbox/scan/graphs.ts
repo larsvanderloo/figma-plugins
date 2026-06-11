@@ -8,7 +8,7 @@
 // ============================================================
 
 import { findTableWrap, findTableSlot } from '../slide-machine';
-import { GraphItems, TableWrapModel } from '../types';
+import { GraphItems, TableWrapModel } from '../../shared/types';
 import { applyTable, scanTableSlot } from '../editors/table/renderer';
 
 export function scanGraphs(slide: InstanceNode): GraphItems | null {

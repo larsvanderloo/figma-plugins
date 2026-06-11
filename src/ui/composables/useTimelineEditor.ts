@@ -3,7 +3,7 @@
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
-import type { TimelineItem } from '../../types';
+import type { TimelineItem } from '../../shared/types';
 
 export function useTimelineEditor() {
   const view = usePluginView();

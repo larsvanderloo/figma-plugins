@@ -12,7 +12,7 @@ import { getRuntimeInfo } from '../runtime';
 import { postToUI } from '../bridge';
 import { findFocusedWelderSlide } from '../slides';
 import { emitSlideLoaded } from '../session';
-import type { UIToPluginMessage } from '../../types';
+import type { UIToPluginMessage } from '../../shared/types';
 
 /** clientStorage key for the user's recently-picked icon names (max 8). */
 const ICON_RECENTS_KEY = 'icon-recents';

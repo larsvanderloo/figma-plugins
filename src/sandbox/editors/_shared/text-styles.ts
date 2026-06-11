@@ -4,7 +4,7 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { debugLog } from '../../debug';
+import { debugLog } from '../../../shared/debug';
 
 // Library-subscribed styles can't be enumerated by name — only local
 // styles can. To resolve one we have to read its id off a TextNode that

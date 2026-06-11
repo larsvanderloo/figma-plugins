@@ -9,15 +9,15 @@
 // ============================================================
 
 import { findCardWrap, findTimelineWrap } from '../slide-machine';
-import { ContentItems, CardItem, InstructorCardItem, TimelineItem } from '../types';
+import { ContentItems, CardItem, InstructorCardItem, TimelineItem } from '../../shared/types';
 import {
   findInstructorListTexts,
   readInstructorVariant,
   readInstructorOptions,
   INSTRUCTOR_CARD_NODE_NAME,
 } from '../editors/content/instructor';
-import { debugLog } from '../debug';
-import { isDevModeRuntime } from '../sandbox/runtime';
+import { debugLog } from '../../shared/debug';
+import { isDevModeRuntime } from '../runtime';
 import {
   readTextByName,
   readCardIcon,

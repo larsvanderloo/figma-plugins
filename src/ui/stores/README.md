@@ -9,7 +9,7 @@ Plugin-local Pinia stores for the welder-editor iframe. One store per cross-comp
 - **Store id** is the camelCase name without `use` prefix: `pluginView`, `iconRecents`. Used by Pinia devtools.
 - **Return shape** is `{ state, ...actions }` where `state` is a `reactive<...>` object. Consumers access via `view.state.X` and `view.someAction()`. Keeping `state` nested means future schema changes only touch the store file, not every consumer.
 - **No async in actions.** Bridge-sends (postMessage to the Figma sandbox) live in components or composables, not stores. Stores stay thread-agnostic and easy to test.
-- **Scope.** These stores hold state that lives only in the iframe. State that needs to round-trip to the sandbox goes through the message-bus contract in `src/types.ts`, not through the stores.
+- **Scope.** These stores hold state that lives only in the iframe. State that needs to round-trip to the sandbox goes through the message-bus contract in `src/shared/types.ts`, not through the stores.
 
 ## When to add a third store
 

@@ -21,8 +21,8 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import type { TableWrapModel, TableRowModel, TableCellModel } from '../../types';
-import { tableWidthsForSurface } from '../../constants';
+import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
+import { tableWidthsForSurface } from '../../../shared/constants';
 import { findEnclosingSurfaceName } from '../../slide-machine';
 import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from '../_shared/accent-vars';
 

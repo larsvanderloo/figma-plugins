@@ -8,7 +8,7 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { GeneralSections, ThemeMode } from '../types';
+import { GeneralSections, ThemeMode } from '../../shared/types';
 
 /**
  * Discover every variable collection named "Theme" that the slide is

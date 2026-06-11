@@ -23,9 +23,9 @@ import { findCopyWrap, findEnclosingInstanceByName } from '../../slide-machine';
 import { applyAccentRanges } from '../_shared/accent-ranges';
 import { findTextByName } from '../_shared/node-finders';
 import { setTextCharactersSafe } from '../_shared/fonts';
-import { debugLog } from '../../debug';
+import { debugLog } from '../../../shared/debug';
 
-import type { TitleDescriptionPayload } from '../../types';
+import type { TitleDescriptionPayload } from '../../../shared/types';
 
 /**
  * Past een TitleDescription-payload toe op de CopyWrap van `slide`.

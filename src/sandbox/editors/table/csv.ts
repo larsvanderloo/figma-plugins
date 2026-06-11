@@ -20,9 +20,9 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import type { TableWrapModel, TableRowModel, TableCellModel } from '../../types';
-import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../constants';
-import { tokenize } from '../../csv';
+import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
+import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../shared/constants';
+import { tokenize } from '../../../shared/csv';
 import { applyTable } from './renderer';
 
 type WidthKey = 'sm' | 'md' | 'lg';

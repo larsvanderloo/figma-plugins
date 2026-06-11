@@ -9,9 +9,9 @@
 
 import { postToUI } from '../bridge';
 import { findSlideById } from '../slides';
-import { applyTable } from '../../editors/table/renderer';
-import { importCSV } from '../../editors/table/csv';
-import type { UIToPluginMessage } from '../../types';
+import { applyTable } from '../editors/table/renderer';
+import { importCSV } from '../editors/table/csv';
+import type { UIToPluginMessage } from '../../shared/types';
 
 export async function handleUpdateTable(
   msg: Extract<UIToPluginMessage, { type: 'update-table' }>,

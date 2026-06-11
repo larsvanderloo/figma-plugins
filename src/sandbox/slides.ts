@@ -10,9 +10,9 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { findSlidesOnPage, isSlide, slideSummary } from '../slide-machine';
-import { SlideSummary } from '../types';
-import { debugLog } from '../debug';
+import { findSlidesOnPage, isSlide, slideSummary } from './slide-machine';
+import { SlideSummary } from '../shared/types';
+import { debugLog } from '../shared/debug';
 
 
 interface SlidePageCache {

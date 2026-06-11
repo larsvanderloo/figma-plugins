@@ -10,11 +10,12 @@
 // ============================================================
 
 import { findImageSlot } from '../editors/_shared/node-finders';
-import { postToUI } from '../sandbox/bridge';
+import { postToUI } from '../bridge';
 import { SlideScan } from './slide-scan';
 
 // Module-level: last-sent imageHash per imageWrapId — voorkomt re-posts op
-// ongerelateerde documentchanges. Gedeeld met de upload-image handler in code.ts.
+// ongerelateerde documentchanges. Gedeeld met de upload-image handler in
+// handlers/image.ts.
 export var lastSentPreviewHash: Map<string, string> = new Map();
 
 /**

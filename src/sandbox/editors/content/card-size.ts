@@ -12,8 +12,8 @@
 // ============================================================
 
 import { readCardTypeVariant } from '../../scan/readers';
-import { markSelfWrite } from '../../sandbox/bridge';
-import { debugLog } from '../../debug';
+import { markSelfWrite } from '../../bridge';
+import { debugLog } from '../../../shared/debug';
 
 export interface CardSizeOptions {
   /** Opgeloste text-style-id voor de card-heading (zie text-styles.ts). */

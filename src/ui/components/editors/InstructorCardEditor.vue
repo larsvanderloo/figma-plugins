@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { InstructorCardItem } from '../../../types';
+import type { InstructorCardItem } from '../../../shared/types';
 import WTextarea from '../ui/WTextarea.vue';
 
 interface Props {

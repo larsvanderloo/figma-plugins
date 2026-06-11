@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { TimelineItem } from '../../../types';
+import type { TimelineItem } from '../../../shared/types';
 import WInput from '../ui/WInput.vue';
 import WTextarea from '../ui/WTextarea.vue';
 

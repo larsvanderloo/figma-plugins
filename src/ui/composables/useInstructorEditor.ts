@@ -5,7 +5,7 @@
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
-import type { InstructorCardItem } from '../../types';
+import type { InstructorCardItem } from '../../shared/types';
 
 export function useInstructorEditor() {
   const view = usePluginView();

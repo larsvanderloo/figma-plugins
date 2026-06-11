@@ -8,16 +8,16 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { debugLog } from '../../debug';
+import { debugLog } from '../../shared/debug';
 import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideById } from '../slides';
-import { findCopyWrap } from '../../slide-machine';
-import { applyTitleDescription } from '../../editors/general/title-description';
-import { applyBadge } from '../../editors/general/badge';
-import { applyAccentRanges } from '../../editors/_shared/accent-ranges';
-import { findVisibleTextNodeByName, resolveTypHeadingSizeHost } from '../../scan/readers';
-import { refreshTablesOnSlide } from '../../scan/graphs';
-import type { UIToPluginMessage } from '../../types';
+import { findCopyWrap } from '../slide-machine';
+import { applyTitleDescription } from '../editors/general/title-description';
+import { applyBadge } from '../editors/general/badge';
+import { applyAccentRanges } from '../editors/_shared/accent-ranges';
+import { findVisibleTextNodeByName, resolveTypHeadingSizeHost } from '../scan/readers';
+import { refreshTablesOnSlide } from '../scan/graphs';
+import type { UIToPluginMessage } from '../../shared/types';
 
 export async function handleUpdateGeneral(
   msg: Extract<UIToPluginMessage, { type: 'update-general' }>,

@@ -9,8 +9,8 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { PluginToUIMessage } from '../types';
-import { debugMessage } from '../debug';
+import { PluginToUIMessage } from '../shared/types';
+import { debugMessage } from '../shared/debug';
 
 export function postToUI(msg: PluginToUIMessage): void {
   debugMessage('plugin->ui', msg);

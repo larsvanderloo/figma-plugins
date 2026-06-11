@@ -34,7 +34,7 @@
 // ============================================================
 
 import { expandLucideNameVariants } from '../../lucide-aliases';
-import { debugLog } from '../../debug';
+import { debugLog } from '../../../shared/debug';
 
 // ============================================================
 // Name normalisation

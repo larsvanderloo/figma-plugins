@@ -9,7 +9,7 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import type { UIToPluginMessage } from '../../types';
+import type { UIToPluginMessage } from '../../shared/types';
 import {
   handleClose,
   handleResizeUi,

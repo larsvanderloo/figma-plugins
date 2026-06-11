@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { ThemeSection, ThemeMode } from '../../../types';
+import type { ThemeSection, ThemeMode } from '../../../shared/types';
 
 interface Props {
   theme: ThemeSection;

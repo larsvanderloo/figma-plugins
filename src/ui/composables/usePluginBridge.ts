@@ -25,8 +25,8 @@
 // ============================================================
 
 import { computed, getCurrentInstance, onUnmounted, ref, type ComputedRef } from 'vue';
-import { debugLog, debugMessage, isPluginDebugEnabled } from '../../debug';
-import type { PluginToUIMessage, UIToPluginMessage } from '../../types';
+import { debugLog, debugMessage, isPluginDebugEnabled } from '../../shared/debug';
+import type { PluginToUIMessage, UIToPluginMessage } from '../../shared/types';
 
 /** Handler voor een inkomend plugin-bericht. */
 type PluginMessageHandler = (msg: PluginToUIMessage) => void;

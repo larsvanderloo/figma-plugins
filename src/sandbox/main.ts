@@ -18,16 +18,16 @@
 // sandbox/session.ts.
 // ============================================================
 
-import uiHtml from '../dist/ui.html';
-import { REQUIRED_FONTS } from './constants';
-import { debugLog, debugMessage } from './debug';
-import { getRuntimeInfo, isDevModeRuntime } from './sandbox/runtime';
-import { postToUI } from './sandbox/bridge';
+import uiHtml from '../../dist/ui.html';
+import { REQUIRED_FONTS } from '../shared/constants';
+import { debugLog, debugMessage } from '../shared/debug';
+import { getRuntimeInfo, isDevModeRuntime } from './runtime';
+import { postToUI } from './bridge';
 import {
   findFocusedWelderSlide,
   getSlidesOnCurrentPage,
   invalidateSlidePageCache,
-} from './sandbox/slides';
+} from './slides';
 import {
   clearDisplayedSlide,
   clearPendingSlideEmitTimers,
@@ -35,12 +35,12 @@ import {
   lastDisplayedSlideId,
   postSlideContent,
   postSlideSummary,
-} from './sandbox/session';
-import { messageHandlers } from './sandbox/handlers';
+} from './session';
+import { messageHandlers } from './handlers';
 import { findSlidesOnPage, isSlide } from './slide-machine';
 import { primeIconCache } from './editors/_shared/icon-swap';
 import { readBadgeIcon, readCardIcon } from './scan/readers';
-import type { UIToPluginMessage } from './types';
+import type { UIToPluginMessage } from '../shared/types';
 
 // ============================================================
 // Bootstrap

@@ -28,9 +28,9 @@ import {
 import { replaceIconViaSlot } from '../_shared/icon-slot';
 import { findNestedIconInstance, findTextByName } from '../_shared/node-finders';
 import { setTextCharactersSafe } from '../_shared/fonts';
-import { debugLog } from '../../debug';
+import { debugLog } from '../../../shared/debug';
 
-import type { BadgePayload } from '../../types';
+import type { BadgePayload } from '../../../shared/types';
 
 // ============================================================
 // Text helpers  (label + icon-font fallback)

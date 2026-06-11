@@ -18,9 +18,9 @@
 //   - Geen mutaties, geen async calls, geen figma.ui-interactie.
 // ============================================================
 
-import type { SlideSummary } from './types';
-import type { SurfaceSignature } from './constants';
-import { SURFACE_SIGNATURES } from './constants';
+import type { SlideSummary } from '../shared/types';
+import type { SurfaceSignature } from '../shared/constants';
+import { SURFACE_SIGNATURES } from '../shared/constants';
 
 // ============================================================
 // Slide-detectie

@@ -3,7 +3,7 @@
 // generate-lucide-aliases.mjs
 //
 // Reads `@iconify-json/lucide/icons.json` and writes
-// `src/lucide-aliases.ts`, a small bundle (~7 KB) containing
+// `src/sandbox/lucide-aliases.ts`, a small bundle (~7 KB) containing
 // only the alias mappings. The sandbox imports this to make the
 // icon-swap cache alias-aware: a library component named after an
 // old Lucide name (e.g., `badge-help`) is also registered under its
@@ -24,7 +24,7 @@ import { dirname, resolve } from 'node:path';
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = here;
 const lucidePath = resolve(repoRoot, 'node_modules/@iconify-json/lucide/icons.json');
-const outPath = resolve(repoRoot, 'src/lucide-aliases.ts');
+const outPath = resolve(repoRoot, 'src/sandbox/lucide-aliases.ts');
 
 const data = JSON.parse(readFileSync(lucidePath, 'utf8'));
 const aliases = data.aliases ?? {};

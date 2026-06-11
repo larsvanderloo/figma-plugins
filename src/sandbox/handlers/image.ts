@@ -10,12 +10,12 @@
 
 import { postToUI } from '../bridge';
 import { findSlideAncestor } from '../slides';
-import { findCardWrap } from '../../slide-machine';
-import { applyImage } from '../../editors/general/image';
-import { applyCardVisual } from '../../editors/content/card';
-import { findImageSlot } from '../../editors/_shared/node-finders';
-import { lastSentPreviewHash } from '../../scan/previews';
-import type { UIToPluginMessage } from '../../types';
+import { findCardWrap } from '../slide-machine';
+import { applyImage } from '../editors/general/image';
+import { applyCardVisual } from '../editors/content/card';
+import { findImageSlot } from '../editors/_shared/node-finders';
+import { lastSentPreviewHash } from '../scan/previews';
+import type { UIToPluginMessage } from '../../shared/types';
 
 export async function handleUploadImage(
   msg: Extract<UIToPluginMessage, { type: 'upload-image' }>,

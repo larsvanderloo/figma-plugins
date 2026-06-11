@@ -14,11 +14,11 @@ import {
   findImageWrap,
   readBooleanProperty,
 } from '../slide-machine';
-import { GeneralSections } from '../types';
+import { GeneralSections } from '../../shared/types';
 import { findTextByName } from '../editors/_shared/node-finders';
 import { readDimRanges } from '../editors/_shared/accent-ranges';
-import { debugLog } from '../debug';
-import { isDevModeRuntime } from '../sandbox/runtime';
+import { debugLog } from '../../shared/debug';
+import { isDevModeRuntime } from '../runtime';
 import {
   readTextByName,
   findVisibleTextNodeByName,

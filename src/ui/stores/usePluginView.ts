@@ -19,7 +19,7 @@ import type {
   GraphItems,
   PluginRuntimeInfo,
   SlideSummary,
-} from '../../types';
+} from '../../shared/types';
 
 export interface PluginViewState {
   /** Runtime metadata posted by the sandbox during init. */

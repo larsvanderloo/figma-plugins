@@ -9,12 +9,12 @@
 
 import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideById } from '../slides';
-import { applyCard } from '../../editors/content/card';
-import { applyCardSize } from '../../editors/content/card-size';
-import { applyInstructorCard } from '../../editors/content/instructor';
-import { setTextCharactersSafe } from '../../editors/_shared/fonts';
-import { resolveTextStyleByName } from '../../editors/_shared/text-styles';
-import type { UIToPluginMessage } from '../../types';
+import { applyCard } from '../editors/content/card';
+import { applyCardSize } from '../editors/content/card-size';
+import { applyInstructorCard } from '../editors/content/instructor';
+import { setTextCharactersSafe } from '../editors/_shared/fonts';
+import { resolveTextStyleByName } from '../editors/_shared/text-styles';
+import type { UIToPluginMessage } from '../../shared/types';
 
 export async function handleUpdateCard(
   msg: Extract<UIToPluginMessage, { type: 'update-card' }>,

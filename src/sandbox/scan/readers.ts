@@ -13,7 +13,7 @@
 import { isEffectivelyVisible } from '../slide-machine';
 import { normalizeIconKey, LUCIDE_SLUG_RE } from '../editors/_shared/icon-swap';
 import { findImageSlot } from '../editors/_shared/node-finders';
-import { debugLog } from '../debug';
+import { debugLog } from '../../shared/debug';
 
 /**
  * Leest een descendant text-node op naam en geeft zijn characters terug.

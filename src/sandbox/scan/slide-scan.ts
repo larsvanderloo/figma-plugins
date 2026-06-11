@@ -13,9 +13,9 @@
 // ============================================================
 
 import { findCopyWrap } from '../slide-machine';
-import { GeneralSections, ContentItems, GraphItems } from '../types';
-import { debugLog } from '../debug';
-import { isDevModeRuntime } from '../sandbox/runtime';
+import { GeneralSections, ContentItems, GraphItems } from '../../shared/types';
+import { debugLog } from '../../shared/debug';
+import { isDevModeRuntime } from '../runtime';
 import { scanGeneral } from './general';
 import { scanContent } from './content';
 import { scanGraphs, refreshTablesOnSlide } from './graphs';

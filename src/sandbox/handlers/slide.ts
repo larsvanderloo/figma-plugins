@@ -10,9 +10,9 @@
 import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideById, summaryForSlide } from '../slides';
 import { setLastSentSummarySignature } from '../session';
-import { findThemeCollectionsForSlide } from '../../scan/theme';
-import { scanSlide } from '../../scan/slide-scan';
-import type { UIToPluginMessage } from '../../types';
+import { findThemeCollectionsForSlide } from '../scan/theme';
+import { scanSlide } from '../scan/slide-scan';
+import type { UIToPluginMessage } from '../../shared/types';
 
 export async function handleSetSlideTheme(
   msg: Extract<UIToPluginMessage, { type: 'set-slide-theme' }>,

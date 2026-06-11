@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { CardItem } from '../../../types';
+import type { CardItem } from '../../../shared/types';
 import IconPicker from '../ui/IconPicker.vue';
 import WInput from '../ui/WInput.vue';
 import WTextarea from '../ui/WTextarea.vue';

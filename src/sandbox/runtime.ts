@@ -8,8 +8,8 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { PluginRuntimeInfo } from '../types';
-import { isPluginDebugEnabled } from '../debug';
+import { PluginRuntimeInfo } from '../shared/types';
+import { isPluginDebugEnabled } from '../shared/debug';
 
 export function isDevModeRuntime(): boolean {
   return figma.editorType === 'dev';

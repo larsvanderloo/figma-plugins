@@ -2,7 +2,7 @@
 import CardItemEditor from '../editors/CardItemEditor.vue';
 import InstructorCardEditor from '../editors/InstructorCardEditor.vue';
 import TimelineItemEditor from '../editors/TimelineItemEditor.vue';
-import type { TimelineItem } from '../../../types';
+import type { TimelineItem } from '../../../shared/types';
 import { useCardEditor } from '../../composables/useCardEditor';
 import { useInstructorEditor } from '../../composables/useInstructorEditor';
 import { useTimelineEditor } from '../../composables/useTimelineEditor';

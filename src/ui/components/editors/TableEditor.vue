@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
-import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../types';
-import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../constants';
-import { tokenize } from '../../../csv';
+import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
+import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../shared/constants';
+import { tokenize } from '../../../shared/csv';
 import { useNotifications } from '../../stores/useNotifications';
 import WInput from '../ui/WInput.vue';
 import WCard from '../ui/WCard.vue';

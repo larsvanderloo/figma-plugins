@@ -6,7 +6,7 @@ import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import { getLucideSvg } from '../lucide-svgs';
 import { bytesToDataUrl } from '../utils/bytes-to-data-url';
-import type { CardItem } from '../../types';
+import type { CardItem } from '../../shared/types';
 
 // Card-size picker state lives at module scope so it survives ContentPanel
 // remounts (the panel is v-if'd against `view.hasContent`, which briefly
@@ -134,7 +134,7 @@ export function useCardEditor() {
     const slideId = view.state.currentSlideId;
     if (slideId === null) return;
     // Reuses the `upload-image` channel; sandbox routes to applyCardVisual
-    // based on card-parent (see code.ts upload-image handler).
+    // based on card-parent (see sandbox/handlers/image.ts upload-image handler).
     tracker.register();
     bridge.post({
       type: 'upload-image',

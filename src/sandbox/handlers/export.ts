@@ -9,7 +9,7 @@
 
 import { postToUI } from '../bridge';
 import { findSlideById, getSlidesOnCurrentPage, summaryForSlide } from '../slides';
-import type { UIToPluginMessage } from '../../types';
+import type { UIToPluginMessage } from '../../shared/types';
 
 export async function handleExportDocument(
   msg: Extract<UIToPluginMessage, { type: 'export-document' }>,

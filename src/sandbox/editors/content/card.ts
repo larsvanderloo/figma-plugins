@@ -36,7 +36,7 @@ import {
   findTextByName,
 } from '../_shared/node-finders';
 import { setTextCharactersSafe } from '../_shared/fonts';
-import { debugLog } from '../../debug';
+import { debugLog } from '../../../shared/debug';
 
 /** Payload-shape voor `update-card` (text-velden) + `upload-image`
  *  (visualBytes wanneer CardItemEditor een file selecteert).

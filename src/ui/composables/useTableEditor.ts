@@ -3,7 +3,7 @@
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
-import type { GraphInstance, TableWrapModel } from '../../types';
+import type { GraphInstance, TableWrapModel } from '../../shared/types';
 
 export function useTableEditor() {
   const view = usePluginView();

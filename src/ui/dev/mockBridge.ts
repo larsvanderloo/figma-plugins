@@ -1,4 +1,4 @@
-import type { PluginToUIMessage } from '../../types';
+import type { PluginToUIMessage } from '../../shared/types';
 
 function devPost(msg: PluginToUIMessage, delay: number): void {
   setTimeout(() => {

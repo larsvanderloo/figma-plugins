@@ -18,7 +18,7 @@
 
 import { getPropertyKey, setInstanceProperty } from '../../slide-machine';
 import { setTextCharactersSafe } from '../_shared/fonts';
-import { debugLog } from '../../debug';
+import { debugLog } from '../../../shared/debug';
 
 export const INSTRUCTOR_CARD_NODE_NAME = 'InstructorCard';
 const INSTRUCTOR_PROPERTY_NAME = 'Instructor';

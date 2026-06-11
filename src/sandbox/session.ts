@@ -11,14 +11,14 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { debugLog } from '../debug';
+import { debugLog } from '../shared/debug';
 import { isDevModeRuntime } from './runtime';
 import { isWithinSelfWriteWindow, postToUI } from './bridge';
 import { findSlideById, summaryForSlide } from './slides';
-import { scanSlide, SlideScan } from '../scan/slide-scan';
-import { postInitialSlidePreviews } from '../scan/previews';
-import { primeIconCache } from '../editors/_shared/icon-swap';
-import { loadAccentVars } from '../editors/_shared/accent-vars';
+import { scanSlide, SlideScan } from './scan/slide-scan';
+import { postInitialSlidePreviews } from './scan/previews';
+import { primeIconCache } from './editors/_shared/icon-swap';
+import { loadAccentVars } from './editors/_shared/accent-vars';
 
 // ============================================================
 // Live current-slide refresh — debounced content + summary posts
