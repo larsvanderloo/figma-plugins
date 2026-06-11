@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { useToast } from '@nuxt/ui/composables';
-import { PDFDocument } from 'pdf-lib';
 import { computed, onMounted, ref, watch } from 'vue';
 import welderLogo from './assets/welder-logo.svg';
 import ContentPanel from './components/panels/ContentPanel.vue';
@@ -9,48 +8,13 @@ import GraphsPanel from './components/panels/GraphsPanel.vue';
 import { useExport } from './composables/useExport';
 import { useIconReconcile } from './composables/useIconReconcile';
 import { usePluginBridge } from './composables/usePluginBridge';
+import { usePluginMessages } from './composables/usePluginMessages';
 import { APP_VERSION } from './generated/app-version';
-import { getLucideSvg } from './lucide-svgs';
 import { useIconRecents } from './stores/useIconRecents';
 import { useNotifications } from './stores/useNotifications';
 import { useOnboarding } from './stores/useOnboarding';
 import { usePluginView } from './stores/usePluginView';
 import OnboardingTour from './components/ui/OnboardingTour.vue';
-const PDF_AUTHOR = 'Welder B.V.';
-const PDF_CREATOR = 'Welder Slide Editor';
-const PDF_PRODUCER = 'Welder Slide Editor';
-const PDF_KEYWORDS = ['Welder', 'Welder Slide Editor', 'presentation', 'slides'];
-const PDF_LANGUAGE = 'nl-NL';
-
-function applyPdfMetadata(doc: PDFDocument, title: string): void {
-  const now = new Date();
-  doc.setTitle(title);
-  doc.setAuthor(PDF_AUTHOR);
-  doc.setCreator(PDF_CREATOR);
-  doc.setProducer(PDF_PRODUCER);
-  doc.setSubject(
-    '© ' +
-      String(now.getFullYear()) +
-      ' Welder B.V. Alle rechten voorbehouden. ' +
-      'Gemaakt met Welder Slide Editor.',
-  );
-  doc.setKeywords(PDF_KEYWORDS);
-  doc.setLanguage(PDF_LANGUAGE);
-  doc.setCreationDate(now);
-  doc.setModificationDate(now);
-}
-
-function downloadBlob(bytes: Uint8Array, filename: string, mime: string): void {
-  const blob = new Blob([bytes as BlobPart], { type: mime });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  setTimeout(() => URL.revokeObjectURL(url), 0);
-}
 
 const bridge = usePluginBridge();
 const view = usePluginView();
@@ -79,6 +43,9 @@ function finishReconcile(): void {
     reconcileDeadlineTimer = null;
   }
   reconciling.value = false;
+}
+function scheduleReconcileFallback(): void {
+  reconcileFallbackTimer = setTimeout(finishReconcile, STALE_FALLBACK_MS);
 }
 reconcileDeadlineTimer = setTimeout(finishReconcile, STALE_DEADLINE_MS);
 const MIN_W = 380;
@@ -218,155 +185,17 @@ function submitExport(): void {
   }
   exportModalOpen.value = false;
 }
-bridge.onMessage((msg) => {
-  if (msg.type === 'init') {
-    if (msg.runtime !== undefined) {
-      view.setRuntime(msg.runtime);
-    }
-    initializing.value = false;
-    return;
-  }
-  if (msg.type === 'slide-loaded') {
-    view.setSlideLoaded(msg.summary, msg.general, msg.content, msg.graphs);
-    initializing.value = false;
-    return;
-  }
-  if (msg.type === 'instructor-card-updated') {
-    // Gericht patch-bericht na een instructor-switch: de sandbox heeft
-    // de list-teksten gereset naar de defaults van de nieuwe variant.
-    const instructorList = view.state.content?.instructorCards ?? null;
-    if (instructorList !== null) {
-      const cardIdx = instructorList.findIndex((c) => c.cardNodeId === msg.cardNodeId);
-      if (cardIdx >= 0) {
-        instructorList[cardIdx].instructor = msg.instructor;
-        instructorList[cardIdx].items = [...msg.items];
-      }
-    }
-    return;
-  }
-  if (msg.type === 'stale-icons') {
-    const cardCount = msg.cards.length;
-    const badgeCount = msg.badges.length;
-    console.log(
-      '[icon-reconcile] sandbox flagged ' +
-        cardCount +
-        ' card icon(s) + ' +
-        badgeCount +
-        ' badge icon(s) as stale',
-    );
-    for (let i = 0; i < msg.cards.length; i++) {
-      const entry = msg.cards[i];
-      const svg = getLucideSvg(entry.iconIntended);
-      if (svg === null) continue;
-      bridge.post({
-        type: 'update-card',
-        slideId: entry.slideId,
-        cardNodeId: entry.cardNodeId,
-        payload: { icon: entry.iconIntended, iconSvg: svg },
-      });
-    }
-    for (let i = 0; i < msg.badges.length; i++) {
-      const entry = msg.badges[i];
-      const svg = getLucideSvg(entry.iconIntended);
-      if (svg === null) continue;
-      bridge.post({
-        type: 'update-general',
-        slideId: entry.slideId,
-        section: 'badge',
-        payload: { icon: entry.iconIntended, iconSvg: svg },
-      });
-    }
-    if (cardCount === 0 && badgeCount === 0) {
-      finishReconcile();
-    } else {
-      reconcileFallbackTimer = setTimeout(finishReconcile, STALE_FALLBACK_MS);
-    }
-    return;
-  }
-  if (msg.type === 'slide-summary') {
-    view.setSummary(msg.summary);
-    return;
-  }
-  if (msg.type === 'slide-deselected') {
-    view.clearSlide();
-    return;
-  }
-  if (msg.type === 'icon-recents') {
-    if (msg.items.length === 0) {
-      let migrated: string[] | null = null;
-      try {
-        const raw = localStorage.getItem('welder-icon-picker-recent');
-        if (raw !== null) {
-          const parsed = JSON.parse(raw) as unknown;
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            migrated = (parsed as string[]).slice(0, 8);
-            localStorage.removeItem('welder-icon-picker-recent');
-          }
-        }
-      } catch {
-      }
-      if (migrated !== null) {
-        iconRecents.setItems(migrated);
-        return;
-      }
-    }
+usePluginMessages({
+  view: view,
+  iconRecents: iconRecents,
+  notifications: notifications,
+  onboarding: onboarding,
+  initializing: initializing,
+  finishReconcile: finishReconcile,
+  scheduleReconcileFallback: scheduleReconcileFallback,
+  suppressNextIconRecentsSave: () => {
     skipIconRecentsSave = true;
-    iconRecents.setItems(msg.items);
-    return;
-  }
-  if (msg.type === 'onboarding-seen') {
-    onboarding.setSeenFromSandbox(msg.seen);
-    return;
-  }
-  if (msg.type === 'presentation-pdf-parts') {
-    void (async () => {
-      try {
-        const merged = await PDFDocument.create();
-        for (let i = 0; i < msg.parts.length; i++) {
-          const slideDoc = await PDFDocument.load(msg.parts[i]);
-          const pages = await merged.copyPages(slideDoc, slideDoc.getPageIndices());
-          for (let p = 0; p < pages.length; p++) merged.addPage(pages[p]);
-        }
-        applyPdfMetadata(merged, msg.title);
-        const bytes = await merged.save();
-        downloadBlob(bytes, msg.filename, 'application/pdf');
-      } catch (err: unknown) {
-        const text = err instanceof Error ? err.message : String(err);
-        notifications.pushError('PDF samenvoegen mislukt', text);
-      }
-    })();
-    return;
-  }
-  if (msg.type === 'document-ready') {
-    if (msg.format === 'PNG') {
-      try {
-        downloadBlob(msg.bytes, msg.filename, 'image/png');
-      } catch (err: unknown) {
-        const text = err instanceof Error ? err.message : String(err);
-        notifications.pushError('Download mislukt', text);
-      }
-      return;
-    }
-    void (async () => {
-      try {
-        const doc = await PDFDocument.load(msg.bytes);
-        applyPdfMetadata(doc, msg.title);
-        const bytes = await doc.save();
-        downloadBlob(bytes, msg.filename, 'application/pdf');
-      } catch (err: unknown) {
-        const text = err instanceof Error ? err.message : String(err);
-        notifications.pushError('Download mislukt', text);
-      }
-    })();
-    return;
-  }
-  if (msg.type === 'target-updated' && msg.ok === false) {
-    notifications.pushError(
-      'Bewerking mislukt',
-      typeof msg.error === 'string' && msg.error.length > 0 ? msg.error : undefined,
-    );
-    return;
-  }
+  },
 });
 watch(
   () => iconRecents.items,
