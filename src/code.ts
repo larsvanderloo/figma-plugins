@@ -320,7 +320,7 @@ function postSlideContent(): void {
     void (async function () {
       const startedAt = Date.now();
       try {
-        const slide = findSlideById(lastDisplayedSlideId!);
+        const slide = await findSlideById(lastDisplayedSlideId!);
         if (slide === null) return;
         const scanStartedAt = Date.now();
         const scan = await scanSlide(slide);
@@ -395,12 +395,12 @@ function postSlideSummary(): void {
   if (pendingSlideSummaryUpdate !== null) {
     clearTimeout(pendingSlideSummaryUpdate);
   }
-  pendingSlideSummaryUpdate = setTimeout(() => {
+  pendingSlideSummaryUpdate = setTimeout(async () => {
     pendingSlideSummaryUpdate = null;
     if (lastDisplayedSlideId === null) return;
     const startedAt = Date.now();
     try {
-      const slide = findSlideById(lastDisplayedSlideId);
+      const slide = await findSlideById(lastDisplayedSlideId);
       if (slide === null) return;
       const summaryStartedAt = Date.now();
       const summary = summaryForSlide(slide);
@@ -705,7 +705,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   }
 
   if (msg.type === 'update-general') {
-    const slide = findSlideById(msg.slideId);
+    const slide = await findSlideById(msg.slideId);
     if (slide === null) {
       postToUI({
         type: 'target-updated',
@@ -755,7 +755,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
 
   if (msg.type === 'update-accent') {
     // Spec §13 T30 — heading-only. Paragraph-accent permanent out-of-scope.
-    const slide = findSlideById(msg.slideId);
+    const slide = await findSlideById(msg.slideId);
     if (slide === null) {
       postToUI({
         type: 'target-updated',
@@ -810,7 +810,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   }
 
   if (msg.type === 'update-card') {
-    const slide = findSlideById(msg.slideId);
+    const slide = await findSlideById(msg.slideId);
     if (slide === null) {
       postToUI({
         type: 'target-updated',
@@ -839,7 +839,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   }
 
   if (msg.type === 'update-instructor-card') {
-    const slide = findSlideById(msg.slideId);
+    const slide = await findSlideById(msg.slideId);
     if (slide === null) {
       postToUI({
         type: 'target-updated',
@@ -878,7 +878,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   }
 
   if (msg.type === 'set-card-size') {
-    const slide = findSlideById(msg.slideId);
+    const slide = await findSlideById(msg.slideId);
     if (slide === null) {
       postToUI({
         type: 'target-updated',
@@ -918,7 +918,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     // T31.2 — muteert heading/paragraph van één CopyWrap-item.
     // Zoek CopyWrap via slide.findOne(id) zodat ook genestede CopyWraps
     // (binnen tussenliggende Frames) gevonden worden — wrapper-agnostisch.
-    const slide = findSlideById(msg.slideId);
+    const slide = await findSlideById(msg.slideId);
     if (slide === null) {
       postToUI({
         type: 'target-updated',
@@ -971,7 +971,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   if (msg.type === 'update-table') {
     // T34.2: Slot-based full-state PUT. msg.slotId adresseert de SlotNode
     // rechtstreeks (de UI ontving 'm via `GraphInstance.nodeId`).
-    const slide = findSlideById(msg.slideId);
+    const slide = await findSlideById(msg.slideId);
     if (slide === null) {
       postToUI({
         type: 'target-updated',
@@ -1002,7 +1002,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   if (msg.type === 'import-csv') {
     // T34.2 / T39.2: parse + truncate + applyTable. Width blijft behouden
     // (gelezen uit pluginData) — import verandert alleen row/cel-inhoud.
-    const slide = findSlideById(msg.slideId);
+    const slide = await findSlideById(msg.slideId);
     if (slide === null) {
       postToUI({
         type: 'target-updated',
@@ -1154,7 +1154,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   }
 
   if (msg.type === 'set-slide-theme') {
-    const themeSlide = findSlideById(msg.slideId);
+    const themeSlide = await findSlideById(msg.slideId);
     if (themeSlide === null) {
       postToUI({
         type: 'target-updated',
@@ -1235,7 +1235,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   }
 
   if (msg.type === 'set-slide-skipped') {
-    var skipSlide = findSlideById(msg.slideId);
+    var skipSlide = await findSlideById(msg.slideId);
     if (skipSlide === null) {
       postToUI({
         type: 'target-updated',
@@ -1280,7 +1280,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   }
 
   if (msg.type === 'set-typography-visibility') {
-    const visSlide = findSlideById(msg.slideId);
+    const visSlide = await findSlideById(msg.slideId);
     if (visSlide === null) {
       postToUI({
         type: 'target-updated',
@@ -1344,7 +1344,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   }
 
   if (msg.type === 'set-copywrap-size') {
-    const sizeSlide = findSlideById(msg.slideId);
+    const sizeSlide = await findSlideById(msg.slideId);
     if (sizeSlide === null) {
       postToUI({
         type: 'target-updated',
@@ -1404,7 +1404,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     // bridge.post) survive the undo and the picker keeps showing
     // the pre-undo value while the canvas correctly reverts.
     if (typeof msg.slideId === 'string' && msg.slideId.length > 0) {
-      const undoSlide = findSlideById(msg.slideId);
+      const undoSlide = await findSlideById(msg.slideId);
       if (undoSlide !== null) {
         try {
           const scan = await scanSlide(undoSlide);
@@ -1437,7 +1437,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
         });
         return;
       }
-      const welderSlide = findSlideById(msg.slideId);
+      const welderSlide = await findSlideById(msg.slideId);
       if (welderSlide === null) {
         postToUI({
           type: 'target-updated',

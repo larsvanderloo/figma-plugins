@@ -154,10 +154,23 @@ export function summaryForSlide(slide: InstanceNode): SlideSummary {
   return slideSummary(slide, getSlideNumber(slide));
 }
 
-export function findSlideById(id: string): InstanceNode | null {
+export async function findSlideById(id: string): Promise<InstanceNode | null> {
   const nodes = getSlidesOnCurrentPage();
   for (const node of nodes) {
     if (node.id === id) return node;
+  }
+  // Fallback: de cache-walk (canvas-grid / page-children) mist slides
+  // die dieper genest zijn — bv. binnen een SECTION op een design-pagina
+  // zoals Templates. De scan-kant vindt die slides wél (up-walk vanaf de
+  // selectie via findSlideAncestor), dus zonder deze fallback kan de UI
+  // een slide tonen waarvan elke mutatie op "Slide not found" strandt.
+  try {
+    const node = await figma.getNodeByIdAsync(id);
+    if (node !== null && node.type === 'INSTANCE' && isSlide(node as InstanceNode)) {
+      return node as InstanceNode;
+    }
+  } catch (_e) {
+    /* silent — id kan stale zijn na undo/delete */
   }
   return null;
 }
