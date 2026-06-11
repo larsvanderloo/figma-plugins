@@ -103,6 +103,19 @@ export async function applyTitleDescription(
       } catch (e) {
         console.log('[title-description] setProperties showParagraph failed: ' + String(e));
       }
+      if (payload.paragraphVisible === true) {
+        // Legacy cleanup — mirror the heading path above: a TypParagraph
+        // that was hidden directly on the canvas (instead of via
+        // showParagraph) does not come back through the property alone.
+        const paragraphNode = findTextByName(copyWrap, 'Paragraph');
+        if (paragraphNode !== null) {
+          const wrapper = findEnclosingInstanceByName(paragraphNode, 'TypParagraph', slide);
+          if (wrapper !== null) {
+            wrapper.visible = true;
+          }
+          paragraphNode.visible = true;
+        }
+      }
     } else {
       // Legacy fallback: no BOOLEAN prop — toggle the wrapper instance.
       const paragraphNode = findTextByName(copyWrap, 'Paragraph');

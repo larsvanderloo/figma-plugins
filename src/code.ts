@@ -35,7 +35,7 @@ import {
 import { applyTitleDescription } from './editors/general/title-description';
 import { applyBadge } from './editors/general/badge';
 import { applyImage } from './editors/general/image';
-import { findImageSlot } from './editors/_shared/node-finders';
+import { findImageSlot, findTextByName } from './editors/_shared/node-finders';
 import { applyCard, applyCardVisual } from './editors/content/card';
 import { normalizeIconKey, LUCIDE_SLUG_RE, primeIconCache } from './editors/_shared/icon-swap';
 import { applyTable, scanTableSlot } from './editors/table/renderer';
@@ -582,10 +582,6 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
     // regardless of visibility so the iframe can preserve text across
     // toggle-off-then-on without round-tripping to Figma.
     const headingNode = findVisibleTextNodeByName(copyWrap, 'Heading', slide);
-    const paragraphHidden = readBooleanProperty(copyWrap, 'showParagraph') === false;
-    const paragraphNode = paragraphHidden
-      ? null
-      : findVisibleTextNodeByName(copyWrap, 'Paragraph', slide);
     const heading = readTextByName(copyWrap, 'Heading') || '';
     // `paragraph` is null only when the master has no Paragraph TextNode
     // at all — that's the "section unsupported" signal. When the node
@@ -597,8 +593,9 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
     // Heading visibility — CopyWrap's .visible flag. CopyWrap owns the
     // title fill/container, so hiding only TypHeading leaves a visual
     // shell behind. Paragraph visibility — showParagraph BOOLEAN
-    // component property (null when the property doesn't exist OR
-    // there's no Paragraph TextNode).
+    // component property, layered with a node-level read (below) so a
+    // TypParagraph hidden directly on the canvas wins over a missing or
+    // true property.
     let headingVisible = copyWrap.visible !== false;
     const typHeading = copyWrap.findOne(function (n: SceneNode) {
       return n.type === 'INSTANCE' && n.name === 'TypHeading';
@@ -613,6 +610,25 @@ async function scanGeneral(slide: InstanceNode): Promise<GeneralSections | null>
     if (paragraph !== null) {
       const showParagraphValue = readBooleanProperty(copyWrap, 'showParagraph');
       paragraphVisible = showParagraphValue === null ? true : showParagraphValue;
+      if (paragraphVisible) {
+        // Node-level read — mirrors the TypHeading legacy read above and
+        // the apply-side fallback in title-description.ts: CopyWraps
+        // without a showParagraph property (or with a stale true value)
+        // carry visibility on the TypParagraph wrapper / Paragraph node
+        // itself. Without this read the toggle reports ON for a hidden
+        // paragraph and bounces back after every off-toggle.
+        const typParagraph = copyWrap.findOne(function (n: SceneNode) {
+          return n.type === 'INSTANCE' && n.name === 'TypParagraph';
+        });
+        if (typParagraph !== null && 'visible' in typParagraph) {
+          paragraphVisible = (typParagraph as InstanceNode).visible !== false;
+        } else {
+          const paragraphTextNode = findTextByName(copyWrap, 'Paragraph');
+          if (paragraphTextNode !== null) {
+            paragraphVisible = paragraphTextNode.visible !== false;
+          }
+        }
+      }
     }
 
     // Dim-range scan (spec §13 T30) — heading-only, silent-fail naar null
