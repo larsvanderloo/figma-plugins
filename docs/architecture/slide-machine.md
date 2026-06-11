@@ -1,7 +1,7 @@
 # Welder Slide Machine — Architecture Reference
 
 **Status:** Living document (derived from code as ground truth)
-**Last updated:** 2026-05-07
+**Last updated:** 2026-06-11
 **Current source files:** `src/slide-machine.ts`, `src/constants.ts`, `src/types.ts`, `src/editors/**`
 
 > Note: this document still contains historical and queued JourneyWrap notes.
@@ -43,7 +43,7 @@ PageNode (figma.currentPage)
         │       ├── TEXT "Heading"
         │       ├── TEXT "Paragraph"
         │       ├── icon_wrapper FRAME → <Lucide INSTANCE>
-        │       └── <fill-bearing child: name 'Visual'|'Image', or first IMAGE fill>
+        │       └── <fill-bearing child: name 'Visual'|'Image'|'ImageSlot', or first IMAGE fill>
         │
         ├── ChartWrap  INSTANCE      ← findChartWrap()  exact name
         │   └── WelderChartContent FRAME  ← plugin-generated; replaced on each render
@@ -139,7 +139,7 @@ functions.
 | Writes | Replaces all fills on the found slot with a fresh `ImagePaint` (`scaleMode: 'FILL'`); bytes from `figma.createImage()` |
 | Card filter | Walk parent chain from the matched node back to `slide`; if any ancestor is `INSTANCE` named `'Card'` or `'CardWrap'`, return false. Prevents returning an image slot that belongs to a card |
 | Message type | `'upload-image'` with `targetNodeId` pointing to the ImageWrap node |
-| Deprecated | `applyCrop()` is marked `@deprecated`; replaced by canvas-crop on the UI side (T28c). `scaleMode` stays `'FILL'` for all current writes |
+| Removed | `applyCrop()` is removed (was @deprecated); replaced by canvas-crop on the UI side (T28c, ImageEditor.vue). `scaleMode` stays `'FILL'` for all current writes |
 
 ### 2.4 CardWrap / Card
 
@@ -152,7 +152,7 @@ functions.
 | Reads | `TEXT "Heading"`, `TEXT "Paragraph"` within the card; icon instance name; `IMAGE` fill hash on image slot |
 | Writes (text) | `setTextCharactersSafe()` on `"Heading"` and `"Paragraph"` text nodes |
 | Writes (icon) | `applyCardIconSwap()` — same three-strategy pattern as Badge (see §4) |
-| Writes (visual) | `findImageSlot()` (strategy 1: `'Visual'` or `'Image'`; strategy 2: existing `IMAGE` fill); replaces fills |
+| Writes (visual) | `findImageSlot()` (strategy 1: `'Visual'`, `'Image'`, or `'ImageSlot'`; strategy 2: existing `IMAGE` fill); replaces fills |
 | Message types | `'update-card'`, `'upload-image'` |
 | ContentItems shape | `cards: CardItem[]`, each with `cardNodeId`, `heading`, `paragraph`, `icon: string | null`, `visualHash: string | null | undefined` |
 
@@ -572,7 +572,7 @@ A rename or restructure in the template would silently break the plugin.
 | 8.5 | The Badge label is a component `TEXT` property (iterated) or a text node named `'Label'` (fallback) or the first text node | `applyBadge()` | Structural changes to Badge → label edits fail silently |
 | 8.6 | The icon within a Badge is reached via `icon_wrapper FRAME` child → first INSTANCE child | `findNestedIconInstance()` in `badge.ts` | If the icon_wrapper frame is renamed or removed, strategy 2 falls back to the Lucide-slug scan |
 | 8.7 | `ImageWrap` is exactly named `'ImageWrap'` | `findImageWrap()` | Rename → no image editor in General tab |
-| 8.8 | ImageWrap's fill-bearing child is named `'Image'`, `'Visual'`, or `'ImageSlot'` (strategies 1 and 2) | `findImageSlot()` in `image.ts` | Different child name → strategy 3 (wrapper itself) may apply image fill to the wrong layer |
+| 8.8 | ImageWrap's fill-bearing child is named `'Image'`, `'Visual'`, or `'ImageSlot'` (strategies 1 and 2) | `findImageSlot()` in `editors/_shared/node-finders.ts` | Different child name → strategy 3 (wrapper itself) may apply image fill to the wrong layer |
 | 8.9 | `CardWrap` is exactly named `'CardWrap'` | `findCardWrap()` | Rename → no Content tab |
 | 8.10 | Individual cards within CardWrap are INSTANCE nodes named exactly `'Card'` | `applyCard()`, `applyCardVisual()` | Rename → card edits silently fail |
 | 8.11 | Card's image slot is named `'Visual'` or `'Image'` | `findImageSlot()` in `card.ts` | Different name → strategy 2 (existing IMAGE fill) used; could match the wrong node |
@@ -601,7 +601,7 @@ Every wrapper against every property the plugin currently exposes. "Exposed" mea
 | Badge | `icon` | Yes | `update-general / badge` | Lucide slug from ICON_OPTIONS |
 | Badge | Variant (`Style`, `Type`, etc.) | No | — | Plugin does not drive Badge variants |
 | ImageWrap | image bytes / hash | Yes | `upload-image` | Replaces fill |
-| ImageWrap | crop transform | No (deprecated) | — | `applyCrop()` is `@deprecated`; UI does pre-crop |
+| ImageWrap | crop transform | No (removed) | — | `applyCrop()` is removed; UI does pre-crop |
 | ImageWrap | scaleMode | No | — | Always written as `'FILL'` |
 | Card | `heading` text | Yes | `update-card` | |
 | Card | `paragraph` text | Yes | `update-card` | |
