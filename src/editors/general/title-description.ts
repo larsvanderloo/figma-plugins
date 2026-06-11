@@ -23,6 +23,7 @@ import { findCopyWrap, findEnclosingInstanceByName } from '../../slide-machine';
 import { applyAccentRanges } from '../_shared/accent-ranges';
 import { findTextByName } from '../_shared/node-finders';
 import { setTextCharactersSafe } from '../_shared/fonts';
+import { debugLog } from '../../debug';
 
 import type { TitleDescriptionPayload } from '../../types';
 
@@ -100,6 +101,10 @@ export async function applyTitleDescription(
         const overrides: { [k: string]: boolean } = {};
         overrides[showKey] = payload.paragraphVisible;
         copyWrap.setProperties(overrides);
+        debugLog('title-description', 'paragraphVisible via property', {
+          key: showKey,
+          value: payload.paragraphVisible,
+        });
       } catch (e) {
         console.log('[title-description] setProperties showParagraph failed: ' + String(e));
       }
@@ -123,9 +128,19 @@ export async function applyTitleDescription(
         const wrapper = findEnclosingInstanceByName(paragraphNode, 'TypParagraph', slide);
         if (wrapper !== null) {
           wrapper.visible = payload.paragraphVisible;
+          debugLog('title-description', 'paragraphVisible via TypParagraph wrapper', {
+            wrapperId: wrapper.id,
+            value: payload.paragraphVisible,
+          });
         } else {
           paragraphNode.visible = payload.paragraphVisible;
+          debugLog('title-description', 'paragraphVisible via text node', {
+            nodeId: paragraphNode.id,
+            value: payload.paragraphVisible,
+          });
         }
+      } else {
+        debugLog('title-description', 'paragraphVisible: no Paragraph text node found');
       }
     }
   }
