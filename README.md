@@ -49,11 +49,12 @@ The UI version badge is generated from `package.json` by `npm run build:version`
 
 ## Architecture
 
-- `src/code.ts` — plugin-sandbox entry (runs `figma.*`, ES2017 target).
+- `src/sandbox/` — plugin-sandbox code (runs `figma.*`, ES2017 target; entry `src/sandbox/main.ts`).
 - `src/ui/` — iframe Vue 3 app (Nuxt UI v4, ES2020+ target).
-- `src/types.ts` — message-bus contract between the two threads.
-- `src/editors/` — per-editor logic.
-- `src/csv/` — CSV tokenizer (used by the Table editor).
+- `src/shared/` — code shipped in both bundles (obeys the stricter sandbox rules).
+- `src/shared/types.ts` — message-bus contract between the two threads.
+- `src/sandbox/editors/` — per-editor logic.
+- `src/shared/csv/` — CSV tokenizer (used by the Table editor).
 
 The two threads are isolated; everything they share crosses the message bus. See `CLAUDE.md` for the non-negotiable thread rules.
 

@@ -6,7 +6,7 @@ This document describes the debug setup for the Welder Editor Figma plugin: what
 
 The plugin runs in two runtime contexts:
 
-- `src/code.ts` runs in the Figma plugin sandbox. This is the only side that can call `figma.*` APIs and mutate the Figma document.
+- `src/sandbox/` (entry `src/sandbox/main.ts`) runs in the Figma plugin sandbox. This is the only side that can call `figma.*` APIs and mutate the Figma document.
 - `src/ui/` runs inside the plugin iframe. This is the Vue/Nuxt UI and has DOM/browser APIs, but no direct `figma.*` access.
 
 The debug setup keeps that split intact:
@@ -21,7 +21,7 @@ The debug setup keeps that split intact:
   - Adds `Figma: debug session`, `Figma: debug watch`, `Figma: build`, and `Figma: typecheck UI`.
   - `.gitignore` allows this one shared task file while keeping other local `.vscode/*` files ignored.
 
-- `src/debug.ts`
+- `src/shared/debug.ts`
   - Shared debug helper imported by both the sandbox and iframe code.
   - Exposes `debugLog(scope, event, data?)`, `debugMessage(direction, msg)`, and `isPluginDebugEnabled()`.
   - Debug output is controlled by the compile-time `__PLUGIN_DEBUG__` flag.
@@ -102,7 +102,7 @@ The debug setup keeps that split intact:
   - Enables inline sourcemaps only when debug mode is on.
   - Marks esbuild console output with `(debug)` in debug mode.
 
-- `src/code.ts`
+- `src/sandbox/main.ts`
   - Imports the debug helpers.
   - Logs sandbox startup/runtime metadata:
     - `figma.editorType`
@@ -129,7 +129,7 @@ The debug setup keeps that split intact:
     - blocks document-mutating commands with a `target-updated` error
     - skips background icon backfills, icon cache priming, and visibility-normalizing writes in Dev Mode
 
-- `src/types.ts`
+- `src/shared/types.ts`
   - Adds `PluginRuntimeInfo`.
   - Extends the `init` message with optional `runtime` metadata.
 

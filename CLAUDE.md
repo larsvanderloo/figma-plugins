@@ -7,16 +7,23 @@ A single-plugin repo. Targets **Figma design** and **Figma Slides** (see `manife
 ```
 manifest.json                    Figma plugin manifest (also: manifest.dev.json / manifest.debug.json variants)
 src/
-  code.ts                        plugin-sandbox entry: bootstrap, registry dispatch, figma.on listeners (runs figma.*)
-  sandbox/                       sandbox infra: bridge.ts (postToUI + self-write window), slides.ts (slide page cache + finders), runtime.ts (editor-type info), session.ts (session state + emit helpers), handlers/ (message-handler registry, one module per domain)
-  scan/                          read side: slide-scan.ts composes per-domain scans (general/content/graphs/theme) over shared readers.ts; previews.ts prefetches thumbnails
+  sandbox/                       everything bundled into dist/code.js (runs figma.*)
+    main.ts                      entry: bootstrap, registry dispatch, figma.on listeners
+    bridge.ts                    postToUI + self-write suppression window
+    slides.ts                    slide page cache + finders
+    runtime.ts                   editor-type/runtime info
+    session.ts                   session state + emit helpers (postSlideContent, ...)
+    handlers/                    message-handler registry, one module per domain
+    scan/                        read side: slide-scan.ts composes per-domain scans over shared readers.ts
+    editors/                     write side: feature editors (shared helpers in editors/_shared/)
+    slide-machine.ts             slide-build state machine
+    lucide-aliases.ts            generated icon-alias map
+  shared/                        imported by BOTH bundles — must satisfy the sandbox constraints below
+    types.ts                     message-bus schema barrel; domain files in types/
+    constants.ts                 surface signatures, table limits
+    debug.ts                     debugLog helpers, active only in PLUGIN_DEBUG=1 builds
+    csv/                         CSV tokenizer (table editor sandbox-side + UI preview)
   ui/                            iframe Vue app (Vue 3 + Nuxt UI v4); plugin-message handling in composables/usePluginMessages.ts
-  editors/                       write side: feature editors invoked from sandbox/handlers (shared helpers in editors/_shared/)
-  csv/                           CSV tokenizer (consumed by table editor)
-  types.ts                       message-bus schema barrel; domain files in types/
-  slide-machine.ts               slide-build state machine
-  debug.ts                       debugLog helpers, active only in PLUGIN_DEBUG=1 builds
-  ...
 scripts/                         build/release/debug tooling (shared helpers in scripts/lib.mjs)
 docs/
   architecture/                  architecture notes
@@ -28,7 +35,7 @@ generate-lucide-aliases.mjs      build-time codegen for icon-alias map
 generate-lucide-svgs.mjs         build-time codegen for lucide-svgs.ts + lucide-icon-names.ts
 ```
 
-Generated files (committed, never hand-edited): `src/lucide-aliases.ts`, `src/ui/lucide-svgs.ts`, `src/ui/lucide-icon-names.ts`, `src/ui/generated/app-version.ts`, `dist/` (tracked so a fresh clone loads in Figma without building).
+Generated files (committed, never hand-edited): `src/sandbox/lucide-aliases.ts`, `src/ui/lucide-svgs.ts`, `src/ui/lucide-icon-names.ts`, `src/ui/generated/app-version.ts`, `dist/` (tracked so a fresh clone loads in Figma without building).
 
 ## Build commands
 
@@ -47,7 +54,7 @@ Loadable via Figma → Plugins → Development → Import plugin from manifest �
 
 The Figma plugin runtime has two threads with strict separation. Crossing them outside the message bus is a blocking review comment.
 
-**Sandbox bundle (Figma sandbox, runs `figma.*`) — `src/code.ts` plus everything it imports: `sandbox/`, `scan/`, `editors/`, `slide-machine.ts`**
+**Sandbox bundle (Figma sandbox, runs `figma.*`) — all of `src/sandbox/` (entry `main.ts`) plus `src/shared/` (shared code ships in both bundles, so it obeys the stricter sandbox rules)**
 
 - No DOM — no `document`, `window`, `localStorage`, `fetch` against arbitrary URLs (only `allowedDomains` from manifest; currently `["none"]`).
 - ES2017 target only — no optional chaining, nullish coalescing, or catch-without-binding in the sandbox bundle. The UI bundle (Vite) may use ES2020+.
