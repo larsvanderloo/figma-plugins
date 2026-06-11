@@ -325,49 +325,36 @@ export const TABLE_MAX_ROWS = 15;
 // renderer.ts via maxLines+textTruncation, berekend per cell uit de
 // werkelijke row.height.
 
-/** Maximum aantal kolommen per breedte-preset. */
-export const TABLE_MAX_COLS: Record<'sm' | 'md' | 'lg', number> = {
-  sm: 3,
-  md: 4,
-  lg: 6,
-};
+/**
+ * T44: flat maximum — de eerdere per-breedte-preset-koppeling
+ * (sm 3 / md 4 / lg 6) is weg; breedte volgt nu het kolom-aantal.
+ */
+export const TABLE_MAX_COLS = 6;
 
 /**
- * Breedte van de Slot-node in Figma-pixels per breedte-preset.
- * De renderer roept `slot.resize(TABLE_WIDTHS[width], slot.height)` aan.
- *
- * Deze presets zijn gekalibreerd op de 1920-brede Slide (lg ≈ 90%,
- * md ≈ 58%, sm ≈ 44% van de surface-breedte). De Whitepaper (1240) heeft
- * een eigen set met dezelfde fracties — zie WHITEPAPER_TABLE_WIDTHS.
- * `applyTable` kiest per-surface via tableWidthsForSurface().
+ * T44 — breedte per kolom in Figma-pixels. De oude presets waren
+ * impliciet al "~280px per kolom" (sm 840/3, md 1119/4, lg 1728/6);
+ * 288 reproduceert het oude lg-footprint exact (288 × 6 = 1728).
  */
-export const TABLE_WIDTHS: Record<'sm' | 'md' | 'lg', number> = {
-  sm: 840,
-  md: 1119,
-  lg: 1728,
-};
+export const TABLE_COL_WIDTH = 288;
+
+/** Maximale tabel-breedte per surface (was de oude lg-preset). */
+export const TABLE_MAX_WIDTH_SLIDE = 1728;
+export const TABLE_MAX_WIDTH_WHITEPAPER = 1116;
 
 /**
- * Slot-breedtes voor de Whitepaper-surface (1240 breed). Zelfde fracties
- * als TABLE_WIDTHS toegepast op 1240 (44% / 58% / 90%), zodat lg ~62px
- * marge per zijde houdt en niet over de pagina-rand loopt.
+ * T44 — afgeleide tabel-breedte: kolom-aantal × TABLE_COL_WIDTH, geclampt
+ * op het surface-maximum. De `max(columnCount, 2)`-vloer voorkomt dat een
+ * 1-koloms tabel 288px breed op een 1920-slide rendert — bewuste guard,
+ * geen preset. Onbekende/afwezige surface-naam → Slide-max (default +
+ * safe fallback voor legacy slides zonder herkenbare surface-ancestor).
  */
-export const WHITEPAPER_TABLE_WIDTHS: Record<'sm' | 'md' | 'lg', number> = {
-  sm: 560,
-  md: 720,
-  lg: 1116,
-};
-
-/**
- * Kiest de juiste breedte-presets voor de surface waarin de TableWrap
- * leeft. Onbekende/afwezige surface-naam → Slide-presets (default + safe
- * fallback voor legacy slides zonder herkenbare surface-ancestor).
- */
-export function tableWidthsForSurface(
-  surfaceName: string | null,
-): Record<'sm' | 'md' | 'lg', number> {
-  if (surfaceName === WHITEPAPER_NODE_NAME) return WHITEPAPER_TABLE_WIDTHS;
-  return TABLE_WIDTHS;
+export function tableWidthForSurface(surfaceName: string | null, columnCount: number): number {
+  const surfaceMax =
+    surfaceName === WHITEPAPER_NODE_NAME ? TABLE_MAX_WIDTH_WHITEPAPER : TABLE_MAX_WIDTH_SLIDE;
+  const cols = columnCount > 2 ? columnCount : 2;
+  const derived = cols * TABLE_COL_WIDTH;
+  return derived < surfaceMax ? derived : surfaceMax;
 }
 
 // T39.2: TABLE_TEXT_SIZES verwijderd. fontSize wordt nu in renderer.ts

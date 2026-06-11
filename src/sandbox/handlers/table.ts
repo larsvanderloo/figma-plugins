@@ -7,7 +7,7 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { postToUI } from '../bridge';
+import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideById } from '../slides';
 import { applyTable } from '../editors/table/renderer';
 import { importCSV } from '../editors/table/csv';
@@ -38,6 +38,7 @@ export async function handleUpdateTable(
   }
   figma.commitUndo();
   await applyTable(slotNode as SlotNode, msg.desired);
+  markSelfWrite();
   postToUI({
     type: 'target-updated',
     ok: true,
@@ -49,8 +50,8 @@ export async function handleUpdateTable(
 export async function handleImportCsv(
   msg: Extract<UIToPluginMessage, { type: 'import-csv' }>,
 ): Promise<void> {
-  // T34.2 / T39.2: parse + truncate + applyTable. Width blijft behouden
-  // (gelezen uit pluginData) — import verandert alleen row/cel-inhoud.
+  // T34.2 / T44: parse + truncate + applyTable. Import verandert alleen
+  // row/cel-inhoud; de tabel-breedte volgt rendertime het kolom-aantal.
   const slide = await findSlideById(msg.slideId);
   if (slide === null) {
     postToUI({
@@ -71,6 +72,7 @@ export async function handleImportCsv(
   }
   figma.commitUndo();
   await importCSV(slotNode as SlotNode, msg.csv);
+  markSelfWrite();
   postToUI({
     type: 'target-updated',
     ok: true,

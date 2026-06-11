@@ -13,8 +13,6 @@
 export interface TableWrapModel {
   /** Figma SlotNode ID binnen de TableWrap-INSTANCE. */
   slotId: string;
-  /** Kolombreedte-preset van de tabel. */
-  width: 'sm' | 'md' | 'lg';
   /**
    * T40 — wanneer true krijgt rij 0 een header-treatment: HUG-vertical,
    * gecentreerde tekst, dimmer-color, divider eronder. Body-rijen (1+)
@@ -22,15 +20,13 @@ export interface TableWrapModel {
    * Default: false (bestaande tabellen blijven onveranderd).
    */
   hasColumnHeader: boolean;
-  /**
-   * T42.9 — tekst-grootte multiplier op de hoogte-formule.
-   * sm = 0.75×, md = 1.0× (default), lg = 1.25×.
-   * Was eerder verwijderd in T39.2 toen height-only formula werd
-   * geïntroduceerd; teruggebracht omdat user-controle nodig blijkt.
-   */
-  textSize: 'sm' | 'md' | 'lg';
   rows: TableRowModel[];
 }
+
+// T44: `width`-preset (sm/md/lg) en `textSize`-multiplier (T42.9) verwijderd.
+// Breedte wordt rendertime afgeleid uit het kolom-aantal (zie
+// tableWidthForSurface in shared/constants.ts); fontSize uit de
+// hoogte-formule in renderer.ts (getFontSizes — de eerdere 'md'-clamps).
 
 /** Eén rij binnen een TableWrapModel. */
 export interface TableRowModel {

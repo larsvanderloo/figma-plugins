@@ -22,15 +22,12 @@
 // ============================================================
 
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
-import { tableWidthsForSurface } from '../../../shared/constants';
+import { tableWidthForSurface } from '../../../shared/constants';
 import { findEnclosingSurfaceName } from '../../slide-machine';
 import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from '../_shared/accent-vars';
 
-type WidthKey = 'sm' | 'md' | 'lg';
-
 /**
  * Tekst-fontSize afgeleid van actual rowHeight (T39.1.1, v0.2.2).
- * Vervangt user-pick textSize én de eerdere rowCount-matrix uit T39.1.
  *
  * `rowHeight` is hier de OUTER row-height (= row's eigen FILL-share van de
  * container). Inner content-area per rij is rowHeight - 40 (rowFrame
@@ -40,60 +37,25 @@ type WidthKey = 'sm' | 'md' | 'lg';
  *
  * Formule:
  *   rowHeight = (slotHeight - 48) / rowCount        // T41.9: container.padding 24+24
- *   heading   = clamp(round(rowHeight * 0.36 * mult), 16, 40)
- *   body      = clamp(round(rowHeight * 0.30 * mult), 12, 32)
+ *   heading   = clamp(round(rowHeight * 0.36), 16, 32)
+ *   body      = clamp(round(rowHeight * 0.30), 14, 24)
  *
- * Multiplier (T42.9 — textSize-picker terug):
- *   sm: 0.75 — kleinere tekst
- *   md: 1.00 — default
- *   lg: 1.25 — grotere tekst
- *
- * T42.9: width-clamp uit T42.6-T42.8 verwijderd. Responsiveness blijft
- * alleen op hoogte; user-control via textSize-picker (sm/md/lg).
+ * T44: de textSize-multiplier (T42.9, sm/lg-branches) is weer verwijderd —
+ * fontSize is volledig automatisch; de clamps zijn de eerdere 'md'-waardes
+ * (T42.21-kalibratie).
  */
-function getFontSizes(
-  slotHeight: number,
-  rowCount: number,
-  textSize: 'sm' | 'md' | 'lg',
-): { heading: number; body: number } {
+function getFontSizes(slotHeight: number, rowCount: number): { heading: number; body: number } {
   var safeRowCount = rowCount > 0 ? rowCount : 1;
   var rowHeight = (slotHeight - 48) / safeRowCount;
   if (rowHeight < 16) rowHeight = 16;
-  // T42.21: getoned-down clamps na user-feedback dat lg te groot was en
-  // sm niet klein genoeg. Drie altijd-onderscheiden waardes met
-  // realistischere typografie-range.
-  var mult: number;
-  var headingMin: number;
-  var headingMax: number;
-  var bodyMin: number;
-  var bodyMax: number;
-  if (textSize === 'sm') {
-    mult = 0.55;
-    headingMin = 12;
-    headingMax = 22;
-    bodyMin = 10;
-    bodyMax = 16;
-  } else if (textSize === 'lg') {
-    mult = 1.3;
-    headingMin = 24;
-    headingMax = 48;
-    bodyMin = 20;
-    bodyMax = 36;
-  } else {
-    mult = 1.0;
-    headingMin = 16;
-    headingMax = 32;
-    bodyMin = 14;
-    bodyMax = 24;
-  }
 
-  var heading = Math.round(rowHeight * 0.36 * mult);
-  if (heading < headingMin) heading = headingMin;
-  if (heading > headingMax) heading = headingMax;
+  var heading = Math.round(rowHeight * 0.36);
+  if (heading < 16) heading = 16;
+  if (heading > 32) heading = 32;
 
-  var body = Math.round(rowHeight * 0.3 * mult);
-  if (body < bodyMin) body = bodyMin;
-  if (body > bodyMax) body = bodyMax;
+  var body = Math.round(rowHeight * 0.3);
+  if (body < 14) body = 14;
+  if (body > 24) body = 24;
 
   return { heading: heading, body: body };
 }
@@ -102,22 +64,9 @@ function getFontSizes(
 // Scan — lees huidige Slot-content in een TableWrapModel
 // -------------------------------------------------------------------
 
-function readWidth(slot: SlotNode): WidthKey {
-  const v = slot.getPluginData('width');
-  if (v === 'sm' || v === 'md' || v === 'lg') return v;
-  return 'md';
-}
-
 /** T40 — leest of de tabel een header-rij heeft. Default false. */
 function readHasColumnHeader(slot: SlotNode): boolean {
   return slot.getPluginData('hasColumnHeader') === '1';
-}
-
-/** T42.9 — leest textSize-preset (sm/md/lg). Default 'md'. */
-function readTextSize(slot: SlotNode): 'sm' | 'md' | 'lg' {
-  const v = slot.getPluginData('textSize');
-  if (v === 'sm' || v === 'md' || v === 'lg') return v;
-  return 'md';
 }
 
 /**
@@ -184,9 +133,7 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
 
   return {
     slotId: slot.id,
-    width: readWidth(slot),
     hasColumnHeader: readHasColumnHeader(slot),
-    textSize: readTextSize(slot),
     rows: rows,
   };
 }
@@ -201,7 +148,7 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
  * - 2px border bound aan Text Dimmer
  * - 32px corner radius
  * - 32px horizontaal + 24px verticaal padding
- * Caller roept `container.resize(TABLE_WIDTHS[width], container.height)`
+ * Caller roept `container.resize(desiredWidth, container.height)`
  * NA appendChild aan de Slot, zodat de container onafhankelijk van de
  * slot-breedte altijd de preset-breedte aanneemt (karakter-wrap-fix).
  */
@@ -569,12 +516,14 @@ function applyBodyTruncation(bodyRows: FrameNode[]): void {
 
 /**
  * Full-state PUT: clear alle Slot-children en bouw opnieuw uit `desired`.
- * Persisteer `width` + migration-marker op pluginData. (T39.2: textSize-write
- * verwijderd — fontSize wordt rendertime afgeleid uit slot.height + rowCount.)
+ * Persisteer `hasColumnHeader` + migration-marker op pluginData. (T44:
+ * width/textSize-keys worden actief gewist — breedte volgt het kolom-aantal,
+ * fontSize wordt rendertime afgeleid uit slot.height + rowCount.)
  *
  * Width-strategie (T37-fix — karakter-wrap in smalle slots):
  * 1. Probeer parent-chain (TableWrap-instance, dan Slot) te resizen naar
- *    `TABLE_WIDTHS[width]` zodat het omringende layout mee-schaalt.
+ *    de afgeleide breedte (tableWidthForSurface) zodat het omringende
+ *    layout mee-schaalt.
  * 2. Zet EXPLICIT `container.resize(...)` zodat de content altijd de
  *    preset-breedte heeft, ook als slot/parent niet konden resizen
  *    (container overflow't dan visueel — user-feedback om slide-layout
@@ -603,11 +552,23 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     }
   }
 
+  // T44: kolom-aantal bepaalt de tabel-breedte. Pad ragged rows (CSV-import
+  // kan rijen met minder cellen leveren) tot een rechthoek — FIXED
+  // kolom-breedtes mogen niet per rij verspringen.
+  let columnCount = 0;
+  for (let i = 0; i < desired.rows.length; i++) {
+    if (desired.rows[i].cells.length > columnCount) columnCount = desired.rows[i].cells.length;
+  }
+  for (let i = 0; i < desired.rows.length; i++) {
+    const cells = desired.rows[i].cells;
+    while (cells.length < columnCount) cells.push({ cellNodeId: '', value: '' });
+  }
+
   // Surface-aware breedte: een Slide (1920) en een Whitepaper (1240) hebben
-  // verschillende Slot-breedte-presets. Bepaal de omsluitende surface vanaf
-  // de Slot en kies de bijbehorende preset-tabel; onbekend → Slide-default.
+  // een eigen maximum. Bepaal de omsluitende surface vanaf de Slot en leid
+  // de breedte af uit het kolom-aantal; onbekend → Slide-default.
   const surfaceName = findEnclosingSurfaceName(slot);
-  const desiredWidth = tableWidthsForSurface(surfaceName)[desired.width];
+  const desiredWidth = tableWidthForSurface(surfaceName, columnCount);
 
   if (vars.text !== null && vars.dimmer !== null) {
     const textRGB = resolveColor(vars.text, slot, { r: 1, g: 0.957, b: 0.918 });
@@ -683,13 +644,8 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     const HEADER_HEIGHT_ESTIMATE = 50;
     const bodyRowCount = hasHeader ? effectiveRows.length - 1 : effectiveRows.length;
     const adjustedSlotHeight = hasHeader ? slot.height - HEADER_HEIGHT_ESTIMATE : slot.height;
-    // T42.9: width-clamp uit T42.6-T42.8 verwijderd. Alleen hoogte +
-    // textSize-multiplier (sm/md/lg user-pick).
-    const sizes = getFontSizes(
-      adjustedSlotHeight,
-      bodyRowCount > 0 ? bodyRowCount : 1,
-      desired.textSize,
-    );
+    // T44: fontSize volledig automatisch uit hoogte + rowCount.
+    const sizes = getFontSizes(adjustedSlotHeight, bodyRowCount > 0 ? bodyRowCount : 1);
 
     // T42.16: collect body-rows voor post-FILL truncation pass.
     const bodyRows: FrameNode[] = [];
@@ -749,9 +705,10 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     console.log('[welder-slide-editor] applyTable: library-vars missing, skipping rebuild');
   }
 
-  slot.setPluginData('width', desired.width);
+  // T44: stale width/textSize-keys actief wissen (lege string = delete).
+  slot.setPluginData('width', '');
+  slot.setPluginData('textSize', '');
   slot.setPluginData('hasColumnHeader', desired.hasColumnHeader ? '1' : '0');
-  slot.setPluginData('textSize', desired.textSize); // T42.9: re-introduced
   slot.setPluginData('kind', 'welder-tablewrap');
-  slot.setPluginData('v', '3');
+  slot.setPluginData('v', '4');
 }

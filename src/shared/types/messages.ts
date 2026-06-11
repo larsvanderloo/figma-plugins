@@ -111,8 +111,8 @@ export type UIToPluginMessage =
   | {
       /**
        * CSV-import voor een TableWrap (T34.2). Main-thread parseert de CSV-
-       * string, trunceert op TABLE_MAX_ROWS / TABLE_MAX_COLS[width] en roept
-       * applyTable aan.
+       * string, trunceert op TABLE_MAX_ROWS / TABLE_MAX_COLS (T44: flat max)
+       * en roept applyTable aan.
        */
       type: 'import-csv';
       slideId: string;

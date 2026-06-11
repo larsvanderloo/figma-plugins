@@ -20,13 +20,6 @@ const emit = defineEmits<{
   'import-csv': [csv: string];
 }>();
 
-type SizeKey = 'sm' | 'md' | 'lg';
-
-const SIZE_OPTIONS: Array<{ value: SizeKey; label: string }> = [
-  { value: 'sm', label: 'Klein' },
-  { value: 'md', label: 'Middel' },
-  { value: 'lg', label: 'Groot' },
-];
 function cloneRows(rows: TableRowModel[]): TableRowModel[] {
   let maxLen = 0;
   for (let i = 0; i < rows.length; i++) {
@@ -46,38 +39,21 @@ function cloneRows(rows: TableRowModel[]): TableRowModel[] {
   }
   return out;
 }
-const localWidth = ref<SizeKey>(props.modelValue.width);
-const localTextSize = ref<SizeKey>(props.modelValue.textSize);
 const localHasColumnHeader = ref<boolean>(props.modelValue.hasColumnHeader);
 const localRows = ref<TableRowModel[]>(cloneRows(props.modelValue.rows));
 
-const maxCols = computed<number>(() => TABLE_MAX_COLS[localWidth.value]);
 const canAddRow = computed<boolean>(() => localRows.value.length < TABLE_MAX_ROWS);
 const currentCols = computed<number>(() =>
   localRows.value.length > 0 ? localRows.value[0].cells.length : 0,
 );
 const canAddColumn = computed<boolean>(
-  () => localRows.value.length > 0 && currentCols.value < maxCols.value,
+  () => localRows.value.length > 0 && currentCols.value < TABLE_MAX_COLS,
 );
 const bodyRowOffset = computed<number>(() => (localHasColumnHeader.value ? 1 : 0));
-watch(
-  () => props.modelValue.width,
-  (next) => {
-    if (next !== localWidth.value) localWidth.value = next;
-  },
-);
-
 watch(
   () => props.modelValue.hasColumnHeader,
   (next) => {
     if (next !== localHasColumnHeader.value) localHasColumnHeader.value = next;
-  },
-);
-
-watch(
-  () => props.modelValue.textSize,
-  (next) => {
-    if (next !== localTextSize.value) localTextSize.value = next;
   },
 );
 function rowsDiffer(a: TableRowModel[], b: TableRowModel[]): boolean {
@@ -116,9 +92,7 @@ function scheduleEmit(): void {
     }, 2000);
     emit('update:modelValue', {
       slotId: props.modelValue.slotId,
-      width: localWidth.value,
       hasColumnHeader: localHasColumnHeader.value,
-      textSize: localTextSize.value,
       rows: cloneRows(localRows.value),
     });
   }, 200);
@@ -129,35 +103,15 @@ onBeforeUnmount(() => {
   if (lastImportTimer !== null) clearTimeout(lastImportTimer);
   if (echoResetTimer !== null) clearTimeout(echoResetTimer);
 });
-function setWidth(w: SizeKey): void {
-  if (localWidth.value === w) return;
-  localWidth.value = w;
-  scheduleEmit();
-}
-
 function setHasColumnHeader(v: boolean): void {
   if (localHasColumnHeader.value === v) return;
   localHasColumnHeader.value = v;
   scheduleEmit();
 }
 
-function setTextSize(s: SizeKey): void {
-  if (localTextSize.value === s) return;
-  localTextSize.value = s;
-  scheduleEmit();
-}
-
-function onWidthChange(value: string | number | undefined): void {
-  if (value === 'sm' || value === 'md' || value === 'lg') setWidth(value);
-}
-
-function onTextSizeChange(value: string | number | undefined): void {
-  if (value === 'sm' || value === 'md' || value === 'lg') setTextSize(value);
-}
-
 function addRow(): void {
   if (!canAddRow.value) return;
-  const cellCount = currentCols.value > 0 ? Math.min(currentCols.value, maxCols.value) : 1;
+  const cellCount = currentCols.value > 0 ? Math.min(currentCols.value, TABLE_MAX_COLS) : 1;
   const cells: TableCellModel[] = [];
   for (let j = 0; j < cellCount; j++) cells.push({ cellNodeId: '', value: '' });
   localRows.value.push({ rowNodeId: '', cells: cells });
@@ -209,8 +163,8 @@ function validateCSV(text: string): string {
   }
   for (let i = 0; i < nonEmpty.length; i++) {
     const cellCount = nonEmpty[i].length;
-    if (cellCount > maxCols.value) {
-      return `Rij ${i + 1}: ${cellCount} kolommen — max ${maxCols.value} bij breedte ${localWidth.value}.`;
+    if (cellCount > TABLE_MAX_COLS) {
+      return `Rij ${i + 1}: ${cellCount} kolommen — max ${TABLE_MAX_COLS}.`;
     }
   }
   return '';
@@ -274,54 +228,9 @@ watch(csvText, () => {
 
 <template>
   <WCard>
-    <UFormField name="table-width" label="Breedte">
-      <UTabs
-        :model-value="localWidth"
-        :items="SIZE_OPTIONS"
-        value-key="value"
-        color="neutral"
-        variant="pill"
-        size="xs"
-        :content="false"
-        :ui="{ trigger: 'h-7 px-2 py-0', indicator: 'bg-inverted/15' }"
-        @update:model-value="onWidthChange"
-      />
-    </UFormField>
-    <UFormField name="table-text-size" label="Tekstgrootte">
-      <URadioGroup
-        :model-value="localTextSize"
-        :items="SIZE_OPTIONS"
-        value-key="value"
-        variant="card"
-        orientation="horizontal"
-        indicator="hidden"
-        :ui="{ fieldset: 'grid grid-cols-3 gap-2', item: 'min-w-0' }"
-        @update:model-value="onTextSizeChange"
-      >
-        <template #label="{ item }">
-          <span
-            class="flex flex-col items-center gap-1 px-3 py-2 transition-colors"
-            :class="
-              localTextSize === item.value
-                ? 'text-primary'
-                : 'text-default'
-            "
-          >
-            <span
-              class="font-semibold"
-              :class="item.value === 'sm' ? 'text-xs' : item.value === 'lg' ? 'text-xl' : 'text-base'"
-            >Aa</span>
-            <span class="text-xs text-muted">{{ item.label }}</span>
-          </span>
-        </template>
-      </URadioGroup>
-    </UFormField>
-
-    <USeparator />
-
     <div class="flex items-center gap-3">
       <span class="text-xs text-muted">{{ localRows.length }} / {{ TABLE_MAX_ROWS }} rijen</span>
-      <span class="text-xs text-muted">{{ currentCols }} / {{ maxCols }} kolommen</span>
+      <span class="text-xs text-muted">{{ currentCols }} / {{ TABLE_MAX_COLS }} kolommen</span>
     </div>
 
     <UEmpty
@@ -438,7 +347,7 @@ watch(csvText, () => {
       accept=".csv,text/csv"
       icon="i-lucide-folder-plus"
       label="Sleep je CSV hier of klik om te bladeren"
-      :description="`Max ${TABLE_MAX_ROWS} rijen · ${maxCols} kolommen bij breedte ${localWidth}.`"
+      :description="`Max ${TABLE_MAX_ROWS} rijen · ${TABLE_MAX_COLS} kolommen.`"
       color="neutral"
       :preview="false"
       reset
@@ -464,7 +373,7 @@ watch(csvText, () => {
       </span>
     </div>
     <div v-else class="text-xs text-muted">
-      Max {{ TABLE_MAX_ROWS }} rijen · {{ maxCols }} kolommen bij breedte {{ localWidth }}.
+      Max {{ TABLE_MAX_ROWS }} rijen · {{ TABLE_MAX_COLS }} kolommen.
     </div>
   </WCard>
 </template>
