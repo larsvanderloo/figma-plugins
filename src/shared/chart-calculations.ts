@@ -66,6 +66,7 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
       name: src !== undefined && typeof src.name === 'string' ? src.name : '',
       values: values,
       emphasis: emphasis,
+      percent: src !== undefined && src.percent === true,
     });
   }
   if (series.length === 0) {
@@ -75,7 +76,7 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
       values.push(0);
       emphasis.push(false);
     }
-    series.push({ name: '', values: values, emphasis: emphasis });
+    series.push({ name: '', values: values, emphasis: emphasis, percent: false });
   }
 
   // T50 — delta-overrides rechthoekig op categorie-lengte; progressMax
@@ -103,6 +104,10 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
     showDelta: model.showDelta === true,
     deltaOverrides: deltaOverrides,
     progressMax: progressMax,
+    donutTotalOverride: typeof model.donutTotalOverride === 'string' ? model.donutTotalOverride : '',
+    donutTotalLabel: typeof model.donutTotalLabel === 'string' ? model.donutTotalLabel : 'totaal',
+    donutTotalEmphasis: model.donutTotalEmphasis !== false,
+    donutTotalLabelEmphasis: model.donutTotalLabelEmphasis === true,
   };
 }
 
@@ -116,6 +121,10 @@ export function chartModelsEqual(a: ChartWrapModel | null, b: ChartWrapModel): b
   if (left.showLegend !== right.showLegend) return false;
   if (left.showValues !== right.showValues) return false;
   if (left.progressMax !== right.progressMax) return false;
+  if (left.donutTotalOverride !== right.donutTotalOverride) return false;
+  if (left.donutTotalLabel !== right.donutTotalLabel) return false;
+  if (left.donutTotalEmphasis !== right.donutTotalEmphasis) return false;
+  if (left.donutTotalLabelEmphasis !== right.donutTotalLabelEmphasis) return false;
   if (left.showDelta !== right.showDelta) return false;
   if (left.categories.length !== right.categories.length) return false;
   for (let i = 0; i < left.categories.length; i++) {
@@ -132,6 +141,7 @@ export function chartModelsEqual(a: ChartWrapModel | null, b: ChartWrapModel): b
   if (left.series.length !== right.series.length) return false;
   for (let s = 0; s < left.series.length; s++) {
     if (left.series[s].name !== right.series[s].name) return false;
+    if ((left.series[s].percent === true) !== (right.series[s].percent === true)) return false;
     for (let i = 0; i < left.series[s].values.length; i++) {
       if (left.series[s].values[i] !== right.series[s].values[i]) return false;
       const le = left.series[s].emphasis;
@@ -237,4 +247,10 @@ export function chartProgressReference(model: ChartWrapModel): number {
 /** T50 — chart-types die alleen serie 0 renderen. */
 export function isSingleSeriesChartType(t: ChartType): boolean {
   return t === 'donut' || t === 'pie' || t === 'progress';
+}
+
+/** T50.2 — waarde-label met optioneel procentteken (per serie). */
+export function chartValueLabel(series: ChartSeriesModel, value: number): string {
+  const formatted = formatTableNumber(value);
+  return series.percent === true ? formatted + '%' : formatted;
 }

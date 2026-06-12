@@ -27,6 +27,8 @@ export interface ChartSeriesModel {
    * SemiBold. Index-aligned met `values`; afwezig = geen nadruk.
    */
   emphasis?: boolean[];
+  /** T50.2 — waarde-labels van deze serie als percentage ('41' → '41%'). */
+  percent?: boolean;
 }
 
 /**
@@ -66,6 +68,14 @@ export interface ChartWrapModel {
    * auto: max(100, hoogste waarde). Alleen waarden > 0 zijn geldig.
    */
   progressMax?: number | null;
+  /** T50.4 — donut center-totaal override; lege string = auto (som serie 0). */
+  donutTotalOverride?: string;
+  /** T50.4 — onderschrift onder het center-totaal; default 'totaal'. */
+  donutTotalLabel?: string;
+  /** T50.4 — nadruk op het center-totaal (SemiBold); default true. */
+  donutTotalEmphasis?: boolean;
+  /** T50.4 — nadruk op het onderschrift (SemiBold); default false. */
+  donutTotalLabelEmphasis?: boolean;
   /**
    * Delta-badges tonen (T48): per categorie de verandering t.o.v. de
    * vorige categorie in serie 0 (▲ +12% / ▼ −5%). Optioneel zodat
