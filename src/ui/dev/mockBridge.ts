@@ -127,6 +127,7 @@ export function installMockBridge(): void {
               columnCalculations: [null, 'sum', 'sum'],
               columnCalculationEmphasis: [false, true, true],
               columnCalculationCurrency: [false, false, true],
+              columnCalculationPercent: [false, true, false],
               rows: [
                 {
                   rowNodeId: 'row-0',

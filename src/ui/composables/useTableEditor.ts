@@ -38,6 +38,15 @@ function tableSemanticsEqual(a: TableWrapModel | null, b: TableWrapModel): boole
   ) {
     return false;
   }
+  if (
+    !columnEmphasisEqual(
+      a.columnCalculationPercent,
+      b.columnCalculationPercent,
+      tableColumnCount(b),
+    )
+  ) {
+    return false;
+  }
 
   for (let i = 0; i < a.rows.length; i++) {
     const aCells = a.rows[i].cells;

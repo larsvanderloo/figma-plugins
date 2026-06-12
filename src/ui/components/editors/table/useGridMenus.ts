@@ -17,6 +17,7 @@ type GridMenusEmit = {
   (event: 'column-calculation', col: number, calculation: TableColumnCalculationSetting): void;
   (event: 'column-calculation-emphasis', col: number, emphasis: boolean): void;
   (event: 'column-calculation-currency', col: number, currency: boolean): void;
+  (event: 'column-calculation-percent', col: number, percent: boolean): void;
   (event: 'add-row-before', row: number): void;
   (event: 'add-row-after', row: number): void;
   (event: 'remove-row', row: number): void;
@@ -30,6 +31,7 @@ interface GridMenusDeps {
   normalizedColumnCalculations: ComputedRef<TableColumnCalculationSetting[]>;
   normalizedColumnCalculationEmphasis: ComputedRef<boolean[]>;
   normalizedColumnCalculationCurrency: ComputedRef<boolean[]>;
+  normalizedColumnCalculationPercent: ComputedRef<boolean[]>;
   focusCell: (row: number, col: number) => void;
   focusNearest: (row: number, col: number) => void;
 }
@@ -40,6 +42,7 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
     normalizedColumnCalculations,
     normalizedColumnCalculationEmphasis,
     normalizedColumnCalculationCurrency,
+    normalizedColumnCalculationPercent,
     focusCell,
     focusNearest,
   } = deps;
@@ -229,8 +232,17 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
     emit('column-calculation-currency', col, currency);
   }
 
+  function isColumnCalculationPercent(col: number): boolean {
+    return normalizedColumnCalculationPercent.value[col] === true;
+  }
+
+  function setColumnCalculationPercent(col: number, percent: boolean): void {
+    emit('column-calculation-percent', col, percent);
+  }
+
   // Footer/sum cell exposes the emphasis toggle (mirroring the per-cell
-  // "Cel benadrukken" action) plus a currency toggle for the sum value.
+  // "Cel benadrukken" action) plus currency/percent toggles for the sum
+  // value (mutually exclusive, enforced in useTableMutations).
   function footerMenuItems(col: number): DropdownMenuItem[][] {
     return [
       [
@@ -243,6 +255,11 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
           label: isColumnCalculationCurrency(col) ? 'Euroteken verbergen' : 'Euroteken tonen',
           icon: 'i-lucide-euro',
           onSelect: () => setColumnCalculationCurrency(col, !isColumnCalculationCurrency(col)),
+        },
+        {
+          label: isColumnCalculationPercent(col) ? 'Procentteken verbergen' : 'Procentteken tonen',
+          icon: 'i-lucide-percent',
+          onSelect: () => setColumnCalculationPercent(col, !isColumnCalculationPercent(col)),
         },
       ],
     ];

@@ -185,10 +185,12 @@ export function computeTableColumnSummaries(
   columnCount: number,
   emphasis?: readonly boolean[],
   currency?: readonly boolean[],
+  percent?: readonly boolean[],
 ): Array<TableColumnSummary | null> {
   const normalized = normalizeColumnCalculations(settings, columnCount);
   const normalizedEmphasis = normalizeColumnEmphasis(emphasis, columnCount);
   const normalizedCurrency = normalizeColumnEmphasis(currency, columnCount);
+  const normalizedPercent = normalizeColumnEmphasis(percent, columnCount);
   const out: Array<TableColumnSummary | null> = [];
   const startRow = hasColumnHeader ? 1 : 0;
 
@@ -211,14 +213,15 @@ export function computeTableColumnSummaries(
 
     out.push({
       calculation: 'sum',
-      // `value` is always the plain formatted number. Currency is signalled
-      // via the `currency` flag: the canvas renderer prepends a `€ ` text
-      // prefix, while the UI footer shows a lucide euro icon instead.
+      // `value` is always the plain formatted number. Currency/percent are
+      // signalled via the flags: consumers (UI footer + canvas renderer)
+      // add the `€`-prefix or `%`-suffix themselves.
       value: formatTableNumber(sum),
       numericValue: sum,
       numericCount: count,
       emphasis: normalizedEmphasis[col],
       currency: normalizedCurrency[col],
+      percent: normalizedPercent[col],
     });
   }
 

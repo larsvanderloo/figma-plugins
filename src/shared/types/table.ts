@@ -33,9 +33,16 @@ export interface TableWrapModel {
   columnCalculationEmphasis?: boolean[];
   /**
    * Per-column currency formatting for the footer/calculation value.
-   * `true` renders the sum with a `€ ` prefix (UI footer + canvas).
+   * `true` renders the sum with a `€` prefix (UI footer + canvas).
+   * Mutually exclusive with `columnCalculationPercent` (UI-enforced).
    */
   columnCalculationCurrency?: boolean[];
+  /**
+   * Per-column percent formatting for the footer/calculation value.
+   * `true` renders the sum with a `%` suffix (UI footer + canvas).
+   * Mutually exclusive with `columnCalculationCurrency` (UI-enforced).
+   */
+  columnCalculationPercent?: boolean[];
   rows: TableRowModel[];
 }
 
@@ -69,6 +76,8 @@ export interface TableColumnSummary {
   numericCount: number;
   /** When true, the footer value renders in the emphasized (bold) style. */
   emphasis: boolean;
-  /** When true, `value` is formatted as currency (`€ ` prefix). */
+  /** When true, `value` is formatted as currency (`€` prefix). */
   currency: boolean;
+  /** When true, `value` is formatted as a percentage (`%` suffix). */
+  percent: boolean;
 }

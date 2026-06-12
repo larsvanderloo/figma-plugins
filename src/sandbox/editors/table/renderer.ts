@@ -48,6 +48,7 @@ import {
   writeColumnCalculations,
   writeColumnCalculationEmphasis,
   writeColumnCalculationCurrency,
+  writeColumnCalculationPercent,
 } from './plugin-data';
 import { buildRow, buildHeaderRow } from './build-rows';
 import { buildFooterRow } from './footer';
@@ -64,6 +65,7 @@ export {
   readColumnCalculations,
   readColumnCalculationEmphasis,
   readColumnCalculationCurrency,
+  readColumnCalculationPercent,
 } from './plugin-data';
 
 // -------------------------------------------------------------------
@@ -166,6 +168,10 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     desired.columnCalculationCurrency,
     columnCount,
   );
+  const columnCalculationPercent = normalizeColumnEmphasis(
+    desired.columnCalculationPercent,
+    columnCount,
+  );
   // T46.1 — kolommen met een (numerieke) som-berekening worden volledig
   // rechts uitgelijnd (Notion number-column-stijl): header, body én footer.
   const rightAlignColumns: boolean[] = [];
@@ -234,6 +240,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
       columnCount,
       columnCalculationEmphasis,
       columnCalculationCurrency,
+      columnCalculationPercent,
     );
     const adjustedSlotHeight =
       slot.height - (hasHeader ? HEADER_HEIGHT_ESTIMATE : 0) - (hasFooter ? FOOTER_HEIGHT_ESTIMATE : 0);
@@ -383,6 +390,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
   writeColumnCalculations(slot, columnCalculations, columnCount);
   writeColumnCalculationEmphasis(slot, columnCalculationEmphasis, columnCount);
   writeColumnCalculationCurrency(slot, columnCalculationCurrency, columnCount);
+  writeColumnCalculationPercent(slot, columnCalculationPercent, columnCount);
   slot.setPluginData('kind', 'welder-tablewrap');
   slot.setPluginData('v', '4');
 }

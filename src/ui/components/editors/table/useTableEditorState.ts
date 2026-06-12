@@ -92,6 +92,12 @@ export function useTableEditorState(
       columnCountForRows(props.modelValue.rows),
     ),
   );
+  const localColumnCalculationPercent = ref<boolean[]>(
+    normalizeColumnEmphasis(
+      props.modelValue.columnCalculationPercent,
+      columnCountForRows(props.modelValue.rows),
+    ),
+  );
 
   const canAddRow = computed<boolean>(() => localRows.value.length < TABLE_MAX_ROWS);
   const currentCols = computed<number>(() => columnCountForRows(localRows.value));
@@ -116,6 +122,10 @@ export function useTableEditorState(
     );
     localColumnCalculationCurrency.value = normalizeColumnEmphasis(
       localColumnCalculationCurrency.value,
+      currentCols.value,
+    );
+    localColumnCalculationPercent.value = normalizeColumnEmphasis(
+      localColumnCalculationPercent.value,
       currentCols.value,
     );
   }
@@ -161,6 +171,15 @@ export function useTableEditorState(
       }
     },
   );
+  watch(
+    () => props.modelValue.columnCalculationPercent,
+    (next) => {
+      if (echoExpected) return;
+      if (!columnEmphasisEqual(next, localColumnCalculationPercent.value, currentCols.value)) {
+        localColumnCalculationPercent.value = normalizeColumnEmphasis(next, currentCols.value);
+      }
+    },
+  );
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   function scheduleEmit(reason: string): void {
@@ -196,12 +215,17 @@ export function useTableEditorState(
         localColumnCalculationCurrency.value,
         currentCols.value,
       );
+      const columnCalculationPercent = normalizeColumnEmphasis(
+        localColumnCalculationPercent.value,
+        currentCols.value,
+      );
       emit('update:modelValue', {
         slotId: props.modelValue.slotId,
         hasColumnHeader: localHasColumnHeader.value,
         columnCalculations: columnCalculations,
         columnCalculationEmphasis: columnCalculationEmphasis,
         columnCalculationCurrency: columnCalculationCurrency,
+        columnCalculationPercent: columnCalculationPercent,
         rows: rows,
       });
     }, 200);
@@ -218,6 +242,7 @@ export function useTableEditorState(
     localColumnCalculations,
     localColumnCalculationEmphasis,
     localColumnCalculationCurrency,
+    localColumnCalculationPercent,
     canAddRow,
     currentCols,
     canAddColumn,

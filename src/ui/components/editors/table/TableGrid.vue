@@ -22,6 +22,7 @@ interface Props {
   columnCalculations: TableColumnCalculationSetting[];
   columnCalculationEmphasis: boolean[];
   columnCalculationCurrency: boolean[];
+  columnCalculationPercent: boolean[];
   maxRows: number;
   maxCols: number;
 }
@@ -34,6 +35,7 @@ const emit = defineEmits<{
   'column-calculation': [col: number, calculation: TableColumnCalculationSetting];
   'column-calculation-emphasis': [col: number, emphasis: boolean];
   'column-calculation-currency': [col: number, currency: boolean];
+  'column-calculation-percent': [col: number, percent: boolean];
   'add-row-before': [row: number];
   'add-row-after': [row: number];
   'remove-row': [row: number];
@@ -58,6 +60,9 @@ const normalizedColumnCalculationEmphasis = computed<boolean[]>(() =>
 const normalizedColumnCalculationCurrency = computed<boolean[]>(() =>
   normalizeColumnEmphasis(props.columnCalculationCurrency, columnCount.value),
 );
+const normalizedColumnCalculationPercent = computed<boolean[]>(() =>
+  normalizeColumnEmphasis(props.columnCalculationPercent, columnCount.value),
+);
 const columnSummaries = computed<Array<TableColumnSummary | null>>(() =>
   computeTableColumnSummaries(
     props.rows,
@@ -66,6 +71,7 @@ const columnSummaries = computed<Array<TableColumnSummary | null>>(() =>
     columnCount.value,
     normalizedColumnCalculationEmphasis.value,
     normalizedColumnCalculationCurrency.value,
+    normalizedColumnCalculationPercent.value,
   ),
 );
 const hasCalculationFooter = computed<boolean>(() =>
@@ -113,6 +119,7 @@ const {
   normalizedColumnCalculations,
   normalizedColumnCalculationEmphasis,
   normalizedColumnCalculationCurrency,
+  normalizedColumnCalculationPercent,
   focusCell,
   focusNearest,
 });
@@ -327,7 +334,7 @@ function updateCellValue(value: unknown, row: number, col: number): void {
                 class="flex-1 truncate text-right text-sm leading-5 text-default"
                 :class="summary.emphasis ? 'font-semibold' : ''"
               >
-                {{ summary.currency ? '€' + summary.value : summary.value }}
+                {{ (summary.currency ? '€' : '') + summary.value + (summary.percent ? '%' : '') }}
               </span>
             </div>
             <UDropdownMenu

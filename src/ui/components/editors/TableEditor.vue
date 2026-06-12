@@ -25,6 +25,7 @@ const {
   localColumnCalculations,
   localColumnCalculationEmphasis,
   localColumnCalculationCurrency,
+  localColumnCalculationPercent,
   currentCols,
 } = state;
 
@@ -36,6 +37,7 @@ const {
   setColumnCalculation,
   setColumnCalculationEmphasis,
   setColumnCalculationCurrency,
+  setColumnCalculationPercent,
   insertRowBefore,
   insertRowAfter,
   removeRow,
@@ -75,6 +77,7 @@ const { csvUploadFile, csvError, lastImport, onCsvFileChange } = useCsvImport(pr
       :column-calculations="localColumnCalculations"
       :column-calculation-emphasis="localColumnCalculationEmphasis"
       :column-calculation-currency="localColumnCalculationCurrency"
+      :column-calculation-percent="localColumnCalculationPercent"
       :max-rows="TABLE_MAX_ROWS"
       :max-cols="TABLE_MAX_COLS"
       @cell-edit="updateCell"
@@ -82,6 +85,7 @@ const { csvUploadFile, csvError, lastImport, onCsvFileChange } = useCsvImport(pr
       @column-calculation="setColumnCalculation"
       @column-calculation-emphasis="setColumnCalculationEmphasis"
       @column-calculation-currency="setColumnCalculationCurrency"
+      @column-calculation-percent="setColumnCalculationPercent"
       @add-row-before="insertRowBefore"
       @add-row-after="insertRowAfter"
       @remove-row="removeRow"

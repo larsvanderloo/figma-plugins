@@ -108,3 +108,29 @@ export function writeColumnCalculationCurrency(
   }
   slot.setPluginData('columnCalculationCurrency', JSON.stringify(normalized));
 }
+
+export function readColumnCalculationPercent(slot: SlotNode, columnCount: number): boolean[] {
+  const raw = slot.getPluginData('columnCalculationPercent');
+  if (raw === '') return normalizeColumnEmphasis(undefined, columnCount);
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return normalizeColumnEmphasis(undefined, columnCount);
+    return normalizeColumnEmphasis(parsed, columnCount);
+  } catch (_e) {
+    return normalizeColumnEmphasis(undefined, columnCount);
+  }
+}
+
+export function writeColumnCalculationPercent(
+  slot: SlotNode,
+  percent: readonly boolean[],
+  columnCount: number,
+): void {
+  const normalized = normalizeColumnEmphasis(percent, columnCount);
+  if (!hasAnyEmphasis(normalized)) {
+    slot.setPluginData('columnCalculationPercent', '');
+    return;
+  }
+  slot.setPluginData('columnCalculationPercent', JSON.stringify(normalized));
+}

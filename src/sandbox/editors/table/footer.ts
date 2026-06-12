@@ -11,11 +11,15 @@
 import type { TableColumnSummary } from '../../../shared/types';
 import type { TableLayoutMetrics } from './metrics';
 
-// Canvas footer-tekst: `€ `-prefix bij currency, anders kale waarde.
-// (De UI gebruikt een lucide-euro icon i.p.v. deze tekst-prefix.)
+// Canvas footer-tekst: `€`-prefix bij currency, `%`-suffix bij percent,
+// anders kale waarde. (De UI rendert dezelfde tekst in de grid-footer;
+// de twee vlaggen zijn UI-zijdig mutually exclusive.)
 export function footerCanvasText(summary: TableColumnSummary | null): string {
   if (summary === null) return '';
-  return summary.currency === true ? '€' + summary.value : summary.value;
+  let text = summary.value;
+  if (summary.currency === true) text = '€' + text;
+  if (summary.percent === true) text = text + '%';
+  return text;
 }
 
 function buildFooterCell(

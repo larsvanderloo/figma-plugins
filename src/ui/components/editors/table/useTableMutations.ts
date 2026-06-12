@@ -34,6 +34,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculations,
     localColumnCalculationEmphasis,
     localColumnCalculationCurrency,
+    localColumnCalculationPercent,
     canAddRow,
     currentCols,
     canAddColumn,
@@ -137,6 +138,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculations.value.splice(index, 0, null);
     localColumnCalculationEmphasis.value.splice(index, 0, false);
     localColumnCalculationCurrency.value.splice(index, 0, false);
+    localColumnCalculationPercent.value.splice(index, 0, false);
     normalizeLocalColumnCalculations();
     announce('Kolom toegevoegd');
     scheduleEmit('add-column');
@@ -151,6 +153,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculations.value.splice(index, 0, null);
     localColumnCalculationEmphasis.value.splice(index, 0, false);
     localColumnCalculationCurrency.value.splice(index, 0, false);
+    localColumnCalculationPercent.value.splice(index, 0, false);
     normalizeLocalColumnCalculations();
     announce('Kolom toegevoegd');
     scheduleEmit('add-column');
@@ -167,6 +170,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculations.value.splice(j, 1);
     localColumnCalculationEmphasis.value.splice(j, 1);
     localColumnCalculationCurrency.value.splice(j, 1);
+    localColumnCalculationPercent.value.splice(j, 1);
     normalizeLocalColumnCalculations();
     announce('Kolom ' + String(j + 1) + ' verwijderd');
     scheduleEmit('remove-column');
@@ -188,6 +192,8 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculationEmphasis.value.splice(insertAt, 0, movedEmphasis === true);
     const movedCurrency = localColumnCalculationCurrency.value.splice(from, 1)[0];
     localColumnCalculationCurrency.value.splice(insertAt, 0, movedCurrency === true);
+    const movedPercent = localColumnCalculationPercent.value.splice(from, 1)[0];
+    localColumnCalculationPercent.value.splice(insertAt, 0, movedPercent === true);
     normalizeLocalColumnCalculations();
     announce('Kolom verplaatst');
     scheduleEmit('move-column');
@@ -201,7 +207,10 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculations.value[j] = next;
     // Nadruk staat standaard aan voor een nieuwe som; bij verwijderen reset.
     localColumnCalculationEmphasis.value[j] = next === 'sum';
-    if (next !== 'sum') localColumnCalculationCurrency.value[j] = false;
+    if (next !== 'sum') {
+      localColumnCalculationCurrency.value[j] = false;
+      localColumnCalculationPercent.value[j] = false;
+    }
     announce(next === 'sum' ? 'Som toegevoegd' : 'Som verwijderd');
     scheduleEmit('column-calculation');
   }
@@ -220,8 +229,21 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     normalizeLocalColumnCalculations();
     if (localColumnCalculationCurrency.value[j] === currency) return;
     localColumnCalculationCurrency.value[j] = currency;
+    // Euro- en procentteken sluiten elkaar uit.
+    if (currency) localColumnCalculationPercent.value[j] = false;
     announce(currency ? 'Euroteken tonen' : 'Euroteken verbergen');
     scheduleEmit('column-calculation-currency');
+  }
+
+  function setColumnCalculationPercent(j: number, percent: boolean): void {
+    if (j < 0 || j >= currentCols.value) return;
+    normalizeLocalColumnCalculations();
+    if (localColumnCalculationPercent.value[j] === percent) return;
+    localColumnCalculationPercent.value[j] = percent;
+    // Euro- en procentteken sluiten elkaar uit.
+    if (percent) localColumnCalculationCurrency.value[j] = false;
+    announce(percent ? 'Procentteken tonen' : 'Procentteken verbergen');
+    scheduleEmit('column-calculation-percent');
   }
 
   function updateCell(i: number, j: number, value: string): void {
@@ -324,6 +346,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     setColumnCalculation,
     setColumnCalculationEmphasis,
     setColumnCalculationCurrency,
+    setColumnCalculationPercent,
     insertRowBefore,
     insertRowAfter,
     removeRow,
