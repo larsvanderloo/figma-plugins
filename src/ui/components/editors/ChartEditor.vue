@@ -491,7 +491,7 @@ function removeSeries(s: number): void {
       color="neutral"
       :preview="false"
       reset
-      :ui="{ base: 'flex-none min-h-32' }"
+      :ui="{ base: '!grow-0 !flex-none h-32' }"
       @update:model-value="csv.onCsvFileChange"
     >
       <template #actions="{ open }">

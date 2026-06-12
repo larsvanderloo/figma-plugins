@@ -114,7 +114,7 @@ const { csvUploadFile, csvError, lastImport, onCsvFileChange } = useCsvImport(pr
       color="neutral"
       :preview="false"
       reset
-      :ui="{ base: 'flex-none min-h-32' }"
+      :ui="{ base: '!grow-0 !flex-none h-32' }"
       @update:model-value="onCsvFileChange"
     >
       <template #actions="{ open }">
