@@ -50,7 +50,11 @@ export function cellTint(light: RGB, accent: RGB, t: number): RGB {
   let clamped = t;
   if (clamped < 0) clamped = 0;
   if (clamped > 1) clamped = 1;
-  return blend(light, accent, clamped * 0.85);
+  // T53.4 — schoon licht→accent verloop zoals de donut-segmenten: start
+  // bij near-white (niet de cream-kaartkleur, die maakt lichte cellen
+  // modderig), eindig op de accent. Lege/0-cel = near-white ≈ kaart.
+  const near = { r: 0.99, g: 0.97, b: 0.95 };
+  return blend(near, accent, clamped * 0.92);
 }
 
 /** T53 — zwart of wit tekst op een cel-tint o.b.v. luminantie. */

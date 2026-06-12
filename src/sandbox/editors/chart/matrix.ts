@@ -11,8 +11,13 @@
 // ============================================================
 
 import type { ChartWrapModel } from '../../../shared/types';
-import { chartMaxValue, chartValueLabel } from '../../../shared/chart-calculations';
-import { cellTint, readableTextOn } from './palette';
+import {
+  chartMaxValue,
+  chartValueLabel,
+  isCategoryEmphasized,
+  isPointEmphasized,
+} from '../../../shared/chart-calculations';
+import { cellTint } from './palette';
 import type { ChartTheme } from './legend';
 
 export function buildMatrix(
@@ -116,7 +121,9 @@ export function buildMatrix(
     row.resize(contentW, cellH);
 
     const rowLabel = figma.createText();
-    rowLabel.fontName = { family: 'Inter', style: 'Medium' };
+    rowLabel.fontName = isCategoryEmphasized(model, r)
+      ? { family: 'Instrument Sans', style: 'SemiBold' }
+      : { family: 'Inter', style: 'Medium' };
     rowLabel.fontSize = labelSize;
     rowLabel.characters =
       model.categories[r] !== '' ? model.categories[r] : 'Categorie ' + String(r + 1);
@@ -147,12 +154,24 @@ export function buildMatrix(
       cell.resize(cellW, cellH);
 
       if (model.showValues) {
+        // T53.3 — tekst in-theme: donkere accent-tekst op lichte cellen,
+        // wit op verzadigde cellen. Kies o.b.v. luminantie-AFSTAND zodat
+        // mid-tone cellen niet de verkeerde (te bleke = grijs ogende)
+        // kleur krijgen.
+        const lum = 0.299 * tint.r + 0.587 * tint.g + 0.114 * tint.b;
+        const darkAccent = { r: accent.r * 0.45, g: accent.g * 0.45, b: accent.b * 0.45 };
+        const darkLum = 0.299 * darkAccent.r + 0.587 * darkAccent.g + 0.114 * darkAccent.b;
+        // wit (lum 1) vs darkAccent: kies de grootste luminantie-afstand.
+        const textColor = 1 - lum > lum - darkLum ? { r: 1, g: 1, b: 1 } : darkAccent;
+        const emphasized = isPointEmphasized(model.series[c], r);
         const vText = figma.createText();
-        vText.fontName = { family: 'Instrument Sans', style: 'SemiBold' };
+        vText.fontName = emphasized
+          ? { family: 'Instrument Sans', style: 'SemiBold' }
+          : { family: 'Inter', style: 'Medium' };
         vText.fontSize = Math.min(labelSize + 4, Math.round(cellH * 0.32));
         vText.characters = chartValueLabel(model.series[c], value);
         vText.textAutoResize = 'WIDTH_AND_HEIGHT';
-        vText.fills = [{ type: 'SOLID', color: readableTextOn(tint) }];
+        vText.fills = [{ type: 'SOLID', color: textColor }];
         cell.appendChild(vText);
       }
       row.appendChild(cell);
