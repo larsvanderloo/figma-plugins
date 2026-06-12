@@ -34,6 +34,7 @@ import {
 } from '../../../shared/constants';
 import { debugLog } from '../../../shared/debug';
 import {
+  computeNumericColumns,
   computeTableColumnSummaries,
   hasColumnCalculations,
   normalizeColumnCalculations,
@@ -172,10 +173,15 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     desired.columnCalculationPercent,
     columnCount,
   );
-  // T46.1 — kolommen met een (numerieke) som-berekening worden volledig
-  // rechts uitgelijnd (Notion number-column-stijl): header, body én footer.
-  const rightAlignColumns: boolean[] = [];
-  for (let j = 0; j < columnCount; j++) rightAlignColumns.push(columnCalculations[j] === 'sum');
+  // T46.1/T46.3 — getallen-kolommen worden volledig rechts uitgelijnd
+  // (Notion/Excel number-column-stijl): header, body én footer. De
+  // detectie is content-driven via computeNumericColumns — '45' telt,
+  // '45 mensen' niet — onafhankelijk van een som-toggle.
+  const rightAlignColumns = computeNumericColumns(
+    desired.rows,
+    desired.hasColumnHeader && desired.rows.length > 0,
+    columnCount,
+  );
 
   const surfaceName = findEnclosingSurfaceName(slot);
   const targetWidth = resolveTableRenderWidth(slot, surfaceName, columnCount);

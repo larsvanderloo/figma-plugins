@@ -178,6 +178,41 @@ export function formatTableNumber(value: number): string {
   return sign + grouped + (decimalPart !== '' ? ',' + decimalPart : '');
 }
 
+/**
+ * Per-column "is dit een getallen-kolom?"-detectie voor uitlijning.
+ * Een kolom telt als numeriek wanneer minstens één niet-lege body-cel
+ * een getal is (volgens parseTableNumber: ook `€ 45`, `12%`, `1,2M`)
+ * en géén enkele niet-lege body-cel tekst bevat ('45 mensen' → false).
+ * De header-rij (indien aanwezig) telt niet mee.
+ */
+export function computeNumericColumns(
+  rows: readonly TableRowModel[],
+  hasColumnHeader: boolean,
+  columnCount: number,
+): boolean[] {
+  const out: boolean[] = [];
+  const startRow = hasColumnHeader ? 1 : 0;
+
+  for (let col = 0; col < columnCount; col++) {
+    let numericCount = 0;
+    let textCount = 0;
+    for (let row = startRow; row < rows.length; row++) {
+      const cells = rows[row].cells;
+      if (col >= cells.length) continue;
+      const value = cells[col].value.trim();
+      if (value === '') continue;
+      if (parseTableNumber(value) !== null) {
+        numericCount += 1;
+      } else {
+        textCount += 1;
+      }
+    }
+    out.push(numericCount > 0 && textCount === 0);
+  }
+
+  return out;
+}
+
 export function computeTableColumnSummaries(
   rows: readonly TableRowModel[],
   hasColumnHeader: boolean,

@@ -6,6 +6,7 @@ import type {
   TableRowModel,
 } from '../../../../shared/types';
 import {
+  computeNumericColumns,
   computeTableColumnSummaries,
   hasColumnCalculations,
   normalizeColumnCalculations,
@@ -143,10 +144,15 @@ function rowMenuLabel(row: number): string {
   return 'Rij ' + String(displayRow) + ' opties';
 }
 
-// A column with a (numeric) sum calculation is right-aligned across header,
-// body and footer — mirrors the canvas renderer's Notion number-column style.
+// Number columns are right-aligned across header, body and footer —
+// mirrors the canvas renderer's Notion/Excel number-column style. The
+// detection is content-driven ('45' counts, '45 mensen' does not),
+// independent of the sum toggle.
+const numericColumns = computed<boolean[]>(() =>
+  computeNumericColumns(props.rows, props.hasColumnHeader, columnCount.value),
+);
 function isRightAlignedColumn(col: number): boolean {
-  return normalizedColumnCalculations.value[col] === 'sum';
+  return numericColumns.value[col] === true;
 }
 
 function cellTextareaUi(row: number, col: number): { root: string; base: string } {
