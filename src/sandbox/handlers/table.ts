@@ -51,7 +51,7 @@ export async function handleImportCsv(
   msg: Extract<UIToPluginMessage, { type: 'import-csv' }>,
 ): Promise<void> {
   // T34.2 / T44: parse + truncate + applyTable. Import verandert alleen
-  // row/cel-inhoud; de tabel-breedte volgt rendertime het kolom-aantal.
+  // row/cel-inhoud; de tabel rendert rendertime full-width per surface.
   const slide = await findSlideById(msg.slideId);
   if (slide === null) {
     postToUI({
