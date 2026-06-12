@@ -89,7 +89,7 @@ export async function handleSetSlideTheme(
   // T47.2: gebonden paints volgen de nieuwe mode vanzelf, maar de chart-
   // ramp (segment/lijn-tinten) is rendertime-resolved RGB — re-render de
   // ChartWrap zodat de tinten de nieuwe theme-mode pakken.
-  await refreshChartsOnSlide(themeSlide);
+  await refreshChartsOnSlide(themeSlide, true);
   markSelfWrite();
   // No slide re-scan: a theme change doesn't affect any other content
   // (text, icons, structure all stay the same). The iframe applies the

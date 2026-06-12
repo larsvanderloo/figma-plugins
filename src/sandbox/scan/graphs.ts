@@ -90,22 +90,27 @@ async function refreshTableSlot(wrap: InstanceNode): Promise<void> {
  * mutaties (zelfde reden als refreshTablesOnSlide: de kaart bevriest de
  * slot-afmetingen op applyChart-moment).
  */
-export async function refreshChartsOnSlide(slide: InstanceNode): Promise<void> {
+export async function refreshChartsOnSlide(
+  slide: InstanceNode,
+  force?: boolean,
+): Promise<void> {
   const wraps = findAllChartWraps(slide);
   for (let w = 0; w < wraps.length; w++) {
-    await refreshChartSlot(wraps[w]);
+    await refreshChartSlot(wraps[w], force === true);
   }
 }
 
-async function refreshChartSlot(wrap: InstanceNode): Promise<void> {
+async function refreshChartSlot(wrap: InstanceNode, force: boolean): Promise<void> {
   const slot = findSlotInWrap(wrap);
   if (slot === null) return;
   if (slot.getPluginData('chartModel') === '') return;
   // T50.7 — alleen re-renderen wanneer de slot-afmetingen écht zijn
   // veranderd: deze refresh draait op elke CopyWrap-keystroke en een
-  // full clear+rebuild flitst zichtbaar. De kaart volgt de slot exact,
-  // dus gelijke afmetingen = niets te re-fitten.
-  try {
+  // full clear+rebuild flitst zichtbaar. T51.4: theme-switch forceert
+  // (force=true) een re-render — de ramp-kleuren zijn rendertime-RGB en
+  // volgen de mode niet vanzelf, ondanks gelijke afmetingen.
+  if (!force) {
+   try {
     if (slot.children.length > 0) {
       const card = slot.children[0];
       if (
@@ -115,9 +120,10 @@ async function refreshChartSlot(wrap: InstanceNode): Promise<void> {
       ) {
         return;
       }
-    }
-  } catch (_e) {
+     }
+   } catch (_e) {
     /* stale node — gewoon doorgaan met re-apply */
+   }
   }
   try {
     // T50.6 — suppressie vóór de rebuild (zie handlers/chart.ts).
