@@ -36,6 +36,38 @@ export function normalizeColumnEmphasis(
   return out;
 }
 
+export function normalizeColumnLabels(
+  labels: readonly string[] | undefined,
+  columnCount: number,
+): string[] {
+  const count = columnCount > 0 ? columnCount : 0;
+  const out: string[] = [];
+  for (let i = 0; i < count; i++) {
+    out.push(labels !== undefined && i < labels.length && typeof labels[i] === 'string' ? labels[i] : '');
+  }
+  return out;
+}
+
+export function columnLabelsEqual(
+  a: readonly string[] | undefined,
+  b: readonly string[] | undefined,
+  columnCount: number,
+): boolean {
+  const left = normalizeColumnLabels(a, columnCount);
+  const right = normalizeColumnLabels(b, columnCount);
+  for (let i = 0; i < columnCount; i++) {
+    if (left[i] !== right[i]) return false;
+  }
+  return true;
+}
+
+export function hasColumnLabels(labels: readonly string[]): boolean {
+  for (let i = 0; i < labels.length; i++) {
+    if (labels[i] !== '') return true;
+  }
+  return false;
+}
+
 export function columnEmphasisEqual(
   a: readonly boolean[] | undefined,
   b: readonly boolean[] | undefined,

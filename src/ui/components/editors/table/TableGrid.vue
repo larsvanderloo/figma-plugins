@@ -11,6 +11,7 @@ import {
   hasColumnCalculations,
   normalizeColumnCalculations,
   normalizeColumnEmphasis,
+  normalizeColumnLabels,
 } from '../../../../shared/table-calculations';
 import { useGridNavigation } from './useGridNavigation';
 import { useGridDragging } from './useGridDragging';
@@ -24,6 +25,7 @@ interface Props {
   columnCalculationEmphasis: boolean[];
   columnCalculationCurrency: boolean[];
   columnCalculationPercent: boolean[];
+  columnCalculationLabel: string[];
   maxRows: number;
   maxCols: number;
 }
@@ -37,6 +39,7 @@ const emit = defineEmits<{
   'column-calculation-emphasis': [col: number, emphasis: boolean];
   'column-calculation-currency': [col: number, currency: boolean];
   'column-calculation-percent': [col: number, percent: boolean];
+  'column-calculation-label': [col: number, label: string];
   'add-row-before': [row: number];
   'add-row-after': [row: number];
   'remove-row': [row: number];
@@ -63,6 +66,9 @@ const normalizedColumnCalculationCurrency = computed<boolean[]>(() =>
 );
 const normalizedColumnCalculationPercent = computed<boolean[]>(() =>
   normalizeColumnEmphasis(props.columnCalculationPercent, columnCount.value),
+);
+const normalizedColumnCalculationLabel = computed<string[]>(() =>
+  normalizeColumnLabels(props.columnCalculationLabel, columnCount.value),
 );
 const columnSummaries = computed<Array<TableColumnSummary | null>>(() =>
   computeTableColumnSummaries(
@@ -170,6 +176,14 @@ function cellTextareaUi(row: number, col: number): { root: string; base: string 
 function updateCellValue(value: unknown, row: number, col: number): void {
   emit('cell-edit', row, col, String(value ?? ''));
 }
+
+function setColumnLabel(col: number, label: string): void {
+  emit('column-calculation-label', col, label);
+}
+
+const footerLabelUi = {
+  base: 'w-full bg-transparent px-0 text-sm leading-5 text-default placeholder:text-dimmed focus:ring-0',
+} as const;
 </script>
 
 <template>
@@ -343,6 +357,16 @@ function updateCellValue(value: unknown, row: number, col: number): void {
                 {{ (summary.currency ? '€' : '') + summary.value + (summary.percent ? '%' : '') }}
               </span>
             </div>
+            <UInput
+              v-else
+              :model-value="normalizedColumnCalculationLabel[summaryIdx]"
+              :ui="footerLabelUi"
+              placeholder="Label…"
+              size="xs"
+              variant="none"
+              :aria-label="'Footer-label voor kolom ' + (summaryIdx + 1)"
+              @update:model-value="(value: string | number) => setColumnLabel(summaryIdx, String(value))"
+            />
             <UDropdownMenu
               v-if="summary !== null"
               :items="footerMenuItems(summaryIdx)"

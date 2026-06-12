@@ -12,8 +12,10 @@
 import type { TableColumnCalculationSetting } from '../../../shared/types';
 import {
   hasColumnCalculations,
+  hasColumnLabels,
   normalizeColumnCalculations,
   normalizeColumnEmphasis,
+  normalizeColumnLabels,
 } from '../../../shared/table-calculations';
 
 /** T40 — leest of de tabel een header-rij heeft. Default false. */
@@ -133,4 +135,30 @@ export function writeColumnCalculationPercent(
     return;
   }
   slot.setPluginData('columnCalculationPercent', JSON.stringify(normalized));
+}
+
+export function readColumnCalculationLabel(slot: SlotNode, columnCount: number): string[] {
+  const raw = slot.getPluginData('columnCalculationLabel');
+  if (raw === '') return normalizeColumnLabels(undefined, columnCount);
+
+  try {
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return normalizeColumnLabels(undefined, columnCount);
+    return normalizeColumnLabels(parsed, columnCount);
+  } catch (_e) {
+    return normalizeColumnLabels(undefined, columnCount);
+  }
+}
+
+export function writeColumnCalculationLabel(
+  slot: SlotNode,
+  labels: readonly string[],
+  columnCount: number,
+): void {
+  const normalized = normalizeColumnLabels(labels, columnCount);
+  if (!hasColumnLabels(normalized)) {
+    slot.setPluginData('columnCalculationLabel', '');
+    return;
+  }
+  slot.setPluginData('columnCalculationLabel', JSON.stringify(normalized));
 }

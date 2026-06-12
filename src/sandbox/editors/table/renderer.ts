@@ -39,6 +39,7 @@ import {
   hasColumnCalculations,
   normalizeColumnCalculations,
   normalizeColumnEmphasis,
+  normalizeColumnLabels,
 } from '../../../shared/table-calculations';
 import { findEnclosingSurfaceName } from '../../slide-machine';
 import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from '../_shared/accent-vars';
@@ -50,6 +51,7 @@ import {
   writeColumnCalculationEmphasis,
   writeColumnCalculationCurrency,
   writeColumnCalculationPercent,
+  writeColumnCalculationLabel,
 } from './plugin-data';
 import { buildRow, buildHeaderRow } from './build-rows';
 import { buildFooterRow } from './footer';
@@ -67,6 +69,7 @@ export {
   readColumnCalculationEmphasis,
   readColumnCalculationCurrency,
   readColumnCalculationPercent,
+  readColumnCalculationLabel,
 } from './plugin-data';
 
 // -------------------------------------------------------------------
@@ -171,6 +174,10 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
   );
   const columnCalculationPercent = normalizeColumnEmphasis(
     desired.columnCalculationPercent,
+    columnCount,
+  );
+  const columnCalculationLabel = normalizeColumnLabels(
+    desired.columnCalculationLabel,
     columnCount,
   );
   // T46.1/T46.3 — getallen-kolommen worden volledig rechts uitgelijnd
@@ -359,6 +366,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     if (hasFooter) {
       const footerRow = buildFooterRow(
         footerSummaries,
+        columnCalculationLabel,
         sizes,
         vars.text,
         textRGB,
@@ -397,6 +405,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
   writeColumnCalculationEmphasis(slot, columnCalculationEmphasis, columnCount);
   writeColumnCalculationCurrency(slot, columnCalculationCurrency, columnCount);
   writeColumnCalculationPercent(slot, columnCalculationPercent, columnCount);
+  writeColumnCalculationLabel(slot, columnCalculationLabel, columnCount);
   slot.setPluginData('kind', 'welder-tablewrap');
   slot.setPluginData('v', '4');
 }

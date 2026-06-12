@@ -20,8 +20,10 @@ import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../../shared/constants';
 import {
   columnCalculationsEqual,
   columnEmphasisEqual,
+  columnLabelsEqual,
   normalizeColumnCalculations,
   normalizeColumnEmphasis,
+  normalizeColumnLabels,
 } from '../../../../shared/table-calculations';
 import { debugLog } from '../../../../shared/debug';
 
@@ -98,6 +100,12 @@ export function useTableEditorState(
       columnCountForRows(props.modelValue.rows),
     ),
   );
+  const localColumnCalculationLabel = ref<string[]>(
+    normalizeColumnLabels(
+      props.modelValue.columnCalculationLabel,
+      columnCountForRows(props.modelValue.rows),
+    ),
+  );
 
   const canAddRow = computed<boolean>(() => localRows.value.length < TABLE_MAX_ROWS);
   const currentCols = computed<number>(() => columnCountForRows(localRows.value));
@@ -126,6 +134,10 @@ export function useTableEditorState(
     );
     localColumnCalculationPercent.value = normalizeColumnEmphasis(
       localColumnCalculationPercent.value,
+      currentCols.value,
+    );
+    localColumnCalculationLabel.value = normalizeColumnLabels(
+      localColumnCalculationLabel.value,
       currentCols.value,
     );
   }
@@ -180,6 +192,15 @@ export function useTableEditorState(
       }
     },
   );
+  watch(
+    () => props.modelValue.columnCalculationLabel,
+    (next) => {
+      if (echoExpected) return;
+      if (!columnLabelsEqual(next, localColumnCalculationLabel.value, currentCols.value)) {
+        localColumnCalculationLabel.value = normalizeColumnLabels(next, currentCols.value);
+      }
+    },
+  );
   let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
   function scheduleEmit(reason: string): void {
@@ -219,6 +240,10 @@ export function useTableEditorState(
         localColumnCalculationPercent.value,
         currentCols.value,
       );
+      const columnCalculationLabel = normalizeColumnLabels(
+        localColumnCalculationLabel.value,
+        currentCols.value,
+      );
       emit('update:modelValue', {
         slotId: props.modelValue.slotId,
         hasColumnHeader: localHasColumnHeader.value,
@@ -226,6 +251,7 @@ export function useTableEditorState(
         columnCalculationEmphasis: columnCalculationEmphasis,
         columnCalculationCurrency: columnCalculationCurrency,
         columnCalculationPercent: columnCalculationPercent,
+        columnCalculationLabel: columnCalculationLabel,
         rows: rows,
       });
     }, 200);
@@ -243,6 +269,7 @@ export function useTableEditorState(
     localColumnCalculationEmphasis,
     localColumnCalculationCurrency,
     localColumnCalculationPercent,
+    localColumnCalculationLabel,
     canAddRow,
     currentCols,
     canAddColumn,

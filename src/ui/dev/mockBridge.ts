@@ -128,6 +128,7 @@ export function installMockBridge(): void {
               columnCalculationEmphasis: [false, true, true],
               columnCalculationCurrency: [false, false, true],
               columnCalculationPercent: [false, true, false],
+              columnCalculationLabel: ['Totaal', '', ''],
               rows: [
                 {
                   rowNodeId: 'row-0',

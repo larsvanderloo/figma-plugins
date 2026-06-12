@@ -28,6 +28,7 @@ import {
   readColumnCalculationEmphasis,
   readColumnCalculationCurrency,
   readColumnCalculationPercent,
+  readColumnCalculationLabel,
 } from './renderer';
 
 function readHasColumnHeader(slot: SlotNode): boolean {
@@ -76,6 +77,7 @@ export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
     columnCalculationEmphasis: readColumnCalculationEmphasis(slot, columnCount),
     columnCalculationCurrency: readColumnCalculationCurrency(slot, columnCount),
     columnCalculationPercent: readColumnCalculationPercent(slot, columnCount),
+    columnCalculationLabel: readColumnCalculationLabel(slot, columnCount),
     rows: rows,
   };
   await applyTable(slot, desired);

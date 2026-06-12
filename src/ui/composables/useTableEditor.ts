@@ -2,7 +2,11 @@
 
 import { computed, reactive } from 'vue';
 import { debugLog } from '../../shared/debug';
-import { columnCalculationsEqual, columnEmphasisEqual } from '../../shared/table-calculations';
+import {
+  columnCalculationsEqual,
+  columnEmphasisEqual,
+  columnLabelsEqual,
+} from '../../shared/table-calculations';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
 import type { GraphInstance, TableWrapModel } from '../../shared/types';
@@ -42,6 +46,15 @@ function tableSemanticsEqual(a: TableWrapModel | null, b: TableWrapModel): boole
     !columnEmphasisEqual(
       a.columnCalculationPercent,
       b.columnCalculationPercent,
+      tableColumnCount(b),
+    )
+  ) {
+    return false;
+  }
+  if (
+    !columnLabelsEqual(
+      a.columnCalculationLabel,
+      b.columnCalculationLabel,
       tableColumnCount(b),
     )
   ) {

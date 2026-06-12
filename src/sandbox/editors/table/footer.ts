@@ -24,6 +24,7 @@ export function footerCanvasText(summary: TableColumnSummary | null): string {
 
 function buildFooterCell(
   summary: TableColumnSummary | null,
+  label: string,
   j: number,
   sizes: { heading: number; body: number },
   textVar: Variable,
@@ -40,20 +41,21 @@ function buildFooterCell(
   cellFrame.setPluginData('emphasis', '');
 
   // T46 — footer-cell styling volgt de body-cells (Inter Regular, body-fontSize,
-  // volledige Text-kleur, geen eigen padding — die zit op de row). Alleen de
-  // berekende waarde wordt getoond; geen 'Som'-label of -symbool op canvas.
+  // volledige Text-kleur, geen eigen padding — die zit op de row).
   // Per-column emphasis bold't alleen de footer-waarde, identiek aan de
   // per-cell `emphasis`-stijl in buildCell().
   // T46.1 — sum-kolommen zijn numeriek; waarde rechts uitgelijnd (Notion-stijl).
+  // T46.4 — kolommen ZONDER som tonen een vrije label-tekst (bv. "Totaal"),
+  // links uitgelijnd zoals normale body-cells.
   const emphasized = summary !== null && summary.emphasis === true;
   const t = figma.createText();
   t.fontName = emphasized
     ? { family: 'Instrument Sans', style: 'SemiBold' }
     : { family: 'Inter', style: 'Regular' };
   t.fontSize = emphasized ? sizes.heading : sizes.body;
-  t.characters = footerCanvasText(summary);
+  t.characters = summary !== null ? footerCanvasText(summary) : label;
   t.textAutoResize = 'HEIGHT';
-  t.textAlignHorizontal = 'RIGHT';
+  t.textAlignHorizontal = summary !== null ? 'RIGHT' : 'LEFT';
   try {
     t.maxLines = 1;
   } catch (_e) {
@@ -84,6 +86,7 @@ function buildFooterCell(
 
 export function buildFooterRow(
   summaries: Array<TableColumnSummary | null>,
+  labels: readonly string[],
   sizes: { heading: number; body: number },
   textVar: Variable,
   textRGB: RGB,
@@ -120,7 +123,8 @@ export function buildFooterRow(
   rowFrame.strokeRightWeight = 0;
 
   for (let j = 0; j < summaries.length; j++) {
-    const cellFrame = buildFooterCell(summaries[j], j, sizes, textVar, textRGB);
+    const label = j < labels.length ? labels[j] : '';
+    const cellFrame = buildFooterCell(summaries[j], label, j, sizes, textVar, textRGB);
     rowFrame.appendChild(cellFrame);
     try {
       cellFrame.layoutSizingHorizontal = 'FILL';

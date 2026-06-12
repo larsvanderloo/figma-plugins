@@ -35,6 +35,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculationEmphasis,
     localColumnCalculationCurrency,
     localColumnCalculationPercent,
+    localColumnCalculationLabel,
     canAddRow,
     currentCols,
     canAddColumn,
@@ -139,6 +140,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculationEmphasis.value.splice(index, 0, false);
     localColumnCalculationCurrency.value.splice(index, 0, false);
     localColumnCalculationPercent.value.splice(index, 0, false);
+    localColumnCalculationLabel.value.splice(index, 0, '');
     normalizeLocalColumnCalculations();
     announce('Kolom toegevoegd');
     scheduleEmit('add-column');
@@ -154,6 +156,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculationEmphasis.value.splice(index, 0, false);
     localColumnCalculationCurrency.value.splice(index, 0, false);
     localColumnCalculationPercent.value.splice(index, 0, false);
+    localColumnCalculationLabel.value.splice(index, 0, '');
     normalizeLocalColumnCalculations();
     announce('Kolom toegevoegd');
     scheduleEmit('add-column');
@@ -171,6 +174,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculationEmphasis.value.splice(j, 1);
     localColumnCalculationCurrency.value.splice(j, 1);
     localColumnCalculationPercent.value.splice(j, 1);
+    localColumnCalculationLabel.value.splice(j, 1);
     normalizeLocalColumnCalculations();
     announce('Kolom ' + String(j + 1) + ' verwijderd');
     scheduleEmit('remove-column');
@@ -194,6 +198,8 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculationCurrency.value.splice(insertAt, 0, movedCurrency === true);
     const movedPercent = localColumnCalculationPercent.value.splice(from, 1)[0];
     localColumnCalculationPercent.value.splice(insertAt, 0, movedPercent === true);
+    const movedLabel = localColumnCalculationLabel.value.splice(from, 1)[0];
+    localColumnCalculationLabel.value.splice(insertAt, 0, typeof movedLabel === 'string' ? movedLabel : '');
     normalizeLocalColumnCalculations();
     announce('Kolom verplaatst');
     scheduleEmit('move-column');
@@ -207,6 +213,8 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     localColumnCalculations.value[j] = next;
     // Nadruk staat standaard aan voor een nieuwe som; bij verwijderen reset.
     localColumnCalculationEmphasis.value[j] = next === 'sum';
+    // Een som-kolom toont de berekende waarde, geen vrije label-tekst.
+    if (next === 'sum') localColumnCalculationLabel.value[j] = '';
     if (next !== 'sum') {
       localColumnCalculationCurrency.value[j] = false;
       localColumnCalculationPercent.value[j] = false;
@@ -244,6 +252,14 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     if (percent) localColumnCalculationCurrency.value[j] = false;
     announce(percent ? 'Procentteken tonen' : 'Procentteken verbergen');
     scheduleEmit('column-calculation-percent');
+  }
+
+  function setColumnLabel(j: number, label: string): void {
+    if (j < 0 || j >= currentCols.value) return;
+    normalizeLocalColumnCalculations();
+    if (localColumnCalculationLabel.value[j] === label) return;
+    localColumnCalculationLabel.value[j] = label;
+    scheduleEmit('column-calculation-label');
   }
 
   function updateCell(i: number, j: number, value: string): void {
@@ -347,6 +363,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     setColumnCalculationEmphasis,
     setColumnCalculationCurrency,
     setColumnCalculationPercent,
+    setColumnLabel,
     insertRowBefore,
     insertRowAfter,
     removeRow,

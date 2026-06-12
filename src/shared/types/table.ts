@@ -43,6 +43,13 @@ export interface TableWrapModel {
    * Mutually exclusive with `columnCalculationCurrency` (UI-enforced).
    */
   columnCalculationPercent?: boolean[];
+  /**
+   * Per-column footer label text. Only used for columns WITHOUT a sum:
+   * the footer row then shows this editable label (e.g. "Totaal") instead
+   * of an empty cell. Ignored for sum columns (those show the computed
+   * value). Empty string = no label.
+   */
+  columnCalculationLabel?: string[];
   rows: TableRowModel[];
 }
 

@@ -15,6 +15,7 @@ import {
   readColumnCalculationEmphasis,
   readColumnCalculationCurrency,
   readColumnCalculationPercent,
+  readColumnCalculationLabel,
 } from './plugin-data';
 
 /**
@@ -92,6 +93,7 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
     columnCalculationEmphasis: readColumnCalculationEmphasis(slot, scannedColumnCount),
     columnCalculationCurrency: readColumnCalculationCurrency(slot, scannedColumnCount),
     columnCalculationPercent: readColumnCalculationPercent(slot, scannedColumnCount),
+    columnCalculationLabel: readColumnCalculationLabel(slot, scannedColumnCount),
     rows: rows,
   };
 }
