@@ -3,9 +3,10 @@
 //
 // Donut- en pie-builder via native ellipse-arcData (T47): per categorie
 // één ELLIPSE-segment. Hoeken in radialen, 0 = 3 uur, positief = met de
-// klok mee; start bovenaan (-PI/2) met een kleine angular gap tussen
-// segmenten. Donut toont een center-totaal ("100 totaal"); de legenda
-// (categorieën, optioneel met waarde) komt rechts naast de cirkel.
+// klok mee; start bovenaan (-PI/2). Nul-waarden worden overgeslagen
+// (tenzij total === 0, dan gelijke verdeling). Naad-effect via stroke met
+// cardPaint: aangrenzende randen dragen elk een halve streek bij zodat de
+// naad even breed is ongeacht segmentbreedte (T50/R3).
 // Delta-badges (T48, showDelta): parts-of-whole — geen badge in de
 // cirkel, de delta vs de vorige categorie staat als legenda-suffix.
 //
@@ -14,7 +15,7 @@
 
 import type { ChartWrapModel } from '../../../shared/types';
 import {
-  chartDeltaLabel,
+  chartDeltaDisplay,
   formatChartValue,
   isCategoryEmphasized,
   isPointEmphasized,
@@ -23,7 +24,6 @@ import {
 import { buildLegend, ChartTheme, LegendEntry } from './legend';
 import type { DeltaBadgeContext } from './delta-badge';
 
-const SEGMENT_GAP = 0.03; // radialen tussen segmenten
 const DONUT_INNER = 0.66; // innerRadius-ratio voor donut
 
 export function buildDonut(
@@ -33,7 +33,7 @@ export function buildDonut(
   ramp: RGB[],
   theme: ChartTheme,
   labelSize: number,
-  _cardPaint: SolidPaint,
+  cardPaint: SolidPaint,
   _deltaCtx: DeltaBadgeContext,
 ): FrameNode {
   const isDonut = model.chartType === 'donut';
@@ -60,12 +60,16 @@ export function buildDonut(
   circle.fills = [];
   circle.clipsContent = false;
 
+  // Naad-dikte: half op elk aangrenzend segment → constante naad.
+  const strokeWeight = Math.max(2, Math.round(diameter * 0.015));
+
   let angle = -Math.PI / 2;
-  const gap = model.categories.length > 1 ? SEGMENT_GAP : 0;
   for (let i = 0; i < model.categories.length; i++) {
     const value = series.values[i];
+    // Nul-waarden overslaan wanneer er een zinvol totaal is (T50/R3).
+    if (total > 0 && value === 0) continue;
     const fraction = total > 0 ? value / total : 1 / model.categories.length;
-    const sweep = fraction * (Math.PI * 2 - gap * model.categories.length);
+    const sweep = fraction * (Math.PI * 2);
     const segment = figma.createEllipse();
     segment.name = 'Segment-' + String(i);
     segment.resize(diameter, diameter);
@@ -77,8 +81,14 @@ export function buildDonut(
       innerRadius: isDonut ? DONUT_INNER : 0,
     };
     segment.fills = [{ type: 'SOLID', color: ramp[i % ramp.length] }];
+    // Naadstrook: aangrenzende randen dragen elk een halve stroke bij →
+    // constante-breedte parallel-edged seams op pie én donut.
+    // Omtrek-stroke valt weg achter card-achtergrond (cardPaint = onzichtbaar).
+    segment.strokes = [cardPaint];
+    segment.strokeAlign = 'CENTER';
+    segment.strokeWeight = strokeWeight;
     circle.appendChild(segment);
-    angle += sweep + gap;
+    angle += sweep;
   }
 
   // Donut: center-totaal zoals het referentie-dashboard ("100 / totaal").
@@ -129,10 +139,11 @@ export function buildDonut(
   if (model.showLegend) {
     const entries: LegendEntry[] = [];
     for (let i = 0; i < model.categories.length; i++) {
+      // Nul-waarden wel in de legenda tonen — data bestaat nog steeds.
       let label = model.categories[i];
       if (model.showValues) label = label + '  —  ' + formatChartValue(series.values[i]);
       if (model.showDelta === true) {
-        const delta = chartDeltaLabel(series.values, i);
+        const delta = chartDeltaDisplay(model, i);
         if (delta !== null) label = label + '  ' + delta;
       }
       entries.push({

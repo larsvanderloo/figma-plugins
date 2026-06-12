@@ -14,7 +14,7 @@
 import type { ChartWrapModel } from '../../../shared/types';
 import {
   chartDeltaLabel,
-  chartMaxValue,
+  chartProgressReference,
   formatChartValue,
   isCategoryEmphasized,
   isPointEmphasized,
@@ -34,7 +34,7 @@ export function buildProgress(
   deltaCtx: DeltaBadgeContext,
 ): FrameNode {
   const series = model.series[0];
-  const reference = Math.max(100, chartMaxValue(model));
+  const reference = chartProgressReference(model);
 
   const root = figma.createFrame();
   root.name = 'ChartProgress';
@@ -107,7 +107,7 @@ export function buildProgress(
     fill.name = 'Fill';
     fill.resize(fillW, trackH);
     fill.cornerRadius = trackH / 2;
-    fill.fills = [{ type: 'SOLID', color: ramp[i % ramp.length] }];
+    fill.fills = [{ type: 'SOLID', color: light }];
     track.appendChild(fill);
     row.appendChild(track);
 
