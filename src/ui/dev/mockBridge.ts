@@ -115,7 +115,56 @@ export function installMockBridge(): void {
           },
         ],
       },
-      graphs: null,
+      graphs: {
+        selectedGraphId: 'slot-1',
+        instances: [
+          {
+            nodeId: 'slot-1',
+            label: 'Tabel',
+            tableModel: {
+              slotId: 'slot-1',
+              hasColumnHeader: true,
+              columnCalculations: [null, 'sum', 'sum'],
+              columnCalculationEmphasis: [false, true, true],
+              columnCalculationCurrency: [false, false, true],
+              rows: [
+                {
+                  rowNodeId: 'row-0',
+                  cells: [
+                    { cellNodeId: 'cell-0-0', value: 'Metric' },
+                    { cellNodeId: 'cell-0-1', value: 'Q1' },
+                    { cellNodeId: 'cell-0-2', value: 'Q2' },
+                  ],
+                },
+                {
+                  rowNodeId: 'row-1',
+                  cells: [
+                    { cellNodeId: 'cell-1-0', value: 'Omzet' },
+                    { cellNodeId: 'cell-1-1', value: '€ 1,2M' },
+                    { cellNodeId: 'cell-1-2', value: '€ 1,4M' },
+                  ],
+                },
+                {
+                  rowNodeId: 'row-2',
+                  cells: [
+                    { cellNodeId: 'cell-2-0', value: 'Klanten' },
+                    { cellNodeId: 'cell-2-1', value: '184' },
+                    { cellNodeId: 'cell-2-2', value: '211' },
+                  ],
+                },
+                {
+                  rowNodeId: 'row-3',
+                  cells: [
+                    { cellNodeId: 'cell-3-0', value: 'NPS' },
+                    { cellNodeId: 'cell-3-1', value: '42' },
+                    { cellNodeId: 'cell-3-2', value: '45' },
+                  ],
+                },
+              ],
+            },
+          },
+        ],
+      },
     },
     600,
   );

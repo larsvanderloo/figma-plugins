@@ -1,10 +1,22 @@
 <script setup lang="ts">
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
-import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
+import type {
+  TableWrapModel,
+  TableRowModel,
+  TableCellModel,
+  TableColumnCalculationSetting,
+} from '../../../shared/types';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../shared/constants';
 import { tokenize } from '../../../shared/csv';
+import {
+  columnCalculationsEqual,
+  columnEmphasisEqual,
+  normalizeColumnCalculations,
+  normalizeColumnEmphasis,
+} from '../../../shared/table-calculations';
+import { debugLog } from '../../../shared/debug';
 import { useNotifications } from '../../stores/useNotifications';
-import WInput from '../ui/WInput.vue';
+import TableGrid from './table/TableGrid.vue';
 import WCard from '../ui/WCard.vue';
 
 const notifications = useNotifications();
@@ -29,27 +41,51 @@ function cloneRows(rows: TableRowModel[]): TableRowModel[] {
   for (let i = 0; i < rows.length; i++) {
     const cells: TableCellModel[] = [];
     for (let j = 0; j < rows[i].cells.length; j++) {
-      cells.push({
+      const cell: TableCellModel = {
         cellNodeId: rows[i].cells[j].cellNodeId,
         value: rows[i].cells[j].value,
-      });
+      };
+      if (rows[i].cells[j].emphasis === true) cell.emphasis = true;
+      cells.push(cell);
     }
     while (cells.length < maxLen) cells.push({ cellNodeId: '', value: '' });
     out.push({ rowNodeId: rows[i].rowNodeId, cells: cells });
   }
   return out;
 }
+
+function columnCountForRows(rows: TableRowModel[]): number {
+  if (rows.length === 0) return 1;
+  return rows[0].cells.length > 0 ? rows[0].cells.length : 1;
+}
+
 const localHasColumnHeader = ref<boolean>(props.modelValue.hasColumnHeader);
 const localRows = ref<TableRowModel[]>(cloneRows(props.modelValue.rows));
+const localColumnCalculations = ref<TableColumnCalculationSetting[]>(
+  normalizeColumnCalculations(
+    props.modelValue.columnCalculations,
+    columnCountForRows(props.modelValue.rows),
+  ),
+);
+const localColumnCalculationEmphasis = ref<boolean[]>(
+  normalizeColumnEmphasis(
+    props.modelValue.columnCalculationEmphasis,
+    columnCountForRows(props.modelValue.rows),
+  ),
+);
+const localColumnCalculationCurrency = ref<boolean[]>(
+  normalizeColumnEmphasis(
+    props.modelValue.columnCalculationCurrency,
+    columnCountForRows(props.modelValue.rows),
+  ),
+);
 
 const canAddRow = computed<boolean>(() => localRows.value.length < TABLE_MAX_ROWS);
-const currentCols = computed<number>(() =>
-  localRows.value.length > 0 ? localRows.value[0].cells.length : 0,
-);
+const currentCols = computed<number>(() => columnCountForRows(localRows.value));
 const canAddColumn = computed<boolean>(
   () => localRows.value.length > 0 && currentCols.value < TABLE_MAX_COLS,
 );
-const bodyRowOffset = computed<number>(() => (localHasColumnHeader.value ? 1 : 0));
+const gridStatus = ref<string>('');
 watch(
   () => props.modelValue.hasColumnHeader,
   (next) => {
@@ -60,27 +96,74 @@ function rowsDiffer(a: TableRowModel[], b: TableRowModel[]): boolean {
   if (a.length !== b.length) return true;
   for (let i = 0; i < a.length; i++) {
     if (a[i].cells.length !== b[i].cells.length) return true;
-    if (a[i].rowNodeId !== b[i].rowNodeId) return true;
     for (let j = 0; j < a[i].cells.length; j++) {
       if (a[i].cells[j].value !== b[i].cells[j].value) return true;
-      if (a[i].cells[j].cellNodeId !== b[i].cells[j].cellNodeId) return true;
+      if ((a[i].cells[j].emphasis === true) !== (b[i].cells[j].emphasis === true)) return true;
     }
   }
   return false;
 }
+
+function normalizeLocalColumnCalculations(): void {
+  localColumnCalculations.value = normalizeColumnCalculations(
+    localColumnCalculations.value,
+    currentCols.value,
+  );
+  localColumnCalculationEmphasis.value = normalizeColumnEmphasis(
+    localColumnCalculationEmphasis.value,
+    currentCols.value,
+  );
+  localColumnCalculationCurrency.value = normalizeColumnEmphasis(
+    localColumnCalculationCurrency.value,
+    currentCols.value,
+  );
+}
+
 let echoExpected = false;
 let echoResetTimer: ReturnType<typeof setTimeout> | null = null;
+let pendingReason = '';
 
 watch(
   () => props.modelValue.rows,
   (next) => {
     if (echoExpected) return;
-    if (rowsDiffer(next, localRows.value)) localRows.value = cloneRows(next);
+    if (rowsDiffer(next, localRows.value)) {
+      localRows.value = cloneRows(next);
+      normalizeLocalColumnCalculations();
+    }
+  },
+);
+watch(
+  () => props.modelValue.columnCalculations,
+  (next) => {
+    if (echoExpected) return;
+    if (!columnCalculationsEqual(next, localColumnCalculations.value, currentCols.value)) {
+      localColumnCalculations.value = normalizeColumnCalculations(next, currentCols.value);
+    }
+  },
+);
+watch(
+  () => props.modelValue.columnCalculationEmphasis,
+  (next) => {
+    if (echoExpected) return;
+    if (!columnEmphasisEqual(next, localColumnCalculationEmphasis.value, currentCols.value)) {
+      localColumnCalculationEmphasis.value = normalizeColumnEmphasis(next, currentCols.value);
+    }
+  },
+);
+watch(
+  () => props.modelValue.columnCalculationCurrency,
+  (next) => {
+    if (echoExpected) return;
+    if (!columnEmphasisEqual(next, localColumnCalculationCurrency.value, currentCols.value)) {
+      localColumnCalculationCurrency.value = normalizeColumnEmphasis(next, currentCols.value);
+    }
   },
 );
 let debounceTimer: ReturnType<typeof setTimeout> | null = null;
 
-function scheduleEmit(): void {
+function scheduleEmit(reason: string): void {
+  pendingReason = reason;
   if (debounceTimer !== null) clearTimeout(debounceTimer);
   debounceTimer = setTimeout(() => {
     debounceTimer = null;
@@ -90,10 +173,35 @@ function scheduleEmit(): void {
       echoExpected = false;
       echoResetTimer = null;
     }, 2000);
+    debugLog('table-editor', 'emit-update', {
+      reason: pendingReason,
+      slotId: props.modelValue.slotId,
+      rows: localRows.value.length,
+      cols: currentCols.value,
+    });
+    const rows = cloneRows(localRows.value);
+    if (localHasColumnHeader.value && rows.length > 0) {
+      for (let j = 0; j < rows[0].cells.length; j++) delete rows[0].cells[j].emphasis;
+    }
+    const columnCalculations = normalizeColumnCalculations(
+      localColumnCalculations.value,
+      currentCols.value,
+    );
+    const columnCalculationEmphasis = normalizeColumnEmphasis(
+      localColumnCalculationEmphasis.value,
+      currentCols.value,
+    );
+    const columnCalculationCurrency = normalizeColumnEmphasis(
+      localColumnCalculationCurrency.value,
+      currentCols.value,
+    );
     emit('update:modelValue', {
       slotId: props.modelValue.slotId,
       hasColumnHeader: localHasColumnHeader.value,
-      rows: cloneRows(localRows.value),
+      columnCalculations: columnCalculations,
+      columnCalculationEmphasis: columnCalculationEmphasis,
+      columnCalculationCurrency: columnCalculationCurrency,
+      rows: rows,
     });
   }, 200);
 }
@@ -106,49 +214,282 @@ onBeforeUnmount(() => {
 function setHasColumnHeader(v: boolean): void {
   if (localHasColumnHeader.value === v) return;
   localHasColumnHeader.value = v;
-  scheduleEmit();
+  if (v && localRows.value.length > 0) {
+    for (let j = 0; j < localRows.value[0].cells.length; j++) {
+      delete localRows.value[0].cells[j].emphasis;
+    }
+  }
+  scheduleEmit('header-toggle');
 }
 
-function addRow(): void {
-  if (!canAddRow.value) return;
+function announce(message: string): void {
+  gridStatus.value = '';
+  requestAnimationFrame(() => {
+    gridStatus.value = message;
+  });
+}
+
+function materializeRow(): number {
+  if (!canAddRow.value) return -1;
   const cellCount = currentCols.value > 0 ? Math.min(currentCols.value, TABLE_MAX_COLS) : 1;
   const cells: TableCellModel[] = [];
   for (let j = 0; j < cellCount; j++) cells.push({ cellNodeId: '', value: '' });
   localRows.value.push({ rowNodeId: '', cells: cells });
-  scheduleEmit();
+  return localRows.value.length - 1;
+}
+
+function createEmptyRow(): TableRowModel {
+  const cellCount = currentCols.value > 0 ? Math.min(currentCols.value, TABLE_MAX_COLS) : 1;
+  const cells: TableCellModel[] = [];
+  for (let j = 0; j < cellCount; j++) cells.push({ cellNodeId: '', value: '' });
+  return { rowNodeId: '', cells: cells };
+}
+
+function insertRowAfter(i: number): void {
+  if (!canAddRow.value) return;
+  const index = i < 0 ? 0 : i + 1;
+  localRows.value.splice(index, 0, createEmptyRow());
+  announce('Rij toegevoegd');
+  scheduleEmit('add-row');
+}
+
+function insertRowBefore(i: number): void {
+  if (!canAddRow.value) return;
+  const index = i < 0 ? 0 : i;
+  localRows.value.splice(index, 0, createEmptyRow());
+  announce('Rij toegevoegd');
+  scheduleEmit('add-row');
+}
+
+function ensureColumnCount(nextCount: number): void {
+  const capped = nextCount > TABLE_MAX_COLS ? TABLE_MAX_COLS : nextCount;
+  for (let i = 0; i < localRows.value.length; i++) {
+    while (localRows.value[i].cells.length < capped) {
+      localRows.value[i].cells.push({ cellNodeId: '', value: '' });
+    }
+  }
+  normalizeLocalColumnCalculations();
 }
 
 function removeRow(i: number): void {
   if (i < 0 || i >= localRows.value.length) return;
+  if (localRows.value.length <= 1) return;
   localRows.value.splice(i, 1);
-  scheduleEmit();
+  if (localHasColumnHeader.value && i === 0) {
+    announce('Koprij verwijderd');
+  } else {
+    const label = localHasColumnHeader.value ? i : i + 1;
+    announce('Rij ' + String(label) + ' verwijderd');
+  }
+  scheduleEmit('remove-row');
 }
 
-function addColumn(): void {
+function moveRow(from: number, to: number): void {
+  if (from < 0 || from >= localRows.value.length) return;
+  const cappedTo = to < 0 ? 0 : to > localRows.value.length ? localRows.value.length : to;
+  if (cappedTo === from || cappedTo === from + 1) return;
+  const moved = localRows.value.splice(from, 1)[0];
+  if (moved === undefined) return;
+  const insertAt = from < cappedTo ? cappedTo - 1 : cappedTo;
+  localRows.value.splice(insertAt, 0, moved);
+  announce('Rij verplaatst');
+  scheduleEmit('move-row');
+}
+
+function insertColumnAfter(j: number): void {
   if (!canAddColumn.value) return;
+  const index = j < 0 ? 0 : j + 1;
   for (let i = 0; i < localRows.value.length; i++) {
-    localRows.value[i].cells.push({ cellNodeId: '', value: '' });
+    localRows.value[i].cells.splice(index, 0, { cellNodeId: '', value: '' });
   }
-  scheduleEmit();
+  localColumnCalculations.value.splice(index, 0, null);
+  localColumnCalculationEmphasis.value.splice(index, 0, false);
+  localColumnCalculationCurrency.value.splice(index, 0, false);
+  normalizeLocalColumnCalculations();
+  announce('Kolom toegevoegd');
+  scheduleEmit('add-column');
+}
+
+function insertColumnBefore(j: number): void {
+  if (!canAddColumn.value) return;
+  const index = j < 0 ? 0 : j;
+  for (let i = 0; i < localRows.value.length; i++) {
+    localRows.value[i].cells.splice(index, 0, { cellNodeId: '', value: '' });
+  }
+  localColumnCalculations.value.splice(index, 0, null);
+  localColumnCalculationEmphasis.value.splice(index, 0, false);
+  localColumnCalculationCurrency.value.splice(index, 0, false);
+  normalizeLocalColumnCalculations();
+  announce('Kolom toegevoegd');
+  scheduleEmit('add-column');
 }
 
 function removeColumn(j: number): void {
   if (j < 0 || j >= currentCols.value) return;
+  if (currentCols.value <= 1) return;
   for (let i = 0; i < localRows.value.length; i++) {
     if (j < localRows.value[i].cells.length) {
       localRows.value[i].cells.splice(j, 1);
     }
   }
-  scheduleEmit();
+  localColumnCalculations.value.splice(j, 1);
+  localColumnCalculationEmphasis.value.splice(j, 1);
+  localColumnCalculationCurrency.value.splice(j, 1);
+  normalizeLocalColumnCalculations();
+  announce('Kolom ' + String(j + 1) + ' verwijderd');
+  scheduleEmit('remove-column');
+}
+
+function moveColumn(from: number, to: number): void {
+  if (from < 0 || from >= currentCols.value) return;
+  const cappedTo = to < 0 ? 0 : to > currentCols.value ? currentCols.value : to;
+  if (cappedTo === from || cappedTo === from + 1) return;
+  const insertAt = from < cappedTo ? cappedTo - 1 : cappedTo;
+  for (let i = 0; i < localRows.value.length; i++) {
+    const moved = localRows.value[i].cells.splice(from, 1)[0];
+    if (moved === undefined) continue;
+    localRows.value[i].cells.splice(insertAt, 0, moved);
+  }
+  const movedCalculation = localColumnCalculations.value.splice(from, 1)[0];
+  localColumnCalculations.value.splice(insertAt, 0, movedCalculation === undefined ? null : movedCalculation);
+  const movedEmphasis = localColumnCalculationEmphasis.value.splice(from, 1)[0];
+  localColumnCalculationEmphasis.value.splice(insertAt, 0, movedEmphasis === true);
+  const movedCurrency = localColumnCalculationCurrency.value.splice(from, 1)[0];
+  localColumnCalculationCurrency.value.splice(insertAt, 0, movedCurrency === true);
+  normalizeLocalColumnCalculations();
+  announce('Kolom verplaatst');
+  scheduleEmit('move-column');
+}
+
+function setColumnCalculation(j: number, calculation: TableColumnCalculationSetting): void {
+  if (j < 0 || j >= currentCols.value) return;
+  normalizeLocalColumnCalculations();
+  const next = calculation === 'sum' ? 'sum' : null;
+  if (localColumnCalculations.value[j] === next) return;
+  localColumnCalculations.value[j] = next;
+  // Nadruk staat standaard aan voor een nieuwe som; bij verwijderen reset.
+  localColumnCalculationEmphasis.value[j] = next === 'sum';
+  if (next !== 'sum') localColumnCalculationCurrency.value[j] = false;
+  announce(next === 'sum' ? 'Som toegevoegd' : 'Som verwijderd');
+  scheduleEmit('column-calculation');
+}
+
+function setColumnCalculationEmphasis(j: number, emphasis: boolean): void {
+  if (j < 0 || j >= currentCols.value) return;
+  normalizeLocalColumnCalculations();
+  if (localColumnCalculationEmphasis.value[j] === emphasis) return;
+  localColumnCalculationEmphasis.value[j] = emphasis;
+  announce(emphasis ? 'Som benadrukt' : 'Nadruk verwijderd');
+  scheduleEmit('column-calculation-emphasis');
+}
+
+function setColumnCalculationCurrency(j: number, currency: boolean): void {
+  if (j < 0 || j >= currentCols.value) return;
+  normalizeLocalColumnCalculations();
+  if (localColumnCalculationCurrency.value[j] === currency) return;
+  localColumnCalculationCurrency.value[j] = currency;
+  announce(currency ? 'Euroteken tonen' : 'Euroteken verbergen');
+  scheduleEmit('column-calculation-currency');
 }
 
 function updateCell(i: number, j: number, value: string): void {
+  if (i === localRows.value.length) {
+    if (value === '') return;
+    const materialized = materializeRow();
+    if (materialized < 0) return;
+    i = materialized;
+    announce('Rij toegevoegd');
+  }
+  if (j >= currentCols.value) ensureColumnCount(j + 1);
   const row = localRows.value[i];
   if (row === undefined) return;
   const cell = row.cells[j];
   if (cell === undefined || cell.value === value) return;
   cell.value = value;
-  scheduleEmit();
+  scheduleEmit('cell-edit');
+}
+
+function setCellEmphasis(i: number, j: number, emphasis: boolean): void {
+  if (i < 0 || i >= localRows.value.length) return;
+  if (j >= currentCols.value) return;
+  if (localHasColumnHeader.value && i === 0) return;
+  const cell = localRows.value[i]?.cells[j];
+  if (cell === undefined) return;
+  if ((cell.emphasis === true) === emphasis) return;
+  if (emphasis) {
+    cell.emphasis = true;
+    announce('Cel benadrukt');
+  } else {
+    delete cell.emphasis;
+    announce('Cel niet meer benadrukt');
+  }
+  scheduleEmit('cell-style');
+}
+
+function matrixColumnCount(matrix: string[][]): number {
+  let count = 0;
+  for (let i = 0; i < matrix.length; i++) {
+    if (matrix[i].length > count) count = matrix[i].length;
+  }
+  return count;
+}
+
+function pasteMatrix(i: number, j: number, matrix: string[][]): void {
+  if (matrix.length === 0) return;
+  const matrixCols = matrixColumnCount(matrix);
+  if (matrixCols === 0) return;
+
+  if (i === localRows.value.length) {
+    const materialized = materializeRow();
+    if (materialized < 0) return;
+    i = materialized;
+  }
+
+  const neededRowsRaw = i + matrix.length;
+  const neededColsRaw = j + matrixCols;
+  const neededRows = neededRowsRaw > TABLE_MAX_ROWS ? TABLE_MAX_ROWS : neededRowsRaw;
+  const neededCols = neededColsRaw > TABLE_MAX_COLS ? TABLE_MAX_COLS : neededColsRaw;
+
+  while (localRows.value.length < neededRows) {
+    const cells: TableCellModel[] = [];
+    const cellCount = currentCols.value > 0 ? currentCols.value : 1;
+    for (let c = 0; c < cellCount; c++) cells.push({ cellNodeId: '', value: '' });
+    localRows.value.push({ rowNodeId: '', cells: cells });
+  }
+  ensureColumnCount(neededCols);
+
+  let writtenRows = 0;
+  let writtenCols = 0;
+  for (let r = 0; r < matrix.length && i + r < TABLE_MAX_ROWS; r++) {
+    const row = localRows.value[i + r];
+    if (row === undefined) break;
+    writtenRows += 1;
+    const source = matrix[r];
+    for (let c = 0; c < source.length && j + c < TABLE_MAX_COLS; c++) {
+      const cell = row.cells[j + c];
+      if (cell === undefined) continue;
+      cell.value = source[c].trim();
+      if (c + 1 > writtenCols) writtenCols = c + 1;
+    }
+  }
+
+  const truncated = neededRowsRaw > TABLE_MAX_ROWS || neededColsRaw > TABLE_MAX_COLS;
+  if (truncated) {
+    notifications.pushInfo(
+      'Plakken afgekapt',
+      'Max ' + String(TABLE_MAX_ROWS) + ' rijen · ' + String(TABLE_MAX_COLS) + ' kolommen.',
+    );
+    announce(
+      'Plakken afgekapt op ' +
+        String(TABLE_MAX_ROWS) +
+        ' rijen en ' +
+        String(TABLE_MAX_COLS) +
+        ' kolommen',
+    );
+  } else {
+    announce('Geplakt: ' + String(writtenRows) + ' rijen x ' + String(writtenCols) + ' kolommen');
+  }
+  scheduleEmit('paste-matrix');
 }
 const csvText = ref<string>('');
 const csvUploadFile = ref<File | null>(null);
@@ -233,45 +574,8 @@ watch(csvText, () => {
       <span class="text-xs text-muted">{{ currentCols }} / {{ TABLE_MAX_COLS }} kolommen</span>
     </div>
 
-    <UEmpty
-      v-if="localRows.length === 0"
-      icon="i-lucide-table"
-      description="Tabel is leeg — voeg een rij toe om te starten."
-      variant="naked"
-    >
-      <template #actions>
-        <UButton color="neutral" variant="soft" icon="i-lucide-plus" @click="addRow">
-          Eerste rij toevoegen
-        </UButton>
-      </template>
-    </UEmpty>
-
-    <template v-else>
-      <span class="text-xs font-medium text-muted">Kolommen</span>
-      <div class="flex flex-wrap items-center gap-2">
-        <UButton
-          v-for="j in currentCols"
-          :key="'colchip-' + j"
-          color="neutral"
-          variant="subtle"
-          trailing-icon="i-lucide-x"
-          :aria-label="`Verwijder kolom ${j}`"
-          @click="removeColumn(j - 1)"
-          >Kolom {{ j }}</UButton
-        >
-        <UButton
-          color="neutral"
-          variant="ghost"
-          icon="i-lucide-plus"
-          :disabled="!canAddColumn"
-          @click="addColumn"
-          >Kolom toevoegen</UButton
-        >
-      </div>
-
-      <USeparator />
-
-      <div class="flex items-center justify-between gap-2">
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="flex items-center gap-2">
         <span class="text-sm font-semibold text-default">Koprij</span>
         <USwitch
           :model-value="localHasColumnHeader"
@@ -280,65 +584,33 @@ watch(csvText, () => {
           @update:model-value="(v: boolean) => setHasColumnHeader(v)"
         />
       </div>
-      <UCollapsible v-if="localRows.length > 0" :open="localHasColumnHeader">
-        <template #content>
-          <div
-            v-for="(cell, j) in localRows[0].cells"
-            :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'kolomkop-' + j"
-            class="grid grid-cols-[80px_1fr] items-center gap-3"
-          >
-            <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-            <WInput
-              :model-value="cell.value"
-              :placeholder="`Waarde voor kolom ${j + 1}`"
-              @update:model-value="(v: string) => updateCell(0, j, v)"
-            />
-          </div>
-        </template>
-      </UCollapsible>
+    </div>
 
-      <template
-        v-for="(row, idx) in localRows"
-        :key="row.rowNodeId !== '' ? row.rowNodeId : 'row-' + idx"
-      >
-        <template v-if="idx >= bodyRowOffset">
-          <USeparator />
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-sm font-semibold text-default"
-              >Rij {{ idx + 1 - bodyRowOffset }}</span
-            >
-            <UButton
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-x"
-              :aria-label="`Verwijder rij ${idx + 1 - bodyRowOffset}`"
-              @click="removeRow(idx)"
-            />
-          </div>
-          <div
-            v-for="(cell, j) in row.cells"
-            :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'row-' + idx + '-' + j"
-            class="grid grid-cols-[80px_1fr] items-center gap-3"
-          >
-            <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-            <WInput
-              :model-value="cell.value"
-              :placeholder="`Waarde voor kolom ${j + 1}`"
-              @update:model-value="(v: string) => updateCell(idx, j, v)"
-            />
-          </div>
-        </template>
-      </template>
-      <UButton
-        color="neutral"
-        variant="subtle"
-        icon="i-lucide-plus"
-        :disabled="!canAddRow"
-        block
-        @click="addRow"
-        >Rij toevoegen</UButton
-      >
-    </template>
+    <TableGrid
+      :rows="localRows"
+      :has-column-header="localHasColumnHeader"
+      :column-calculations="localColumnCalculations"
+      :column-calculation-emphasis="localColumnCalculationEmphasis"
+      :column-calculation-currency="localColumnCalculationCurrency"
+      :max-rows="TABLE_MAX_ROWS"
+      :max-cols="TABLE_MAX_COLS"
+      @cell-edit="updateCell"
+      @cell-style="setCellEmphasis"
+      @column-calculation="setColumnCalculation"
+      @column-calculation-emphasis="setColumnCalculationEmphasis"
+      @column-calculation-currency="setColumnCalculationCurrency"
+      @add-row-before="insertRowBefore"
+      @add-row-after="insertRowAfter"
+      @remove-row="removeRow"
+      @add-column-before="insertColumnBefore"
+      @add-column-after="insertColumnAfter"
+      @remove-column="removeColumn"
+      @move-row="moveRow"
+      @move-column="moveColumn"
+      @paste-matrix="pasteMatrix"
+    />
+
+    <div class="sr-only" aria-live="polite">{{ gridStatus }}</div>
 
     <USeparator />
 
