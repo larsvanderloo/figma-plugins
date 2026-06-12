@@ -1,6 +1,6 @@
 {
   "name": "welder-editor",
-  "version": "0.5.253",
+  "version": "0.5.254",
   "type": "module",
   "scripts": {
     "build:version": "node scripts/write-app-version.mjs",
