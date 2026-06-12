@@ -24,7 +24,6 @@
 
 import type { ChartWrapModel } from '../../../shared/types';
 import { chartDeltaDisplay } from '../../../shared/chart-calculations';
-import { findBadge } from '../../slide-machine';
 import type { ChartTheme } from './legend';
 
 export interface DeltaBadgeContext {
@@ -43,15 +42,20 @@ export function createDeltaContext(
   theme: ChartTheme,
   labelSize: number,
 ): DeltaBadgeContext {
-  // T50: template één keer per apply zoeken. De mode-context kan in
-  // theorie de slot zelf zijn (geen instance-ancestor); findBadge
-  // vereist een INSTANCE, dus dan geen template → tekst-variant.
+  // T50: template één keer per apply zoeken — ZONDER visibility-gates:
+  // findBadge eist zichtbaarheid, maar de Badge_wrap staat op de meeste
+  // slides verborgen terwijl de instance prima als clone-template dient
+  // (de clone krijgt zelf visible=true). Eigen DeltaBadge-clones matchen
+  // niet (naam begint niet met 'Badge').
   let badgeTemplate: InstanceNode | null = null;
   if (slide.type === 'INSTANCE') {
     try {
-      badgeTemplate = findBadge(slide);
+      const found = (slide as InstanceNode).findOne(function (n: SceneNode): boolean {
+        return n.type === 'INSTANCE' && n.name.indexOf('Badge') === 0;
+      });
+      badgeTemplate = found !== null && found.type === 'INSTANCE' ? (found as InstanceNode) : null;
     } catch (e) {
-      console.log('[chart] delta: findBadge failed: ' + String(e));
+      console.log('[chart] delta: badge-template lookup failed: ' + String(e));
       badgeTemplate = null;
     }
   }
@@ -138,6 +142,52 @@ function buildDeltaBadgeClone(
             }
             break;
           }
+        }
+      }
+      if (labelSet) {
+        // T50.2 — Outline-variant voor delta-badges (subtieler dan de
+        // gevulde default). Sync poging op de eerste VARIANT-property;
+        // ongeldige waarde gooit en wordt geslikt (default blijft staan).
+        for (let v = 0; v < keys.length; v++) {
+          const vKey = keys[v];
+          if (props[vKey].type === 'VARIANT') {
+            try {
+              const variantPatch: { [name: string]: string } = {};
+              variantPatch[vKey] = 'Outline';
+              clone.setProperties(variantPatch);
+            } catch (eVariant) {
+              console.log('[chart] delta: outline-variant failed: ' + String(eVariant));
+            }
+            break;
+          }
+        }
+      }
+      if (labelSet) {
+        // MCP-geverifieerd (T50.1): de Badge-master draagt een VERBORGEN
+        // 'Label'-node + zichtbare icon-slot — de clone erft dat en
+        // rendert dan icon-only. Visibility-overrides op instance-
+        // children zijn sync toegestaan: label-keten aan, iconen uit.
+        try {
+          const labelNode = clone.findOne(function (n: SceneNode): boolean {
+            return n.type === 'TEXT';
+          });
+          if (labelNode !== null) {
+            labelNode.visible = true;
+            let parent: BaseNode | null = labelNode.parent;
+            while (parent !== null && parent.id !== clone.id) {
+              if ('visible' in parent) (parent as SceneNode).visible = true;
+              parent = parent.parent;
+            }
+          }
+          const children = clone.children;
+          for (let c = 0; c < children.length; c++) {
+            const child = children[c];
+            if (child.type === 'SLOT' || (child.type === 'INSTANCE' && child.name !== 'Text_wrapper')) {
+              child.visible = false;
+            }
+          }
+        } catch (eVis) {
+          console.log('[chart] delta: label/icon visibility fix failed: ' + String(eVis));
         }
       }
     }
