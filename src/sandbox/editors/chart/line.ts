@@ -242,9 +242,13 @@ export function buildLine(
   for (let s = 0; s < model.series.length; s++) {
     const color = ramp[s % ramp.length];
     let data = '';
+    let minX = Infinity;
+    let minY = Infinity;
     for (let i = 0; i < pointCount; i++) {
       const x = Math.round(xFor(i));
       const y = Math.round(yFor(model.series[s].values[i]));
+      if (x < minX) minX = x;
+      if (y < minY) minY = y;
       data += (i === 0 ? 'M ' : ' L ') + String(x) + ' ' + String(y);
     }
     const vector = figma.createVector();
@@ -256,8 +260,13 @@ export function buildLine(
     vector.strokeJoin = 'ROUND';
     vector.fills = [];
     plot.appendChild(vector);
-    vector.x = 0;
-    vector.y = 0;
+    // T52.2 — MCP-geverifieerd: na het zetten van vectorPaths her-origint
+    // Figma de vector naar de bounding-box van het pad (vector.x/y → 0).
+    // Het pad is in absolute plot-coördinaten gerekend, dus plaats de
+    // vector op de minX/minY van het pad zodat de lijn op de dots valt
+    // i.p.v. naar de plot-top te klappen.
+    vector.x = minX === Infinity ? 0 : minX;
+    vector.y = minY === Infinity ? 0 : minY;
 
     for (let i = 0; i < pointCount; i++) {
       const dot = figma.createEllipse();
