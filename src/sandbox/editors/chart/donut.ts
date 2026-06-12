@@ -21,6 +21,7 @@ import {
   seriesTotal,
 } from '../../../shared/chart-calculations';
 import { buildLegend, ChartTheme, LegendEntry } from './legend';
+import type { DeltaBadgeContext } from './delta-badge';
 
 const SEGMENT_GAP = 0.03; // radialen tussen segmenten
 const DONUT_INNER = 0.66; // innerRadius-ratio voor donut
@@ -32,6 +33,8 @@ export function buildDonut(
   ramp: RGB[],
   theme: ChartTheme,
   labelSize: number,
+  _cardPaint: SolidPaint,
+  _deltaCtx: DeltaBadgeContext,
 ): FrameNode {
   const isDonut = model.chartType === 'donut';
   const series = model.series[0];

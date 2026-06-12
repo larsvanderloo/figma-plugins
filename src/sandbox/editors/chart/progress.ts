@@ -21,6 +21,7 @@ import {
 } from '../../../shared/chart-calculations';
 import { trackPaint } from './palette';
 import type { ChartTheme } from './legend';
+import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
 
 export function buildProgress(
   model: ChartWrapModel,
@@ -30,6 +31,7 @@ export function buildProgress(
   light: RGB,
   theme: ChartTheme,
   labelSize: number,
+  deltaCtx: DeltaBadgeContext,
 ): FrameNode {
   const series = model.series[0];
   const reference = Math.max(100, chartMaxValue(model));
@@ -125,23 +127,20 @@ export function buildProgress(
     row.appendChild(value);
     value.resize(valueW, value.height);
 
-    // Delta-kolom (T48): verandering t.o.v. de vorige categorie.
+    // Delta-kolom (T48/T50): vaste-breedte cel zodat rij-alignment
+    // behouden blijft wanneer een categorie geen delta heeft.
     if (model.showDelta === true) {
-      const delta = chartDeltaLabel(series.values, i);
-      const deltaText = figma.createText();
-      deltaText.fontName = { family: 'Inter', style: 'Medium' };
-      deltaText.fontSize = Math.round(labelSize * 0.7);
-      deltaText.characters = delta !== null ? delta : '';
-      deltaText.textAutoResize = 'HEIGHT';
-      deltaText.fills = [
-        figma.variables.setBoundVariableForPaint(
-          { type: 'SOLID', color: theme.dimmerRGB },
-          'color',
-          theme.dimmerVar,
-        ),
-      ];
-      row.appendChild(deltaText);
-      deltaText.resize(deltaW, deltaText.height);
+      const deltaCell = figma.createFrame();
+      deltaCell.name = 'DeltaCell';
+      deltaCell.layoutMode = 'HORIZONTAL';
+      deltaCell.primaryAxisSizingMode = 'FIXED';
+      deltaCell.counterAxisSizingMode = 'AUTO';
+      deltaCell.counterAxisAlignItems = 'CENTER';
+      deltaCell.fills = [];
+      const deltaNode = buildDeltaNode(deltaCtx, i);
+      if (deltaNode !== null) deltaCell.appendChild(deltaNode);
+      row.appendChild(deltaCell);
+      deltaCell.resize(deltaW, Math.max(deltaCell.height, 1));
     }
 
     root.appendChild(row);

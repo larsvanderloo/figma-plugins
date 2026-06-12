@@ -21,6 +21,7 @@ import {
   isPointEmphasized,
 } from '../../../shared/chart-calculations';
 import { buildLegend, ChartTheme, LegendEntry } from './legend';
+import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
 
 export function buildBars(
   model: ChartWrapModel,
@@ -29,6 +30,7 @@ export function buildBars(
   ramp: RGB[],
   theme: ChartTheme,
   labelSize: number,
+  deltaCtx: DeltaBadgeContext,
 ): FrameNode {
   const max = Math.max(1, chartMaxValue(model));
   const seriesCount = model.series.length;
@@ -157,24 +159,10 @@ export function buildBars(
         barColumn.appendChild(valueText);
       }
 
-      // Delta-badge (T48): alleen serie 0, vs vorige categorie.
+      // Delta-badge (T48/T50): alleen serie 0, override-aware via engine.
       if (model.showDelta === true && s === 0) {
-        const delta = chartDeltaLabel(model.series[0].values, i);
-        if (delta !== null) {
-          const deltaText = figma.createText();
-          deltaText.fontName = { family: 'Inter', style: 'Medium' };
-          deltaText.fontSize = Math.round(labelSize * 0.7);
-          deltaText.characters = delta;
-          deltaText.textAutoResize = 'WIDTH_AND_HEIGHT';
-          deltaText.fills = [
-            figma.variables.setBoundVariableForPaint(
-              { type: 'SOLID', color: theme.dimmerRGB },
-              'color',
-              theme.dimmerVar,
-            ),
-          ];
-          barColumn.appendChild(deltaText);
-        }
+        const deltaNode = buildDeltaNode(deltaCtx, i);
+        if (deltaNode !== null) barColumn.appendChild(deltaNode);
       }
 
       const bar = figma.createRectangle();

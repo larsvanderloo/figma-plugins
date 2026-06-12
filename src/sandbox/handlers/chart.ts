@@ -10,6 +10,7 @@
 import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideById } from '../slides';
 import { applyChart } from '../editors/chart/renderer';
+import { importChartCSV } from '../editors/chart/csv';
 import type { UIToPluginMessage } from '../../shared/types';
 
 export async function handleUpdateChart(
@@ -35,6 +36,38 @@ export async function handleUpdateChart(
   }
   figma.commitUndo();
   await applyChart(slotNode as SlotNode, msg.desired);
+  markSelfWrite();
+  postToUI({
+    type: 'target-updated',
+    ok: true,
+    targetId: msg.slotId,
+  });
+  return;
+}
+
+export async function handleImportChartCsv(
+  msg: Extract<UIToPluginMessage, { type: 'import-chart-csv' }>,
+): Promise<void> {
+  const slide = await findSlideById(msg.slideId);
+  if (slide === null) {
+    postToUI({
+      type: 'target-updated',
+      ok: false,
+      error: 'Slide not found: ' + msg.slideId,
+    });
+    return;
+  }
+  const slotNode = await figma.getNodeByIdAsync(msg.slotId);
+  if (slotNode === null || slotNode.type !== 'SLOT') {
+    postToUI({
+      type: 'target-updated',
+      ok: false,
+      error: 'Chart slot not found: ' + msg.slotId,
+    });
+    return;
+  }
+  figma.commitUndo();
+  await importChartCSV(slotNode as SlotNode, msg.csv);
   markSelfWrite();
   postToUI({
     type: 'target-updated',

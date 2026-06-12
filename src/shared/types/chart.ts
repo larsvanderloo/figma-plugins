@@ -56,6 +56,17 @@ export interface ChartWrapModel {
   /** Waarde-labels tonen op segmenten/bars/punten. */
   showValues: boolean;
   /**
+   * Per-categorie delta-override (serie 0, T50). Index-aligned met
+   * `categories`. Lege string = auto (chartDeltaLabel vs vorige
+   * categorie); niet-lege string = letterlijke badge-tekst.
+   */
+  deltaOverrides?: string[];
+  /**
+   * Vaste referentieschaal voor progress-bars (T50). null/afwezig =
+   * auto: max(100, hoogste waarde). Alleen waarden > 0 zijn geldig.
+   */
+  progressMax?: number | null;
+  /**
    * Delta-badges tonen (T48): per categorie de verandering t.o.v. de
    * vorige categorie in serie 0 (▲ +12% / ▼ −5%). Optioneel zodat
    * bestaande gepersisteerde modellen geldig blijven; default false.

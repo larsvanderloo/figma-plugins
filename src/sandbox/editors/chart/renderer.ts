@@ -31,6 +31,7 @@ import {
 import { cardRamp } from './palette';
 import type { ChartTheme } from './legend';
 import { readChartModel, writeChartModel } from './plugin-data';
+import { createDeltaContext } from './delta-badge';
 import { buildDonut } from './donut';
 import { buildBars } from './bars';
 import { buildProgress } from './progress';
@@ -46,7 +47,7 @@ export function scanChartSlot(slot: SlotNode): ChartWrapModel {
 /** Accent-kaart — zelfde taal als de InstructorCards (MCP-referentie
  * 2026-06-12): fill gebonden aan de `Text`-variable (saturated accent),
  * radius 55 (radius/rounded-4xl), geen border. */
-function buildChartCard(textVar: Variable, accentRGB: RGB): FrameNode {
+function buildChartCard(cardPaint: SolidPaint): FrameNode {
   const card = figma.createFrame();
   card.name = 'WelderChartContent';
   card.layoutMode = 'VERTICAL';
@@ -56,13 +57,7 @@ function buildChartCard(textVar: Variable, accentRGB: RGB): FrameNode {
   card.counterAxisAlignItems = 'CENTER';
   card.cornerRadius = 55;
   card.clipsContent = true;
-  card.fills = [
-    figma.variables.setBoundVariableForPaint(
-      { type: 'SOLID', color: accentRGB },
-      'color',
-      textVar,
-    ),
-  ];
+  card.fills = [cardPaint];
   card.strokes = [];
   return card;
 }
@@ -154,7 +149,14 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
       g: 0.467,
       b: 0,
     });
-    const card = buildChartCard(vars.text, accentRGB);
+    // Kaart-paint één keer bouwen: hergebruikt voor de kaart-fill én als
+    // segment-separator-stroke in de donut/pie (T50/R3).
+    const cardPaint = figma.variables.setBoundVariableForPaint(
+      { type: 'SOLID', color: accentRGB },
+      'color',
+      vars.text,
+    ) as SolidPaint;
+    const card = buildChartCard(cardPaint);
     slot.appendChild(card);
 
     // Pin de kaart op (0,0) binnen de Slot. Een auto-layout-Slot (met
@@ -216,15 +218,17 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
         : model.series.length;
     const ramp = cardRamp(lightRGB, accentRGB, rampCount);
 
+    const deltaCtx = createDeltaContext(modeContext, model, theme, labelSize);
+
     let content: FrameNode;
     if (model.chartType === 'donut' || model.chartType === 'pie') {
-      content = buildDonut(model, contentW, contentH, ramp, theme, labelSize);
+      content = buildDonut(model, contentW, contentH, ramp, theme, labelSize, cardPaint, deltaCtx);
     } else if (model.chartType === 'bar') {
-      content = buildBars(model, contentW, contentH, ramp, theme, labelSize);
+      content = buildBars(model, contentW, contentH, ramp, theme, labelSize, deltaCtx);
     } else if (model.chartType === 'progress') {
-      content = buildProgress(model, contentW, contentH, ramp, lightRGB, theme, labelSize);
+      content = buildProgress(model, contentW, contentH, ramp, lightRGB, theme, labelSize, deltaCtx);
     } else {
-      content = buildLine(model, contentW, contentH, ramp, lightRGB, theme, labelSize);
+      content = buildLine(model, contentW, contentH, ramp, lightRGB, theme, labelSize, deltaCtx);
     }
     card.appendChild(content);
     try {

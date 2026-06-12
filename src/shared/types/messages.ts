@@ -122,6 +122,17 @@ export type UIToPluginMessage =
     }
   | {
       /**
+       * CSV-import voor een ChartWrap (T50). Main-thread parseert de CSV
+       * (rij 0 = koprij met serienamen, kolom 0 = categorie-labels) en
+       * roept applyChart aan.
+       */
+      type: 'import-chart-csv';
+      slideId: string;
+      slotId: string;
+      csv: string;
+    }
+  | {
+      /**
        * CSV-import voor een TableWrap (T34.2). Main-thread parseert de CSV-
        * string, trunceert op TABLE_MAX_ROWS / TABLE_MAX_COLS (T44: flat max)
        * en roept applyTable aan.

@@ -20,6 +20,7 @@ import {
   isPointEmphasized,
 } from '../../../shared/chart-calculations';
 import { buildLegend, ChartTheme, LegendEntry } from './legend';
+import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
 import { trackPaint } from './palette';
 
 const DOT_SIZE = 12;
@@ -33,6 +34,7 @@ export function buildLine(
   light: RGB,
   theme: ChartTheme,
   labelSize: number,
+  deltaCtx: DeltaBadgeContext,
 ): FrameNode {
   const max = Math.max(1, chartMaxValue(model));
   const pointCount = model.categories.length;
@@ -131,24 +133,15 @@ export function buildLine(
       // (T48, alleen serie 0) eronder, dichtst bij de dot.
       let stackY = yFor(model.series[s].values[i]) - DOT_SIZE;
       if (model.showDelta === true && s === 0) {
-        const delta = chartDeltaLabel(model.series[0].values, i);
-        if (delta !== null) {
-          const deltaText = figma.createText();
-          deltaText.fontName = { family: 'Inter', style: 'Medium' };
-          deltaText.fontSize = Math.round(labelSize * 0.7);
-          deltaText.characters = delta;
-          deltaText.textAutoResize = 'WIDTH_AND_HEIGHT';
-          deltaText.fills = [
-            figma.variables.setBoundVariableForPaint(
-              { type: 'SOLID', color: theme.dimmerRGB },
-              'color',
-              theme.dimmerVar,
-            ),
-          ];
-          plot.appendChild(deltaText);
-          deltaText.x = xFor(i) - deltaText.width / 2;
-          deltaText.y = stackY - deltaText.height;
-          stackY = deltaText.y;
+        const deltaNode = buildDeltaNode(deltaCtx, i);
+        if (deltaNode !== null) {
+          plot.appendChild(deltaNode);
+          deltaNode.x = Math.min(
+            contentW - deltaNode.width,
+            Math.max(0, xFor(i) - deltaNode.width / 2),
+          );
+          deltaNode.y = stackY - deltaNode.height;
+          stackY = deltaNode.y;
         }
       }
       if (model.showValues) {

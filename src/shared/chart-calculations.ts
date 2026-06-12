@@ -78,6 +78,20 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
     series.push({ name: '', values: values, emphasis: emphasis });
   }
 
+  // T50 — delta-overrides rechthoekig op categorie-lengte; progressMax
+  // alleen geldig wanneer een eindig getal > 0.
+  const deltaOverrides: string[] = [];
+  const sourceOverrides = Array.isArray(model.deltaOverrides) ? model.deltaOverrides : [];
+  for (let i = 0; i < categories.length; i++) {
+    deltaOverrides.push(
+      i < sourceOverrides.length && typeof sourceOverrides[i] === 'string'
+        ? sourceOverrides[i]
+        : '',
+    );
+  }
+  const rawMax = model.progressMax;
+  const progressMax = typeof rawMax === 'number' && isFinite(rawMax) && rawMax > 0 ? rawMax : null;
+
   return {
     slotId: model.slotId,
     chartType: isChartType(model.chartType) ? model.chartType : 'donut',
@@ -87,6 +101,8 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
     showLegend: model.showLegend === true,
     showValues: model.showValues === true,
     showDelta: model.showDelta === true,
+    deltaOverrides: deltaOverrides,
+    progressMax: progressMax,
   };
 }
 
@@ -99,10 +115,14 @@ export function chartModelsEqual(a: ChartWrapModel | null, b: ChartWrapModel): b
   if (left.chartType !== right.chartType) return false;
   if (left.showLegend !== right.showLegend) return false;
   if (left.showValues !== right.showValues) return false;
+  if (left.progressMax !== right.progressMax) return false;
   if (left.showDelta !== right.showDelta) return false;
   if (left.categories.length !== right.categories.length) return false;
   for (let i = 0; i < left.categories.length; i++) {
     if (left.categories[i] !== right.categories[i]) return false;
+    const lo = left.deltaOverrides;
+    const ro = right.deltaOverrides;
+    if ((lo !== undefined ? lo[i] : '') !== (ro !== undefined ? ro[i] : '')) return false;
     const lce = left.categoryEmphasis;
     const rce = right.categoryEmphasis;
     if ((lce !== undefined && lce[i] === true) !== (rce !== undefined && rce[i] === true)) {
@@ -190,4 +210,31 @@ export function emptyChartModel(slotId: string): ChartWrapModel {
     showValues: true,
     showDelta: false,
   };
+}
+
+/**
+ * T50 — effectieve delta-tekst voor categorie i (serie 0): een niet-lege
+ * override wint van de auto-berekening. Single source of truth voor de
+ * sandbox-renderers én de UI-grid-placeholder.
+ */
+export function chartDeltaDisplay(model: ChartWrapModel, i: number): string | null {
+  const overrides = model.deltaOverrides;
+  if (overrides !== undefined && i < overrides.length) {
+    const trimmed = overrides[i].trim();
+    if (trimmed !== '') return trimmed;
+  }
+  if (model.series.length === 0) return null;
+  return chartDeltaLabel(model.series[0].values, i);
+}
+
+/** T50 — referentieschaal voor progress: progressMax of auto. */
+export function chartProgressReference(model: ChartWrapModel): number {
+  const max = model.progressMax;
+  if (typeof max === 'number' && isFinite(max) && max > 0) return max;
+  return Math.max(100, chartMaxValue(model));
+}
+
+/** T50 — chart-types die alleen serie 0 renderen. */
+export function isSingleSeriesChartType(t: ChartType): boolean {
+  return t === 'donut' || t === 'pie' || t === 'progress';
 }
