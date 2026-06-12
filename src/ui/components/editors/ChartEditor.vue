@@ -14,10 +14,12 @@ import {
   CHART_MAX_CATEGORIES,
   CHART_MAX_SERIES,
   chartModelsEqual,
+  isSingleSeriesChartType,
   normalizeChartModel,
 } from '../../../shared/chart-calculations';
 import { debugLog } from '../../../shared/debug';
 import ChartGrid from './chart/ChartGrid.vue';
+import { useChartCsvImport } from './chart/useChartCsvImport';
 import WCard from '../ui/WCard.vue';
 
 interface Props {
@@ -28,6 +30,7 @@ const props = defineProps<Props>();
 
 const emit = defineEmits<{
   'update:modelValue': [value: ChartWrapModel];
+  'import-csv': [csv: string];
 }>();
 
 function cloneModel(model: ChartWrapModel): ChartWrapModel {
@@ -44,6 +47,8 @@ function cloneModel(model: ChartWrapModel): ChartWrapModel {
     showLegend: model.showLegend,
     showValues: model.showValues,
     showDelta: model.showDelta,
+    deltaOverrides: model.deltaOverrides !== undefined ? model.deltaOverrides.slice() : undefined,
+    progressMax: model.progressMax,
   });
 }
 
@@ -102,13 +107,9 @@ function setChartType(next: ChartType): void {
   scheduleEmit('chart-type');
 }
 
-// Donut/pie/progress renderen serie 0 — hint tonen bij meerdere series.
-const singleSeriesType = computed<boolean>(
-  () =>
-    local.value.chartType === 'donut' ||
-    local.value.chartType === 'pie' ||
-    local.value.chartType === 'progress',
-);
+// Donut/pie/progress renderen serie 0 — grid toont dan alleen serie 0
+// (display-gating; verborgen series blijven bewaard in het model).
+const singleSeriesType = computed<boolean>(() => isSingleSeriesChartType(local.value.chartType));
 
 // --- weergave ------------------------------------------------------
 
@@ -127,6 +128,55 @@ function setShowDelta(v: boolean): void {
   local.value.showDelta = v;
   scheduleEmit('delta-toggle');
 }
+
+// T50 — per-cel delta-override; lege string = auto.
+function ensureDeltaOverrides(): string[] {
+  if (local.value.deltaOverrides === undefined) {
+    local.value.deltaOverrides = local.value.categories.map(() => '');
+  }
+  return local.value.deltaOverrides;
+}
+
+function setDeltaOverride(i: number, value: string): void {
+  ensureDeltaOverrides()[i] = value;
+  scheduleEmit('delta-override');
+}
+
+// T50 — vaste progress-referentie; leeg/ongeldig = auto (null).
+function setProgressMax(raw: string | number): void {
+  const parsed = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.'));
+  const next = isFinite(parsed) && parsed > 0 ? parsed : null;
+  if (local.value.progressMax === next) return;
+  local.value.progressMax = next;
+  scheduleEmit('progress-max');
+}
+
+// T50 — transponeren (Datawrapper/Flourish-conventie: expliciete actie,
+// nooit stille auto-rotatie): categorieën ↔ series wisselen. Reset
+// nadruk/overrides — rij-identiteit verandert.
+const canTranspose = computed<boolean>(
+  () =>
+    local.value.categories.length <= CHART_MAX_SERIES &&
+    local.value.series.length <= CHART_MAX_CATEGORIES,
+);
+
+function transpose(): void {
+  if (!canTranspose.value) return;
+  const oldCategories = local.value.categories.slice();
+  const oldSeries = local.value.series.map((sr) => ({ name: sr.name, values: sr.values.slice() }));
+  local.value.categories = oldSeries.map((sr, idx) =>
+    sr.name !== '' ? sr.name : 'Categorie ' + String(idx + 1),
+  );
+  local.value.series = oldCategories.map((cat, i) => ({
+    name: cat !== '' ? cat : 'Serie ' + String(i + 1),
+    values: oldSeries.map((sr) => sr.values[i]),
+  }));
+  local.value.categoryEmphasis = undefined;
+  local.value.deltaOverrides = undefined;
+  scheduleEmit('transpose');
+}
+
+const csv = useChartCsvImport(props, (event: 'import-csv', text: string) => emit(event, text));
 
 // --- grid-mutaties (positioneel, zoals de tabel) --------------------
 
@@ -254,6 +304,21 @@ function removeSeries(s: number): void {
       </div>
     </div>
 
+    <UFormField v-if="local.chartType === 'progress'" name="progress-max" label="Maximum">
+      <UInput
+        :model-value="local.progressMax !== null && local.progressMax !== undefined ? String(local.progressMax) : ''"
+        type="number"
+        min="1"
+        placeholder="Auto (max(100, hoogste waarde))"
+        class="w-full"
+        aria-label="Maximum referentiewaarde"
+        @update:model-value="(v: string | number) => setProgressMax(v)"
+      />
+      <template v-if="local.progressMax !== null && local.progressMax !== undefined" #hint>
+        <span class="text-xs text-dimmed">Waarden boven het maximum vullen de balk volledig.</span>
+      </template>
+    </UFormField>
+
     <p v-if="singleSeriesType && local.series.length > 1" class="text-xs text-dimmed">
       Dit grafiektype toont alleen de eerste serie.
     </p>
@@ -262,10 +327,12 @@ function removeSeries(s: number): void {
       :model="local"
       :max-categories="CHART_MAX_CATEGORIES"
       :max-series="CHART_MAX_SERIES"
+      :single-series="singleSeriesType"
       @category-edit="setCategory"
       @series-name="setSeriesName"
       @value-edit="setValue"
       @cell-emphasis="setCellEmphasis"
+      @delta-override-edit="setDeltaOverride"
       @category-emphasis="setCategoryEmphasis"
       @add-category-before="(i: number) => insertCategoryAt(i)"
       @add-category-after="(i: number) => insertCategoryAt(i + 1)"
@@ -275,9 +342,58 @@ function removeSeries(s: number): void {
       @remove-series="removeSeries"
     />
 
-    <p class="text-xs text-muted">
-      {{ local.categories.length }} / {{ CHART_MAX_CATEGORIES }} categorieën ·
-      {{ local.series.length }} / {{ CHART_MAX_SERIES }} series
-    </p>
+    <div class="flex items-center gap-2">
+      <UButton
+        color="neutral"
+        variant="soft"
+        size="xs"
+        icon="i-lucide-arrow-left-right"
+        :disabled="!canTranspose"
+        :title="canTranspose ? 'Rijen en kolommen wisselen' : 'Te veel rijen om te transponeren (max ' + CHART_MAX_SERIES + ')'"
+        @click="transpose"
+      >
+        Transponeren
+      </UButton>
+      <span class="ml-auto text-xs text-muted">
+        {{ local.categories.length }} / {{ CHART_MAX_CATEGORIES }} categorieën ·
+        {{ local.series.length }} / {{ CHART_MAX_SERIES }} series
+      </span>
+    </div>
+
+    <USeparator />
+
+    <UFileUpload
+      v-model="csv.csvUploadFile.value"
+      accept=".csv,text/csv"
+      icon="i-lucide-folder-plus"
+      label="Sleep je CSV hier of klik om te bladeren"
+      :description="`Koprij met serienamen · max ${CHART_MAX_CATEGORIES} datarijen · ${CHART_MAX_SERIES} series.`"
+      color="neutral"
+      :preview="false"
+      reset
+      @update:model-value="csv.onCsvFileChange"
+    >
+      <template #actions="{ open }">
+        <UButton color="neutral" variant="outline" @click.stop.prevent="open()">
+          Bestand kiezen
+        </UButton>
+      </template>
+    </UFileUpload>
+
+    <div v-if="csv.csvError.value !== ''" class="text-xs text-error">{{ csv.csvError.value }}</div>
+    <div
+      v-else-if="csv.lastImport.value !== null"
+      class="flex min-w-0 items-center gap-1.5 text-xs text-success"
+    >
+      <UIcon name="i-lucide-check" class="size-3.5 shrink-0" aria-hidden="true" />
+      <span class="truncate">
+        Geïmporteerd<template v-if="csv.lastImport.value.fileName">: {{ csv.lastImport.value.fileName }}</template>
+        · {{ csv.lastImport.value.rows }} {{ csv.lastImport.value.rows === 1 ? 'datarij' : 'datarijen' }}
+        · {{ csv.lastImport.value.cols }} series
+      </span>
+    </div>
+    <div v-else class="text-xs text-muted">
+      Kolom 1 = categorieën · kolommen 2+ = series (koprij = namen).
+    </div>
   </WCard>
 </template>

@@ -10,12 +10,18 @@
 import { computed, nextTick, onBeforeUpdate } from 'vue';
 import type { DropdownMenuItem } from '@nuxt/ui';
 import type { ChartWrapModel } from '../../../../shared/types';
-import { isCategoryEmphasized, isPointEmphasized } from '../../../../shared/chart-calculations';
+import {
+  chartDeltaDisplay,
+  isCategoryEmphasized,
+  isPointEmphasized,
+} from '../../../../shared/chart-calculations';
 
 interface Props {
   model: ChartWrapModel;
   maxCategories: number;
   maxSeries: number;
+  /** T50 — single-series chart-types tonen alleen serie 0 (display-gating). */
+  singleSeries: boolean;
 }
 
 const props = defineProps<Props>();
@@ -25,6 +31,7 @@ const emit = defineEmits<{
   'series-name': [s: number, value: string];
   'value-edit': [s: number, i: number, raw: string | number];
   'cell-emphasis': [s: number, i: number, emphasis: boolean];
+  'delta-override-edit': [i: number, value: string];
   'category-emphasis': [i: number, emphasis: boolean];
   'add-category-before': [i: number];
   'add-category-after': [i: number];
@@ -35,7 +42,27 @@ const emit = defineEmits<{
 }>();
 
 const canAddCategory = computed<boolean>(() => props.model.categories.length < props.maxCategories);
-const canAddSeries = computed<boolean>(() => props.model.series.length < props.maxSeries);
+const canAddSeries = computed<boolean>(
+  () => !props.singleSeries && props.model.series.length < props.maxSeries,
+);
+// T50 — display-gating: verborgen series blijven in het model bewaard.
+const shownSeries = computed(() =>
+  props.singleSeries ? props.model.series.slice(0, 1) : props.model.series,
+);
+const showDeltaColumn = computed<boolean>(() => props.model.showDelta === true);
+
+function deltaPlaceholder(i: number): string {
+  const auto = chartDeltaDisplay(
+    { ...props.model, deltaOverrides: undefined },
+    i,
+  );
+  return auto !== null ? auto : '—';
+}
+
+function deltaOverrideValue(i: number): string {
+  const overrides = props.model.deltaOverrides;
+  return overrides !== undefined && i < overrides.length ? overrides[i] : '';
+}
 
 // Per-serie swatch (Pitch-patroon) — zelfde ramp-idee als de canvas-tinten.
 const SWATCH_OPACITY = ['opacity-100', 'opacity-75', 'opacity-50', 'opacity-30'];
@@ -195,7 +222,7 @@ function cellMenuItems(s: number, i: number): DropdownMenuItem[][] {
         label: 'Serie verwijderen',
         icon: 'i-lucide-trash-2',
         color: 'error',
-        disabled: props.model.series.length <= 1,
+        disabled: props.singleSeries || props.model.series.length <= 1,
         onSelect: () => emit('remove-series', s),
       },
     ],
@@ -266,42 +293,47 @@ function categoryCellClass(i: number): string {
           <th scope="col" class="border-b border-r border-default px-2 py-1.5 text-left">
             <span class="text-xs font-medium">Categorie</span>
           </th>
-          <th
-            v-for="(serie, sIdx) in model.series"
-            :key="'serie-' + sIdx"
-            scope="col"
-            class="border-b border-r border-default px-1 py-1 last:border-r-0"
-          >
-            <div class="flex items-center gap-1">
-              <span :class="seriesSwatchClass(sIdx)" aria-hidden="true" />
-              <UInput
-                :model-value="serie.name"
-                :placeholder="'Serie ' + (sIdx + 1)"
-                size="xs"
-                variant="none"
-                class="min-w-20 flex-1"
-                :aria-label="'Naam serie ' + (sIdx + 1)"
-                @update:model-value="(v: string | number) => emit('series-name', sIdx, String(v))"
-              />
-              <UDropdownMenu
-                :items="seriesMenuItems(sIdx)"
-                :content="menuContent"
-                :ui="dropdownUi"
-                :modal="false"
-                size="xs"
-              >
-                <UButton
-                  color="neutral"
-                  variant="ghost"
+          <template v-for="(serie, sIdx) in shownSeries" :key="'serie-' + sIdx">
+            <th scope="col" class="border-b border-r border-default px-1 py-1 last:border-r-0">
+              <div class="flex items-center gap-1">
+                <span :class="seriesSwatchClass(sIdx)" aria-hidden="true" />
+                <UInput
+                  :model-value="serie.name"
+                  :placeholder="'Serie ' + (sIdx + 1)"
                   size="xs"
-                  square
-                  icon="i-lucide-chevron-down"
-                  :aria-label="'Menu voor serie ' + (sIdx + 1)"
-                  :title="'Menu voor serie ' + (sIdx + 1)"
+                  variant="none"
+                  class="min-w-20 flex-1"
+                  :aria-label="'Naam serie ' + (sIdx + 1)"
+                  @update:model-value="(v: string | number) => emit('series-name', sIdx, String(v))"
                 />
-              </UDropdownMenu>
-            </div>
-          </th>
+                <UDropdownMenu
+                  v-if="!singleSeries"
+                  :items="seriesMenuItems(sIdx)"
+                  :content="menuContent"
+                  :ui="dropdownUi"
+                  :modal="false"
+                  size="xs"
+                >
+                  <UButton
+                    color="neutral"
+                    variant="ghost"
+                    size="xs"
+                    square
+                    icon="i-lucide-chevron-down"
+                    :aria-label="'Menu voor serie ' + (sIdx + 1)"
+                    :title="'Menu voor serie ' + (sIdx + 1)"
+                  />
+                </UDropdownMenu>
+              </div>
+            </th>
+            <th
+              v-if="sIdx === 0 && showDeltaColumn"
+              scope="col"
+              class="border-b border-r border-default px-2 py-1.5 text-left last:border-r-0"
+            >
+              <span class="text-xs font-medium text-dimmed">Delta</span>
+            </th>
+          </template>
         </tr>
       </thead>
       <tbody>
@@ -361,9 +393,8 @@ function categoryCellClass(i: number): string {
               />
             </UDropdownMenu>
           </td>
+          <template v-for="(serie, sIdx) in shownSeries" :key="'cell-' + cIdx + '-' + sIdx">
           <td
-            v-for="(serie, sIdx) in model.series"
-            :key="'cell-' + cIdx + '-' + sIdx"
             class="group/cell relative border-b border-r border-muted px-1 py-0.5 transition-colors last:border-r-0 hover:bg-muted/10"
           >
             <UInput
@@ -398,6 +429,22 @@ function categoryCellClass(i: number): string {
               />
             </UDropdownMenu>
           </td>
+          <td
+            v-if="sIdx === 0 && showDeltaColumn"
+            class="border-b border-r border-muted px-1 py-0.5 last:border-r-0"
+          >
+            <UInput
+              :model-value="deltaOverrideValue(cIdx)"
+              :placeholder="deltaPlaceholder(cIdx)"
+              size="sm"
+              variant="none"
+              class="w-full"
+              :ui="{ base: 'text-right text-dimmed placeholder:text-dimmed/60' }"
+              :aria-label="'Delta-override rij ' + (cIdx + 1)"
+              @update:model-value="(v: string | number) => emit('delta-override-edit', cIdx, String(v))"
+            />
+          </td>
+          </template>
         </tr>
       </tbody>
     </table>

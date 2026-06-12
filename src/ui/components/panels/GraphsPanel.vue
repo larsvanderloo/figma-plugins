@@ -81,6 +81,7 @@ const selectorItems = computed(() => {
         "
         :model-value="chartEditor.model"
         @update:model-value="chartEditor.update"
+        @import-csv="chartEditor.importCsv"
       />
     </EditorWrapper>
   </UContainer>

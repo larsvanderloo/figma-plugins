@@ -64,6 +64,20 @@ export function useChartEditor() {
     });
   }
 
+  function importCsv(csv: string): void {
+    const slideId = view.state.currentSlideId;
+    const inst = selected.value;
+    if (slideId === null || inst === null || inst.chartModel == null) return;
+
+    tracker.register();
+    bridge.post({
+      type: 'import-chart-csv',
+      slideId: slideId,
+      slotId: inst.chartModel.slotId,
+      csv: csv,
+    });
+  }
+
   return reactive({
     instances,
     selectedId,
@@ -71,5 +85,6 @@ export function useChartEditor() {
     model,
     pending: tracker.pending,
     update,
+    importCsv,
   });
 }
