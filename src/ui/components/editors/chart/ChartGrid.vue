@@ -10,7 +10,7 @@
 import { computed, nextTick, onBeforeUpdate } from 'vue';
 import type { DropdownMenuItem } from '@nuxt/ui';
 import type { ChartWrapModel } from '../../../../shared/types';
-import { isPointEmphasized } from '../../../../shared/chart-calculations';
+import { isCategoryEmphasized, isPointEmphasized } from '../../../../shared/chart-calculations';
 
 interface Props {
   model: ChartWrapModel;
@@ -25,6 +25,7 @@ const emit = defineEmits<{
   'series-name': [s: number, value: string];
   'value-edit': [s: number, i: number, raw: string | number];
   'cell-emphasis': [s: number, i: number, emphasis: boolean];
+  'category-emphasis': [i: number, emphasis: boolean];
   'add-category-before': [i: number];
   'add-category-after': [i: number];
   'remove-category': [i: number];
@@ -99,6 +100,42 @@ function seriesMenuItems(s: number): DropdownMenuItem[][] {
         color: 'error',
         disabled: props.model.series.length <= 1,
         onSelect: () => emit('remove-series', s),
+      },
+    ],
+  ];
+}
+
+function categoryMenuItems(i: number): DropdownMenuItem[][] {
+  const emphasized = isCategoryEmphasized(props.model, i);
+  return [
+    [
+      {
+        label: emphasized ? 'Nadruk verwijderen' : 'Cel benadrukken',
+        icon: 'i-lucide-bold',
+        onSelect: () => emit('category-emphasis', i, !emphasized),
+      },
+    ],
+    [
+      {
+        label: 'Rij erboven invoegen',
+        icon: 'i-lucide-arrow-up-to-line',
+        disabled: !canAddCategory.value,
+        onSelect: () => emit('add-category-before', i),
+      },
+      {
+        label: 'Rij eronder invoegen',
+        icon: 'i-lucide-arrow-down-to-line',
+        disabled: !canAddCategory.value,
+        onSelect: () => emit('add-category-after', i),
+      },
+    ],
+    [
+      {
+        label: 'Rij verwijderen',
+        icon: 'i-lucide-trash-2',
+        color: 'error',
+        disabled: props.model.categories.length <= 1,
+        onSelect: () => emit('remove-category', i),
       },
     ],
   ];
@@ -211,6 +248,10 @@ function onEnter(s: number, i: number): void {
 function cellClass(s: number, i: number): string {
   return isPointEmphasized(props.model.series[s], i) ? 'font-semibold' : '';
 }
+
+function categoryCellClass(i: number): string {
+  return isCategoryEmphasized(props.model, i) ? 'font-semibold' : '';
+}
 </script>
 
 <template>
@@ -288,16 +329,37 @@ function cellClass(s: number, i: number): string {
               />
             </UDropdownMenu>
           </th>
-          <td class="border-b border-r border-muted px-1 py-0.5">
+          <td
+            class="group/cell relative border-b border-r border-muted px-1 py-0.5 transition-colors hover:bg-muted/10"
+          >
             <UInput
               :model-value="category"
               placeholder="Label…"
               size="sm"
               variant="none"
               class="w-full"
+              :ui="{ base: 'pr-7 ' + categoryCellClass(cIdx) }"
               :aria-label="'Categorie ' + (cIdx + 1)"
               @update:model-value="(v: string | number) => emit('category-edit', cIdx, String(v))"
             />
+            <UDropdownMenu
+              :items="categoryMenuItems(cIdx)"
+              :content="cellMenuContent"
+              :ui="dropdownUi"
+              :modal="false"
+              size="xs"
+            >
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                square
+                icon="i-lucide-ellipsis"
+                class="absolute right-0.5 top-1/2 -translate-y-1/2 opacity-0 transition-opacity hover:bg-muted/70 focus:opacity-100 group-focus-within/cell:opacity-70 group-hover/cell:opacity-70"
+                :aria-label="'Menu voor categorie rij ' + (cIdx + 1)"
+                :title="'Menu voor categorie rij ' + (cIdx + 1)"
+              />
+            </UDropdownMenu>
           </td>
           <td
             v-for="(serie, sIdx) in model.series"

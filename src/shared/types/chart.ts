@@ -43,6 +43,12 @@ export interface ChartWrapModel {
   chartType: ChartType;
   /** Categorie-labels (slices / bars / x-as-punten). */
   categories: string[];
+  /**
+   * Per-categorie nadruk ("Cel benadrukken" op de categoriekolom):
+   * een benadrukte categorie rendert z'n categorie-label in Instrument
+   * Sans SemiBold. Index-aligned met `categories`; afwezig = geen nadruk.
+   */
+  categoryEmphasis?: boolean[];
   /** Data-series; lengte >= 1. */
   series: ChartSeriesModel[];
   /** Legenda tonen (rechts van donut/pie, boven bar/line). */

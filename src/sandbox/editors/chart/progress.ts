@@ -16,6 +16,7 @@ import {
   chartDeltaLabel,
   chartMaxValue,
   formatChartValue,
+  isCategoryEmphasized,
   isPointEmphasized,
 } from '../../../shared/chart-calculations';
 import { trackPaint } from './palette';
@@ -74,7 +75,7 @@ export function buildProgress(
     row.fills = [];
 
     const label = figma.createText();
-    label.fontName = isPointEmphasized(series, i)
+    label.fontName = isPointEmphasized(series, i) || isCategoryEmphasized(model, i)
       ? { family: 'Instrument Sans', style: 'SemiBold' }
       : { family: 'Inter', style: 'Regular' };
     label.fontSize = labelSize;

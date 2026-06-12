@@ -16,6 +16,7 @@ import type { ChartWrapModel } from '../../../shared/types';
 import {
   chartDeltaLabel,
   formatChartValue,
+  isCategoryEmphasized,
   isPointEmphasized,
   seriesTotal,
 } from '../../../shared/chart-calculations';
@@ -134,7 +135,7 @@ export function buildDonut(
       entries.push({
         label: label,
         color: ramp[i % ramp.length],
-        emphasis: isPointEmphasized(series, i),
+        emphasis: isPointEmphasized(series, i) || isCategoryEmphasized(model, i),
       });
     }
     root.appendChild(buildLegend(entries, theme, labelSize));

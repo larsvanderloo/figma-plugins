@@ -16,6 +16,7 @@ import {
   chartDeltaLabel,
   chartMaxValue,
   formatChartValue,
+  isCategoryEmphasized,
   isPointEmphasized,
 } from '../../../shared/chart-calculations';
 import { buildLegend, ChartTheme, LegendEntry } from './legend';
@@ -180,7 +181,9 @@ export function buildLine(
   labels.fills = [];
   for (let i = 0; i < pointCount; i++) {
     const t = figma.createText();
-    t.fontName = { family: 'Inter', style: 'Regular' };
+    t.fontName = isCategoryEmphasized(model, i)
+      ? { family: 'Instrument Sans', style: 'SemiBold' }
+      : { family: 'Inter', style: 'Regular' };
     t.fontSize = labelSize;
     t.characters = model.categories[i];
     t.textAutoResize = 'WIDTH_AND_HEIGHT';

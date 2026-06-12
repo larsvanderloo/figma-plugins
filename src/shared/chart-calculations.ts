@@ -39,6 +39,14 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
   }
   if (categories.length === 0) categories.push('');
 
+  const categoryEmphasis: boolean[] = [];
+  const sourceCategoryEmphasis = Array.isArray(model.categoryEmphasis)
+    ? model.categoryEmphasis
+    : [];
+  for (let i = 0; i < categories.length; i++) {
+    categoryEmphasis.push(i < sourceCategoryEmphasis.length ? sourceCategoryEmphasis[i] === true : false);
+  }
+
   const series: ChartSeriesModel[] = [];
   const sourceSeries = Array.isArray(model.series) ? model.series : [];
   for (let s = 0; s < sourceSeries.length && s < CHART_MAX_SERIES; s++) {
@@ -74,6 +82,7 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
     slotId: model.slotId,
     chartType: isChartType(model.chartType) ? model.chartType : 'donut',
     categories: categories,
+    categoryEmphasis: categoryEmphasis,
     series: series,
     showLegend: model.showLegend === true,
     showValues: model.showValues === true,
@@ -94,6 +103,11 @@ export function chartModelsEqual(a: ChartWrapModel | null, b: ChartWrapModel): b
   if (left.categories.length !== right.categories.length) return false;
   for (let i = 0; i < left.categories.length; i++) {
     if (left.categories[i] !== right.categories[i]) return false;
+    const lce = left.categoryEmphasis;
+    const rce = right.categoryEmphasis;
+    if ((lce !== undefined && lce[i] === true) !== (rce !== undefined && rce[i] === true)) {
+      return false;
+    }
   }
   if (left.series.length !== right.series.length) return false;
   for (let s = 0; s < left.series.length; s++) {
@@ -113,6 +127,11 @@ export function chartModelsEqual(a: ChartWrapModel | null, b: ChartWrapModel): b
 /** Nadruk-flag van datapunt (serie s, categorie i); afwezig = false. */
 export function isPointEmphasized(series: ChartSeriesModel, i: number): boolean {
   return series.emphasis !== undefined && series.emphasis[i] === true;
+}
+
+/** Nadruk-flag van categorie i (categoriekolom); afwezig = false. */
+export function isCategoryEmphasized(model: ChartWrapModel, i: number): boolean {
+  return model.categoryEmphasis !== undefined && model.categoryEmphasis[i] === true;
 }
 
 /** Som van alle waarden in een serie. */

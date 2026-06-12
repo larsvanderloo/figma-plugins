@@ -35,6 +35,7 @@ function cloneModel(model: ChartWrapModel): ChartWrapModel {
     slotId: model.slotId,
     chartType: model.chartType,
     categories: model.categories.slice(),
+    categoryEmphasis: model.categoryEmphasis !== undefined ? model.categoryEmphasis.slice() : undefined,
     series: model.series.map((s) => ({
       name: s.name,
       values: s.values.slice(),
@@ -138,6 +139,14 @@ function ensureEmphasis(s: number): boolean[] {
   return serie.emphasis;
 }
 
+function ensureCategoryEmphasis(): boolean[] {
+  if (local.value.categoryEmphasis === undefined) {
+    const emphasis: boolean[] = local.value.categories.map(() => false);
+    local.value.categoryEmphasis = emphasis;
+  }
+  return local.value.categoryEmphasis;
+}
+
 function setCategory(i: number, value: string): void {
   local.value.categories[i] = value;
   scheduleEmit('category-edit');
@@ -159,9 +168,15 @@ function setCellEmphasis(s: number, i: number, emphasis: boolean): void {
   scheduleEmit('cell-emphasis');
 }
 
+function setCategoryEmphasis(i: number, emphasis: boolean): void {
+  ensureCategoryEmphasis()[i] = emphasis;
+  scheduleEmit('category-emphasis');
+}
+
 function insertCategoryAt(index: number): void {
   if (local.value.categories.length >= CHART_MAX_CATEGORIES) return;
   local.value.categories.splice(index, 0, 'Categorie ' + String(local.value.categories.length + 1));
+  if (local.value.categoryEmphasis !== undefined) local.value.categoryEmphasis.splice(index, 0, false);
   for (const s of local.value.series) {
     s.values.splice(index, 0, 0);
     if (s.emphasis !== undefined) s.emphasis.splice(index, 0, false);
@@ -172,6 +187,7 @@ function insertCategoryAt(index: number): void {
 function removeCategory(i: number): void {
   if (local.value.categories.length <= 1) return;
   local.value.categories.splice(i, 1);
+  if (local.value.categoryEmphasis !== undefined) local.value.categoryEmphasis.splice(i, 1);
   for (const s of local.value.series) {
     s.values.splice(i, 1);
     if (s.emphasis !== undefined) s.emphasis.splice(i, 1);
@@ -250,6 +266,7 @@ function removeSeries(s: number): void {
       @series-name="setSeriesName"
       @value-edit="setValue"
       @cell-emphasis="setCellEmphasis"
+      @category-emphasis="setCategoryEmphasis"
       @add-category-before="(i: number) => insertCategoryAt(i)"
       @add-category-after="(i: number) => insertCategoryAt(i + 1)"
       @remove-category="removeCategory"
