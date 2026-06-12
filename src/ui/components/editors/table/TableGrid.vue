@@ -163,12 +163,14 @@ function isRightAlignedColumn(col: number): boolean {
 
 function cellTextareaUi(row: number, col: number): { root: string; base: string } {
   const emphasized = isCellEmphasized(row, col);
+  const isHeaderRow = props.hasColumnHeader && row === 0;
   return {
     root: 'w-full',
     base:
-      'block min-h-9 w-full resize-none rounded-none border-0 bg-transparent px-2 py-1.5 pr-8 text-sm leading-5 text-default outline-none ring-0 placeholder:text-dimmed focus:bg-transparent focus:ring-0 focus-visible:outline-none ' +
+      'block min-h-9 w-full resize-none rounded-none border-0 bg-transparent px-2 py-1.5 pr-8 leading-5 text-default outline-none ring-0 placeholder:text-dimmed focus:bg-transparent focus:ring-0 focus-visible:outline-none ' +
+      // Koprij iets groter + semibold (mirror van Instrument Sans SemiBold 20 op canvas).
+      (isHeaderRow ? 'text-base font-semibold ' : 'text-sm ') +
       (isRightAlignedColumn(col) ? 'text-right ' : '') +
-      (props.hasColumnHeader && row === 0 ? 'font-semibold ' : '') +
       (emphasized ? 'font-semibold' : ''),
   };
 }

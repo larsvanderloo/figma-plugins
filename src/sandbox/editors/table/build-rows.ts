@@ -169,10 +169,10 @@ function buildHeaderCell(
   // T41.8: verticale cell-separators verwijderd — minimalistische look.
 
   const t = figma.createText();
-  // T41.10: header → Inter Medium + Text-color (full contrast) per
-  // user-edits direct op canvas. Was Inter Regular + Text Dimmer (T41.9).
-  t.fontName = { family: 'Inter', style: 'Medium' };
-  t.fontSize = 18;
+  // T46.5: koprij → Instrument Sans SemiBold, iets groter, in Text-color
+  // (full contrast). Was Inter Medium 18 (T41.10).
+  t.fontName = { family: 'Instrument Sans', style: 'SemiBold' };
+  t.fontSize = 20;
   t.characters = cell.value;
   t.textAutoResize = 'HEIGHT';
   // T46.1: header van een som-kolom volgt de body/footer-uitlijning (RIGHT).

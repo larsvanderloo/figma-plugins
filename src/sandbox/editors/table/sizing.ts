@@ -62,8 +62,8 @@ export function buildColumnSpecs(
       let font: FontName;
       let fontSize: number;
       if (isHeader) {
-        font = { family: 'Inter', style: 'Medium' };
-        fontSize = 18;
+        font = { family: 'Instrument Sans', style: 'SemiBold' };
+        fontSize = 20;
       } else if (cell !== null && cell.emphasis === true) {
         font = { family: 'Instrument Sans', style: 'SemiBold' };
         fontSize = sizes.heading;
