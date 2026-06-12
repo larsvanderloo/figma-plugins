@@ -7,47 +7,44 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { findTableWrap, findTableSlot, findChartWrap, findChartSlot } from '../slide-machine';
+import { markSelfWrite } from '../bridge';
+import {
+  findAllChartWraps,
+  findAllTableWraps,
+  findSlotInWrap,
+} from '../slide-machine';
 import { GraphItems, TableWrapModel } from '../../shared/types';
 import { applyTable, scanTableSlot } from '../editors/table/renderer';
 import { applyChart, scanChartSlot } from '../editors/chart/renderer';
 
 export function scanGraphs(slide: InstanceNode): GraphItems | null {
-  // v0.1.0 wrapper-finder geeft de eerste TableWrap; in de praktijk heeft
-  // een Slide-template precies één TableWrap. De instance-selector in
-  // GraphsPanel kan hier later groeien wanneer we meerdere tables per
-  // slide toestaan (out of scope v0.1.0).
+  // T51 — slides/whitepapers kunnen MEERDERE wrappers dragen; elke
+  // TableWrap/ChartWrap wordt een eigen instance in de Graphs-tab
+  // (instance-selector verschijnt vanaf 2).
   const instances: GraphItems['instances'] = [];
 
-  const tableWrap = findTableWrap(slide);
-  if (tableWrap !== null) {
-    // T34.2: lees via findTableSlot + scanTableSlot. Wanneer de TableWrap
-    // een Slot heeft, gebruiken we het Slot-id als nodeId zodat
-    // `update-table` en `import-csv` direct naar de Slot kunnen.
-    const slot = findTableSlot(slide);
+  const tableWraps = findAllTableWraps(slide);
+  for (let i = 0; i < tableWraps.length; i++) {
+    const slot = findSlotInWrap(tableWraps[i]);
     const tableModel: TableWrapModel | null = slot !== null ? scanTableSlot(slot) : null;
-    const nodeId = slot !== null ? slot.id : tableWrap.id;
     instances.push({
-      nodeId: nodeId,
-      label: 'Table — ' + tableWrap.name,
+      nodeId: slot !== null ? slot.id : tableWraps[i].id,
+      label: tableWraps.length > 1 ? 'Tabel ' + String(i + 1) : 'Tabel',
       tableModel: tableModel,
       chartModel: null,
     });
   }
 
-  // T47: ChartWrap-detectie — pluginData-truth model (verse slot krijgt
-  // een default-model zodat de editor direct kan bewerken).
-  const chartWrap = findChartWrap(slide);
-  if (chartWrap !== null) {
-    const chartSlot = findChartSlot(slide);
-    if (chartSlot !== null) {
-      instances.push({
-        nodeId: chartSlot.id,
-        label: 'Chart — ' + chartWrap.name,
-        tableModel: null,
-        chartModel: scanChartSlot(chartSlot),
-      });
-    }
+  const chartWraps = findAllChartWraps(slide);
+  for (let i = 0; i < chartWraps.length; i++) {
+    const slot = findSlotInWrap(chartWraps[i]);
+    if (slot === null) continue;
+    instances.push({
+      nodeId: slot.id,
+      label: chartWraps.length > 1 ? 'Grafiek ' + String(i + 1) : 'Grafiek',
+      tableModel: null,
+      chartModel: scanChartSlot(slot),
+    });
   }
 
   if (instances.length === 0) return null;
@@ -70,7 +67,14 @@ export function scanGraphs(slide: InstanceNode): GraphItems | null {
  * Errors worden stilletjes gelogd; mag de caller-flow niet meeslepen.
  */
 export async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
-  const slot = findTableSlot(slide);
+  const wraps = findAllTableWraps(slide);
+  for (let w = 0; w < wraps.length; w++) {
+    await refreshTableSlot(wraps[w]);
+  }
+}
+
+async function refreshTableSlot(wrap: InstanceNode): Promise<void> {
+  const slot = findSlotInWrap(wrap);
   if (slot === null) return;
   try {
     const model = scanTableSlot(slot);
@@ -87,10 +91,37 @@ export async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
  * slot-afmetingen op applyChart-moment).
  */
 export async function refreshChartsOnSlide(slide: InstanceNode): Promise<void> {
-  const slot = findChartSlot(slide);
+  const wraps = findAllChartWraps(slide);
+  for (let w = 0; w < wraps.length; w++) {
+    await refreshChartSlot(wraps[w]);
+  }
+}
+
+async function refreshChartSlot(wrap: InstanceNode): Promise<void> {
+  const slot = findSlotInWrap(wrap);
   if (slot === null) return;
   if (slot.getPluginData('chartModel') === '') return;
+  // T50.7 — alleen re-renderen wanneer de slot-afmetingen écht zijn
+  // veranderd: deze refresh draait op elke CopyWrap-keystroke en een
+  // full clear+rebuild flitst zichtbaar. De kaart volgt de slot exact,
+  // dus gelijke afmetingen = niets te re-fitten.
   try {
+    if (slot.children.length > 0) {
+      const card = slot.children[0];
+      if (
+        card.name === 'WelderChartContent' &&
+        Math.round(card.width) === Math.round(slot.width) &&
+        Math.round(card.height) === Math.round(slot.height)
+      ) {
+        return;
+      }
+    }
+  } catch (_e) {
+    /* stale node — gewoon doorgaan met re-apply */
+  }
+  try {
+    // T50.6 — suppressie vóór de rebuild (zie handlers/chart.ts).
+    markSelfWrite();
     const model = scanChartSlot(slot);
     await applyChart(slot, model);
   } catch (e) {

@@ -36,6 +36,10 @@ export async function handleUpdateChart(
     return;
   }
   figma.commitUndo();
+  // T50.6 — óók vóór de apply: applyChart heeft awaits na het clearen
+  // van de slot; een eerder-gedebouncede scan mag niet interleaven met
+  // half-verwijderde clone-sublayers.
+  markSelfWrite();
   await applyChart(slotNode as SlotNode, msg.desired);
   markSelfWrite();
   postToUI({
@@ -68,6 +72,7 @@ export async function handleImportChartCsv(
     return;
   }
   figma.commitUndo();
+  markSelfWrite();
   await importChartCSV(slotNode as SlotNode, msg.csv);
   markSelfWrite();
   postToUI({

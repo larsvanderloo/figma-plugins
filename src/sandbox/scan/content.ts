@@ -242,6 +242,57 @@ export async function scanContent(slide: InstanceNode): Promise<ContentItems | n
     });
   }
 
+  // T51.1 — losse Cards buiten een CardWrap/TimelineWrap: slide-breed
+  // bijzoeken, met uitsluiting van (a) cards die al via een wrap-scope
+  // gevonden zijn en (b) cards die binnen een InstructorCard leven (die
+  // zijn eigendom van de instructor-editor). Mutaties targeten toch al
+  // cardNodeId rechtstreeks, dus losse cards zijn direct bewerkbaar.
+  const seenCardIds: { [id: string]: boolean } = {};
+  for (let i = 0; i < cards.length; i++) seenCardIds[cards[i].cardNodeId] = true;
+  const looseCardHosts = slide.findAll(function (n: SceneNode) {
+    try {
+      return n.type === 'INSTANCE' && n.name === 'Card';
+    } catch (_e) {
+      return false;
+    }
+  });
+  const allowedLooseIds: { [id: string]: boolean } = {};
+  let hasLoose = false;
+  for (let i = 0; i < looseCardHosts.length; i++) {
+    const host = looseCardHosts[i] as InstanceNode;
+    if (seenCardIds[host.id] === true) continue;
+    let owned = false;
+    let parent: BaseNode | null = host.parent;
+    while (parent !== null && parent.id !== slide.id) {
+      if (parent.type === 'INSTANCE') {
+        const pname = parent.name;
+        if (
+          pname.indexOf('InstructorCard') === 0 ||
+          pname === 'CardWrap' ||
+          pname.indexOf('Timeline') >= 0
+        ) {
+          owned = true;
+          break;
+        }
+      }
+      parent = parent.parent;
+    }
+    if (owned) continue;
+    allowedLooseIds[host.id] = true;
+    hasLoose = true;
+  }
+  if (hasLoose) {
+    // extractCards zoekt descendants — slide-breed extraheren en daarna
+    // filteren op de toegelaten losse card-ids.
+    const slideWide = extractCards(slide, slide);
+    for (let j = 0; j < slideWide.length; j++) {
+      if (allowedLooseIds[slideWide[j].cardNodeId] === true && seenCardIds[slideWide[j].cardNodeId] !== true) {
+        seenCardIds[slideWide[j].cardNodeId] = true;
+        cards.push(slideWide[j]);
+      }
+    }
+  }
+
   if (cards.length === 0 && instructorCards.length === 0 && timelineItems.length === 0) {
     return null;
   }
