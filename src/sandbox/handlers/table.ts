@@ -8,7 +8,8 @@
 // ============================================================
 
 import { markSelfWrite, postToUI } from '../bridge';
-import { findSlideById } from '../slides';
+import { findSlideById, summaryForSlide } from '../slides';
+import { scanSlide } from '../scan/slide-scan';
 import { applyTable } from '../editors/table/renderer';
 import { importCSV } from '../editors/table/csv';
 import type { UIToPluginMessage } from '../../shared/types';
@@ -78,5 +79,22 @@ export async function handleImportCsv(
     ok: true,
     targetId: msg.slotId,
   });
+  // Re-sync de iframe-grid met de geïmporteerde data. De UI stuurde
+  // alleen ruwe CSV-tekst, dus kent de geparste rijen niet; de
+  // documentchange-route is bovendien onderdrukt door markSelfWrite().
+  // Expliciete scan + slide-loaded post — zelfde patroon als
+  // handleTriggerUndo in handlers/slide.ts.
+  try {
+    const scan = await scanSlide(slide);
+    postToUI({
+      type: 'slide-loaded',
+      summary: summaryForSlide(slide),
+      general: scan.general,
+      content: scan.content,
+      graphs: scan.graphs,
+    });
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] post-import scanSlide failed:', err);
+  }
   return;
 }
