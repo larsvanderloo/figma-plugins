@@ -5,14 +5,21 @@
 // in een layout-NONE plotvlak, met subtiele horizontale gridlines en
 // categorie-labels op de x-as. Waarden schalen tegen de hoogste waarde
 // over alle series; punten verdelen de breedte gelijkmatig.
+// Delta-badges (T48, showDelta): boven elk serie-0-punt de verandering
+// t.o.v. de vorige categorie, gestapeld onder het waarde-label.
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
 import type { ChartWrapModel } from '../../../shared/types';
-import { chartMaxValue, formatChartValue } from '../../../shared/chart-calculations';
-import { buildLegend, LegendEntry } from './legend';
-import { trackTint } from './palette';
+import {
+  chartDeltaLabel,
+  chartMaxValue,
+  formatChartValue,
+  isPointEmphasized,
+} from '../../../shared/chart-calculations';
+import { buildLegend, ChartTheme, LegendEntry } from './legend';
+import { trackPaint } from './palette';
 
 const DOT_SIZE = 12;
 const STROKE_W = 4;
@@ -22,8 +29,8 @@ export function buildLine(
   contentW: number,
   contentH: number,
   ramp: RGB[],
-  accent: RGB,
-  textRGB: RGB,
+  light: RGB,
+  theme: ChartTheme,
   labelSize: number,
 ): FrameNode {
   const max = Math.max(1, chartMaxValue(model));
@@ -47,7 +54,7 @@ export function buildLine(
         color: ramp[s % ramp.length],
       });
     }
-    const legend = buildLegend(entries, textRGB, labelSize);
+    const legend = buildLegend(entries, theme, labelSize);
     legend.layoutMode = 'HORIZONTAL';
     legend.itemSpacing = Math.round(labelSize * 1.6);
     root.appendChild(legend);
@@ -57,8 +64,13 @@ export function buildLine(
   const labelRowH = Math.round(labelSize * 1.6);
   const plotH = Math.max(80, contentH - legendH - labelRowH - root.itemSpacing);
   const pad = DOT_SIZE; // marge zodat dots niet clippen op de plot-rand
+  // showValues: waarde-labels staan op yFor(v) - DOT_SIZE - labelhoogte.
+  // Zonder extra top-marge valt het label van het hoogste punt volledig
+  // boven het plot-frame (root clipt children) — reserveer headroom.
+  const valueSize = Math.round(labelSize * 0.85);
+  const padTop = model.showValues ? pad + Math.round(valueSize * 1.4) : pad;
   const innerW = contentW - pad * 2;
-  const innerH = plotH - pad * 2;
+  const innerH = Math.max(10, plotH - padTop - pad);
 
   const plot = figma.createFrame();
   plot.name = 'Plot';
@@ -72,8 +84,8 @@ export function buildLine(
     line.name = 'Gridline';
     line.resize(contentW, 1);
     line.x = 0;
-    line.y = pad + Math.round((innerH * g) / 3);
-    line.fills = [{ type: 'SOLID', color: trackTint(accent) }];
+    line.y = padTop + Math.round((innerH * g) / 3);
+    line.fills = [trackPaint(light)];
     plot.appendChild(line);
   }
 
@@ -82,7 +94,7 @@ export function buildLine(
     return pad + (innerW * i) / (pointCount - 1);
   };
   const yFor = function (value: number): number {
-    return pad + innerH - (value / max) * innerH;
+    return padTop + innerH - (value / max) * innerH;
   };
 
   for (let s = 0; s < model.series.length; s++) {
@@ -114,16 +126,47 @@ export function buildLine(
       dot.fills = [{ type: 'SOLID', color: color }];
       plot.appendChild(dot);
 
+      // Label-stapel boven het punt: waarde bovenaan, delta-badge
+      // (T48, alleen serie 0) eronder, dichtst bij de dot.
+      let stackY = yFor(model.series[s].values[i]) - DOT_SIZE;
+      if (model.showDelta === true && s === 0) {
+        const delta = chartDeltaLabel(model.series[0].values, i);
+        if (delta !== null) {
+          const deltaText = figma.createText();
+          deltaText.fontName = { family: 'Inter', style: 'Medium' };
+          deltaText.fontSize = Math.round(labelSize * 0.7);
+          deltaText.characters = delta;
+          deltaText.textAutoResize = 'WIDTH_AND_HEIGHT';
+          deltaText.fills = [
+            figma.variables.setBoundVariableForPaint(
+              { type: 'SOLID', color: theme.dimmerRGB },
+              'color',
+              theme.dimmerVar,
+            ),
+          ];
+          plot.appendChild(deltaText);
+          deltaText.x = xFor(i) - deltaText.width / 2;
+          deltaText.y = stackY - deltaText.height;
+          stackY = deltaText.y;
+        }
+      }
       if (model.showValues) {
         const valueText = figma.createText();
-        valueText.fontName = { family: 'Inter', style: 'Medium' };
-        valueText.fontSize = Math.round(labelSize * 0.85);
+        valueText.fontName = isPointEmphasized(model.series[s], i)
+          ? { family: 'Instrument Sans', style: 'SemiBold' }
+          : { family: 'Inter', style: 'Medium' };
+        valueText.fontSize = valueSize;
         valueText.characters = formatChartValue(model.series[s].values[i]);
         valueText.textAutoResize = 'WIDTH_AND_HEIGHT';
         valueText.fills = [{ type: 'SOLID', color: color }];
         plot.appendChild(valueText);
-        valueText.x = xFor(i) - valueText.width / 2;
-        valueText.y = yFor(model.series[s].values[i]) - DOT_SIZE - valueText.height;
+        // Clamp binnen het plot-frame (zelfde patroon als de x-as-labels):
+        // randpunten (i=0 / laatste) zouden anders w/2 - pad uitsteken.
+        valueText.x = Math.min(
+          contentW - valueText.width,
+          Math.max(0, xFor(i) - valueText.width / 2),
+        );
+        valueText.y = stackY - valueText.height;
       }
     }
   }
@@ -141,7 +184,13 @@ export function buildLine(
     t.fontSize = labelSize;
     t.characters = model.categories[i];
     t.textAutoResize = 'WIDTH_AND_HEIGHT';
-    t.fills = [{ type: 'SOLID', color: textRGB }];
+    t.fills = [
+      figma.variables.setBoundVariableForPaint(
+        { type: 'SOLID', color: theme.textRGB },
+        'color',
+        theme.textVar,
+      ),
+    ];
     labels.appendChild(t);
     t.x = Math.min(contentW - t.width, Math.max(0, xFor(i) - t.width / 2));
     t.y = 0;

@@ -81,3 +81,69 @@ export function resolveColor(v: Variable, node: SceneNode, fallback: RGB): RGB {
   }
   return fallback;
 }
+
+/**
+ * Mode-getrouwe variable-resolutie (T47.1): resolveForConsumer blijkt op
+ * Slot/Frame/Instance-consumers de DEFAULT-mode van de collectie terug te
+ * geven i.p.v. de slide-mode (MCP-geverifieerd 2026-06-12: blue-mode slide
+ * resolvede Text als orange). Deze helper leest de mode van de node zelf
+ * (resolvedVariableModes → explicitVariableModes → collection-default) en
+ * pakt de waarde direct uit `valuesByMode`, met alias-chains tot 3 hops.
+ */
+export async function resolveColorInNodeMode(
+  v: Variable,
+  node: SceneNode,
+  fallback: RGB,
+): Promise<RGB> {
+  try {
+    let value = await valueInNodeMode(v, node);
+    for (let hop = 0; hop < 3; hop++) {
+      if (
+        value !== undefined &&
+        typeof value === 'object' &&
+        value !== null &&
+        (value as VariableAlias).type === 'VARIABLE_ALIAS'
+      ) {
+        const next = await figma.variables.getVariableByIdAsync((value as VariableAlias).id);
+        if (next === null) break;
+        value = await valueInNodeMode(next, node);
+      } else {
+        break;
+      }
+    }
+    if (
+      value !== undefined &&
+      typeof value === 'object' &&
+      value !== null &&
+      typeof (value as RGBA).r === 'number'
+    ) {
+      const c = value as RGBA;
+      return { r: c.r, g: c.g, b: c.b };
+    }
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] resolveColorInNodeMode failed:', err);
+  }
+  return fallback;
+}
+
+/** Waarde van `v` in de mode die `node` voor v's collectie voert. */
+async function valueInNodeMode(v: Variable, node: SceneNode): Promise<VariableValue | undefined> {
+  const collId = v.variableCollectionId;
+  let modeId: string | undefined;
+  const resolved = node.resolvedVariableModes;
+  if (resolved !== undefined && resolved !== null && typeof resolved[collId] === 'string') {
+    modeId = resolved[collId];
+  }
+  if (modeId === undefined) {
+    const explicit = node.explicitVariableModes;
+    if (explicit !== undefined && explicit !== null && typeof explicit[collId] === 'string') {
+      modeId = explicit[collId];
+    }
+  }
+  if (modeId === undefined) {
+    const coll = await figma.variables.getVariableCollectionByIdAsync(collId);
+    if (coll !== null) modeId = coll.defaultModeId;
+  }
+  if (modeId === undefined) return undefined;
+  return v.valuesByMode[modeId];
+}

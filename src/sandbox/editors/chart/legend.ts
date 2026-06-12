@@ -11,9 +11,19 @@
 export interface LegendEntry {
   label: string;
   color: RGB;
+  /** T47.3 — benadrukt datapunt: label in Instrument Sans SemiBold. */
+  emphasis?: boolean;
 }
 
-export function buildLegend(entries: LegendEntry[], textRGB: RGB, fontSize: number): FrameNode {
+/** Theme-bundel: Variable + resolved RGB-hint, zoals de tabel-renderer. */
+export interface ChartTheme {
+  textVar: Variable;
+  dimmerVar: Variable;
+  textRGB: RGB;
+  dimmerRGB: RGB;
+}
+
+export function buildLegend(entries: LegendEntry[], theme: ChartTheme, fontSize: number): FrameNode {
   const legend = figma.createFrame();
   legend.name = 'ChartLegend';
   legend.layoutMode = 'VERTICAL';
@@ -41,10 +51,19 @@ export function buildLegend(entries: LegendEntry[], textRGB: RGB, fontSize: numb
     row.appendChild(swatch);
 
     const t = figma.createText();
-    t.fontName = { family: 'Inter', style: 'Regular' };
+    t.fontName =
+      entries[i].emphasis === true
+        ? { family: 'Instrument Sans', style: 'SemiBold' }
+        : { family: 'Inter', style: 'Regular' };
     t.fontSize = fontSize;
     t.characters = entries[i].label;
-    t.fills = [{ type: 'SOLID', color: textRGB }];
+    t.fills = [
+      figma.variables.setBoundVariableForPaint(
+        { type: 'SOLID', color: theme.textRGB },
+        'color',
+        theme.textVar,
+      ),
+    ];
     row.appendChild(t);
 
     legend.appendChild(row);

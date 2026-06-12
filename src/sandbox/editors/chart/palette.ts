@@ -11,42 +11,32 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-/** Witte kaart-achtergrond; vast per design ("white card"). */
-export const CHART_CARD_RGB: RGB = { r: 1, g: 1, b: 1 };
-
-/** Blend `color` richting wit met factor t (0 = color, 1 = wit). */
-function towardWhite(color: RGB, t: number): RGB {
+/** Blend van `a` richting `b` met factor t (0 = a, 1 = b). */
+function blend(a: RGB, b: RGB, t: number): RGB {
   return {
-    r: color.r + (1 - color.r) * t,
-    g: color.g + (1 - color.g) * t,
-    b: color.b + (1 - color.b) * t,
+    r: a.r + (b.r - a.r) * t,
+    g: a.g + (b.g - a.g) * t,
+    b: a.b + (b.b - a.b) * t,
   };
 }
 
 /**
- * Ramp van `count` tinten van de accent-kleur, donker → licht.
- * count 1 → [accent]; count 5 → accent, +20%, +40%, +60%, +80% wit.
+ * Ramp van `count` tinten op de accent-kaart, licht → dieper: start op de
+ * Background-kleur (cream/licht per theme-mode) en blendt richting de
+ * accent. Gecapt op 0.6 zodat het diepste segment leesbaar blijft tegen
+ * de accent-kaart (zelfde taal als de Alt/_bgalt-tinten in de library).
  */
-export function accentRamp(accent: RGB, count: number): RGB[] {
+export function cardRamp(light: RGB, accent: RGB, count: number): RGB[] {
   const safe = count > 0 ? count : 1;
   const out: RGB[] = [];
   for (let i = 0; i < safe; i++) {
-    const t = safe === 1 ? 0 : (i / safe) * 0.85;
-    out.push(towardWhite(accent, t));
+    const t = safe === 1 ? 0 : (i / (safe - 1)) * 0.6;
+    out.push(blend(light, accent, t));
   }
   return out;
 }
 
-/** Subtiele track/gridline-tint: accent heel licht (85% richting wit). */
-export function trackTint(accent: RGB): RGB {
-  return towardWhite(accent, 0.88);
-}
-
-/** Donkere tekst op de witte kaart: accent-kleur licht verdonkerd. */
-export function cardTextColor(accent: RGB): RGB {
-  return {
-    r: accent.r * 0.55,
-    g: accent.g * 0.55,
-    b: accent.b * 0.55,
-  };
+/** Subtiele track/gridline-tint op de accent-kaart: licht, lage dekking. */
+export function trackPaint(light: RGB): SolidPaint {
+  return { type: 'SOLID', color: light, opacity: 0.3 };
 }

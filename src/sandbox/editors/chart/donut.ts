@@ -6,13 +6,20 @@
 // klok mee; start bovenaan (-PI/2) met een kleine angular gap tussen
 // segmenten. Donut toont een center-totaal ("100 totaal"); de legenda
 // (categorieën, optioneel met waarde) komt rechts naast de cirkel.
+// Delta-badges (T48, showDelta): parts-of-whole — geen badge in de
+// cirkel, de delta vs de vorige categorie staat als legenda-suffix.
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
 import type { ChartWrapModel } from '../../../shared/types';
-import { formatChartValue, seriesTotal } from '../../../shared/chart-calculations';
-import { buildLegend, LegendEntry } from './legend';
+import {
+  chartDeltaLabel,
+  formatChartValue,
+  isPointEmphasized,
+  seriesTotal,
+} from '../../../shared/chart-calculations';
+import { buildLegend, ChartTheme, LegendEntry } from './legend';
 
 const SEGMENT_GAP = 0.03; // radialen tussen segmenten
 const DONUT_INNER = 0.66; // innerRadius-ratio voor donut
@@ -22,8 +29,7 @@ export function buildDonut(
   contentW: number,
   contentH: number,
   ramp: RGB[],
-  textRGB: RGB,
-  dimRGB: RGB,
+  theme: ChartTheme,
   labelSize: number,
 ): FrameNode {
   const isDonut = model.chartType === 'donut';
@@ -78,7 +84,13 @@ export function buildDonut(
     totalText.fontSize = Math.max(32, Math.round(diameter * 0.16));
     totalText.characters = formatChartValue(total);
     totalText.textAutoResize = 'WIDTH_AND_HEIGHT';
-    totalText.fills = [{ type: 'SOLID', color: textRGB }];
+    totalText.fills = [
+      figma.variables.setBoundVariableForPaint(
+        { type: 'SOLID', color: theme.textRGB },
+        'color',
+        theme.textVar,
+      ),
+    ];
     circle.appendChild(totalText);
 
     const subText = figma.createText();
@@ -86,7 +98,13 @@ export function buildDonut(
     subText.fontSize = labelSize;
     subText.characters = 'totaal';
     subText.textAutoResize = 'WIDTH_AND_HEIGHT';
-    subText.fills = [{ type: 'SOLID', color: dimRGB }];
+    subText.fills = [
+      figma.variables.setBoundVariableForPaint(
+        { type: 'SOLID', color: theme.dimmerRGB },
+        'color',
+        theme.dimmerVar,
+      ),
+    ];
     circle.appendChild(subText);
 
     const blockH = totalText.height + subText.height;
@@ -109,9 +127,17 @@ export function buildDonut(
     for (let i = 0; i < model.categories.length; i++) {
       let label = model.categories[i];
       if (model.showValues) label = label + '  —  ' + formatChartValue(series.values[i]);
-      entries.push({ label: label, color: ramp[i % ramp.length] });
+      if (model.showDelta === true) {
+        const delta = chartDeltaLabel(series.values, i);
+        if (delta !== null) label = label + '  ' + delta;
+      }
+      entries.push({
+        label: label,
+        color: ramp[i % ramp.length],
+        emphasis: isPointEmphasized(series, i),
+      });
     }
-    root.appendChild(buildLegend(entries, textRGB, labelSize));
+    root.appendChild(buildLegend(entries, theme, labelSize));
   }
 
   return root;
