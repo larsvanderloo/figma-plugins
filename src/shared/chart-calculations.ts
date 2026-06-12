@@ -49,15 +49,25 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
       const v = i < sourceValues.length ? sourceValues[i] : 0;
       values.push(typeof v === 'number' && isFinite(v) && v >= 0 ? v : 0);
     }
+    const emphasis: boolean[] = [];
+    const sourceEmphasis = src !== undefined && Array.isArray(src.emphasis) ? src.emphasis : [];
+    for (let i = 0; i < categories.length; i++) {
+      emphasis.push(i < sourceEmphasis.length ? sourceEmphasis[i] === true : false);
+    }
     series.push({
       name: src !== undefined && typeof src.name === 'string' ? src.name : '',
       values: values,
+      emphasis: emphasis,
     });
   }
   if (series.length === 0) {
     const values: number[] = [];
-    for (let i = 0; i < categories.length; i++) values.push(0);
-    series.push({ name: '', values: values });
+    const emphasis: boolean[] = [];
+    for (let i = 0; i < categories.length; i++) {
+      values.push(0);
+      emphasis.push(false);
+    }
+    series.push({ name: '', values: values, emphasis: emphasis });
   }
 
   return {
@@ -67,6 +77,7 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
     series: series,
     showLegend: model.showLegend === true,
     showValues: model.showValues === true,
+    showDelta: model.showDelta === true,
   };
 }
 
@@ -79,6 +90,7 @@ export function chartModelsEqual(a: ChartWrapModel | null, b: ChartWrapModel): b
   if (left.chartType !== right.chartType) return false;
   if (left.showLegend !== right.showLegend) return false;
   if (left.showValues !== right.showValues) return false;
+  if (left.showDelta !== right.showDelta) return false;
   if (left.categories.length !== right.categories.length) return false;
   for (let i = 0; i < left.categories.length; i++) {
     if (left.categories[i] !== right.categories[i]) return false;
@@ -88,9 +100,19 @@ export function chartModelsEqual(a: ChartWrapModel | null, b: ChartWrapModel): b
     if (left.series[s].name !== right.series[s].name) return false;
     for (let i = 0; i < left.series[s].values.length; i++) {
       if (left.series[s].values[i] !== right.series[s].values[i]) return false;
+      const le = left.series[s].emphasis;
+      const re = right.series[s].emphasis;
+      if ((le !== undefined && le[i] === true) !== (re !== undefined && re[i] === true)) {
+        return false;
+      }
     }
   }
   return true;
+}
+
+/** Nadruk-flag van datapunt (serie s, categorie i); afwezig = false. */
+export function isPointEmphasized(series: ChartSeriesModel, i: number): boolean {
+  return series.emphasis !== undefined && series.emphasis[i] === true;
 }
 
 /** Som van alle waarden in een serie. */
@@ -116,6 +138,28 @@ export function formatChartValue(value: number): string {
   return formatTableNumber(value);
 }
 
+/**
+ * Delta-badge-tekst voor categorie `index` t.o.v. de vorige categorie
+ * (T48): ▲ +12% / ▼ −5%, afgerond op hele procenten. Conventies (zie
+ * docs/architecture/chart-delta-badge.md): eerste categorie heeft geen
+ * vorige → null; vorige waarde 0 → absolute verandering i.p.v. een
+ * oneindig percentage (Geckoboard-conventie); beide 0 → null.
+ */
+export function chartDeltaLabel(values: number[], index: number): string | null {
+  if (index <= 0 || index >= values.length) return null;
+  const previous = values[index - 1];
+  const current = values[index];
+  if (previous === 0) {
+    if (current === 0) return null;
+    return '▲ +' + formatTableNumber(current);
+  }
+  const ratio = (current - previous) / previous;
+  const pct = Math.round(Math.abs(ratio) * 100);
+  if (pct === 0) return '0%';
+  if (ratio > 0) return '▲ +' + String(pct) + '%';
+  return '▼ −' + String(pct) + '%';
+}
+
 /** Leeg default-model voor een verse ChartWrap-slot. */
 export function emptyChartModel(slotId: string): ChartWrapModel {
   return {
@@ -125,5 +169,6 @@ export function emptyChartModel(slotId: string): ChartWrapModel {
     series: [{ name: 'Serie 1', values: [40, 35, 25] }],
     showLegend: true,
     showValues: true,
+    showDelta: false,
   };
 }

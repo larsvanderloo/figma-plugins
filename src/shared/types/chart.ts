@@ -21,6 +21,12 @@ export interface ChartSeriesModel {
   name: string;
   /** Eén waarde per categorie; index-aligned met `categories`. */
   values: number[];
+  /**
+   * Per-waarde nadruk ("Cel benadrukken", zelfde concept als de tabel):
+   * een benadrukt datapunt rendert z'n waarde/label in Instrument Sans
+   * SemiBold. Index-aligned met `values`; afwezig = geen nadruk.
+   */
+  emphasis?: boolean[];
 }
 
 /**
@@ -43,4 +49,10 @@ export interface ChartWrapModel {
   showLegend: boolean;
   /** Waarde-labels tonen op segmenten/bars/punten. */
   showValues: boolean;
+  /**
+   * Delta-badges tonen (T48): per categorie de verandering t.o.v. de
+   * vorige categorie in serie 0 (▲ +12% / ▼ −5%). Optioneel zodat
+   * bestaande gepersisteerde modellen geldig blijven; default false.
+   */
+  showDelta?: boolean;
 }
