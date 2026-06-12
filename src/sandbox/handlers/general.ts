@@ -16,7 +16,7 @@ import { applyTitleDescription } from '../editors/general/title-description';
 import { applyBadge } from '../editors/general/badge';
 import { applyAccentRanges } from '../editors/_shared/accent-ranges';
 import { findVisibleTextNodeByName, resolveTypHeadingSizeHost } from '../scan/readers';
-import { refreshTablesOnSlide } from '../scan/graphs';
+import { refreshTablesOnSlide, refreshChartsOnSlide } from '../scan/graphs';
 import type { UIToPluginMessage } from '../../shared/types';
 
 export async function handleUpdateGeneral(
@@ -43,6 +43,7 @@ export async function handleUpdateGeneral(
     markSelfWrite();
     await applyTitleDescription(slide, payload);
     await refreshTablesOnSlide(slide); // T39.3: re-render tables na CopyWrap-edit
+    await refreshChartsOnSlide(slide); // T47: idem voor charts
     markSelfWrite();
     postToUI({
       type: 'target-updated',
@@ -183,6 +184,7 @@ export async function handleSetTypographyVisibility(
     }
     if (msg.field === 'heading' || msg.field === 'paragraph') {
       await refreshTablesOnSlide(visSlide);
+      await refreshChartsOnSlide(visSlide);
     }
   } catch (e) {
     console.log('[set-typography-visibility] failed: ' + String(e));
@@ -237,6 +239,7 @@ export async function handleSetCopywrapSize(
     overrides[sizeHostInfo.key] = msg.size;
     sizeHostInfo.host.setProperties(overrides);
     await refreshTablesOnSlide(sizeSlide);
+    await refreshChartsOnSlide(sizeSlide);
   } catch (e) {
     console.log('[set-copywrap-size] setProperties failed: ' + String(e));
     postToUI({

@@ -333,6 +333,43 @@ export function findTableSlot(slide: InstanceNode): SlotNode | null {
 }
 
 /**
+ * ChartWrap: instances die een chart representeren (T47).
+ * Matcht:
+ *   - legacy exacte naam `ChartWrap`
+ *   - Slide Machine variant-namen met `Chart` erin (`Chart=`,
+ *     `Property 1=... Chart ...`) — spiegel van findTableWrap, maar dan
+ *     mét Chart-vereiste i.p.v. Chart-uitsluiting.
+ * ES2017-compat: indexOf i.p.v. startsWith/includes.
+ */
+export function findChartWrap(slide: InstanceNode): InstanceNode | null {
+  return findFirstInstance(slide, (n) => {
+    if (n.name === 'ChartWrap') return true;
+    if (n.name.indexOf('Chart=') === 0 && n.name.indexOf('Timeline') < 0) return true;
+    if (
+      n.name.indexOf('Property 1=') === 0 &&
+      n.name.indexOf('Chart') >= 0 &&
+      n.name.indexOf('Timeline') < 0
+    ) {
+      return true;
+    }
+    return false;
+  });
+}
+
+/**
+ * Locate de SlotNode binnen de ChartWrap-INSTANCE van een slide —
+ * zelfde wandeling als findTableSlot: slide → ChartWrap → Slot.
+ */
+export function findChartSlot(slide: InstanceNode): SlotNode | null {
+  const chartWrap = findChartWrap(slide);
+  if (chartWrap === null) return null;
+  const slot = chartWrap.findOne((n: SceneNode) => n.type === 'SLOT');
+  if (slot === null) return null;
+  if (slot.type !== 'SLOT') return null;
+  return slot as SlotNode;
+}
+
+/**
  * TimelineWrap: instances die een timeline representeren.
  * Matcht:
  *   - legacy exacte naam `TimelineWrap`

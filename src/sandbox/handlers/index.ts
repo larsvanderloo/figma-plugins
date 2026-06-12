@@ -30,6 +30,7 @@ import {
   handleUpdateTimelineItem,
 } from './content';
 import { handleImportCsv, handleUpdateTable } from './table';
+import { handleUpdateChart } from './chart';
 import { handleUploadImage } from './image';
 import { handleSetSlideSkipped, handleSetSlideTheme, handleTriggerUndo } from './slide';
 import { handleExportDocument } from './export';
@@ -58,6 +59,7 @@ export const messageHandlers: { [K in UIToPluginMessage['type']]: MessageHandler
   'update-timeline-item': handleUpdateTimelineItem,
   // tables
   'update-table': handleUpdateTable,
+  'update-chart': handleUpdateChart,
   'import-csv': handleImportCsv,
   // images
   'upload-image': handleUploadImage,
