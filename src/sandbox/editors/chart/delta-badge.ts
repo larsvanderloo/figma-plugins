@@ -2,18 +2,29 @@
 // editors/chart/delta-badge.ts
 //
 // Delta-badge-engine (T50): bouwt per categorie een delta-node voor
-// serie 0. Deze foundation-versie levert de TEKST-variant (gedrags-
-// neutraal t.o.v. de eerdere inline delta-teksten in de builders);
-// de library-Badge-clone-variant (template vinden → clonen → hernoemen
-// naar 'DeltaBadge-<i>' → label sync zetten → rescalen, met deze
-// tekst-variant als fallback-keten) vervangt de interne implementatie
-// zonder de API te wijzigen.
+// serie 0 via een keten met nette degradatie:
+//
+//   1. library-Badge-CLONE — het Badge-template van de slide wordt één
+//      keer per apply gevonden (createDeltaContext → findBadge) en per
+//      delta gecloond: hernoemen naar 'DeltaBadge-<i>' (VERPLICHT vóór
+//      al het andere; namen die met 'Badge' beginnen worden gekaapt
+//      door de Badge-editor en de startup-icon-reconciler), label sync
+//      zetten via de TEXT-component-property, BOOLEAN-icon-prop
+//      best-effort uit, rescalen naar chart-proporties.
+//   2. TEKST-fallback — wanneer er geen template is, geen TEXT-property
+//      bestaat, of een clone-stap faalt (partiële node wordt dan
+//      opgeruimd), valt de engine terug op de losse tekst-variant
+//      (▲/▼ zit al in het label via chartDeltaDisplay).
+//
+// Builders zijn synchroon: GEEN async font-loads hier — daarom is de
+// TEXT-property-route de enige label-route op de clone.
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
 import type { ChartWrapModel } from '../../../shared/types';
 import { chartDeltaDisplay } from '../../../shared/chart-calculations';
+import { findBadge } from '../../slide-machine';
 import type { ChartTheme } from './legend';
 
 export interface DeltaBadgeContext {
@@ -22,6 +33,8 @@ export interface DeltaBadgeContext {
   model: ChartWrapModel;
   theme: ChartTheme;
   labelSize: number;
+  /** Badge-template, één keer per apply gezocht; null → tekst-variant. */
+  badgeTemplate: InstanceNode | null;
 }
 
 export function createDeltaContext(
@@ -30,7 +43,25 @@ export function createDeltaContext(
   theme: ChartTheme,
   labelSize: number,
 ): DeltaBadgeContext {
-  return { slide: slide, model: model, theme: theme, labelSize: labelSize };
+  // T50: template één keer per apply zoeken. De mode-context kan in
+  // theorie de slot zelf zijn (geen instance-ancestor); findBadge
+  // vereist een INSTANCE, dus dan geen template → tekst-variant.
+  let badgeTemplate: InstanceNode | null = null;
+  if (slide.type === 'INSTANCE') {
+    try {
+      badgeTemplate = findBadge(slide);
+    } catch (e) {
+      console.log('[chart] delta: findBadge failed: ' + String(e));
+      badgeTemplate = null;
+    }
+  }
+  return {
+    slide: slide,
+    model: model,
+    theme: theme,
+    labelSize: labelSize,
+    badgeTemplate: badgeTemplate,
+  };
 }
 
 /**
@@ -41,7 +72,103 @@ export function createDeltaContext(
 export function buildDeltaNode(ctx: DeltaBadgeContext, i: number): SceneNode | null {
   const label = chartDeltaDisplay(ctx.model, i);
   if (label === null) return null;
+  if (ctx.badgeTemplate !== null) {
+    const badge = buildDeltaBadgeClone(ctx.badgeTemplate, label, i, ctx.labelSize);
+    if (badge !== null) return badge;
+  }
   return buildDeltaText(ctx, label);
+}
+
+/**
+ * Clone-route (T50): elke stap guarded; elke fout ruimt de partiële
+ * clone op en retourneert null zodat de caller naar tekst degradeert.
+ */
+function buildDeltaBadgeClone(
+  template: InstanceNode,
+  label: string,
+  i: number,
+  labelSize: number,
+): InstanceNode | null {
+  let clone: InstanceNode;
+  try {
+    clone = template.clone();
+  } catch (e) {
+    console.log('[chart] delta: badge clone failed: ' + String(e));
+    return null;
+  }
+  try {
+    // VERPLICHT vóór alles: nooit een 'Badge*'-naam laten bestaan —
+    // findBadge matcht name.indexOf('Badge') === 0 en de Badge-editor /
+    // icon-reconciler zouden de delta-node anders kapen.
+    clone.name = 'DeltaBadge-' + String(i);
+    // Template kan via Badge_wrap verborgen zijn; de clone zelf kan
+    // visible=false meedragen.
+    clone.visible = true;
+
+    // Label SYNC via de TEXT-component-property (zelfde route als
+    // editors/general/badge.ts); zonder TEXT-property is er geen
+    // synchrone label-route → clone weg en tekst-fallback.
+    let labelSet = false;
+    const props = clone.componentProperties;
+    if (props !== null && props !== undefined) {
+      const keys = Object.keys(props);
+      for (let k = 0; k < keys.length; k++) {
+        const key = keys[k];
+        if (props[key].type === 'TEXT') {
+          const patch: { [name: string]: string } = {};
+          patch[key] = label;
+          clone.setProperties(patch);
+          labelSet = true;
+          break;
+        }
+      }
+      if (labelSet) {
+        // Best-effort, zonder async: BOOLEAN-property die naar het icon
+        // verwijst uitzetten; anders blijft het icon staan (▲/▼ zit al
+        // in het label, dus dat is acceptabel als v1).
+        for (let b = 0; b < keys.length; b++) {
+          const bKey = keys[b];
+          if (props[bKey].type === 'BOOLEAN' && bKey.toLowerCase().indexOf('icon') !== -1) {
+            try {
+              const boolPatch: { [name: string]: boolean } = {};
+              boolPatch[bKey] = false;
+              clone.setProperties(boolPatch);
+            } catch (eIcon) {
+              console.log('[chart] delta: icon-prop hide failed: ' + String(eIcon));
+            }
+            break;
+          }
+        }
+      }
+    }
+    if (!labelSet) {
+      clone.remove();
+      return null;
+    }
+
+    // Rescale van slide-schaal naar chart-proporties: doelhoogte
+    // ~1.4× het label-korps; factor is normaal ≪ 1, nooit opschalen.
+    const targetH = labelSize * 1.4;
+    if (clone.height > 0) {
+      const factor = targetH / clone.height;
+      if (factor > 0 && factor <= 1) {
+        try {
+          clone.rescale(factor);
+        } catch (eScale) {
+          console.log('[chart] delta: rescale failed: ' + String(eScale));
+        }
+      }
+    }
+    return clone;
+  } catch (e) {
+    console.log('[chart] delta: badge route failed, falling back to text: ' + String(e));
+    try {
+      clone.remove();
+    } catch (eRemove) {
+      /* clone kan al verwijderd/invalide zijn */
+    }
+    return null;
+  }
 }
 
 /** Tekst-variant: Inter Medium ~70% labelSize in Text Dimmer-binding. */
