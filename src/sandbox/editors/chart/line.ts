@@ -8,24 +8,44 @@
 // Delta-badges (T48, showDelta): boven elk serie-0-punt de verandering
 // t.o.v. de vorige categorie, gestapeld onder het waarde-label.
 //
+// T52 — hard overflow-budget: de top-headroom (padTop) reserveert de
+// GEMETEN stapel boven het hoogste punt (waarde-label + delta-badge,
+// de oude reservering vergat de badge), de legenda wrapt binnen
+// contentW en telt met zijn echte hoogte mee. Past het niet, dan
+// degradeert de chart (waarde-labels → delta-badges → legenda)
+// i.p.v. de kaart uit te lopen; labels/badges breder dan hun punt-
+// step vervallen per stuk (auto-hide on overlap).
+//
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
 import type { ChartWrapModel } from '../../../shared/types';
 import {
-  chartDeltaLabel,
   chartMaxValue,
   chartValueLabel,
-  formatChartValue,
   isCategoryEmphasized,
   isPointEmphasized,
 } from '../../../shared/chart-calculations';
-import { buildLegend, ChartTheme, LegendEntry } from './legend';
+import { buildLegend, ChartTheme, LegendEntry, truncateToWidth } from './legend';
 import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
 import { trackPaint } from './palette';
 
 const DOT_SIZE = 12;
 const STROKE_W = 4;
+/** T52 — minimaal leesbare lijn-zone; daaronder degraderen i.p.v. clippen. */
+const MIN_INNER_H = 24;
+
+/** T52 — single-line teksthoogte voor font/korps via een wegwerp-probe
+ * (fonts zijn al geladen door applyChart vóór de builders draaien). */
+function probeTextHeight(family: string, style: string, fontSize: number): number {
+  const probe = figma.createText();
+  probe.fontName = { family: family, style: style };
+  probe.fontSize = fontSize;
+  probe.characters = 'Ag';
+  const h = probe.height;
+  probe.remove();
+  return h;
+}
 
 export function buildLine(
   model: ChartWrapModel,
@@ -48,8 +68,10 @@ export function buildLine(
   root.itemSpacing = Math.round(labelSize * 1.0);
   root.fills = [];
   root.resize(contentW, contentH);
+  const rootGap = root.itemSpacing;
 
-  let legendH = 0;
+  // ---- T52: meten — legenda (gewrapt), tekst-probes, echte delta-nodes.
+  let legend: FrameNode | null = null;
   if (model.showLegend && model.series.length > 1) {
     const entries: LegendEntry[] = [];
     for (let s = 0; s < model.series.length; s++) {
@@ -58,23 +80,130 @@ export function buildLine(
         color: ramp[s % ramp.length],
       });
     }
-    const legend = buildLegend(entries, theme, labelSize, contentW);
-    legend.layoutMode = 'HORIZONTAL';
-    legend.itemSpacing = Math.round(labelSize * 1.6);
+    // T52 — gewrapte horizontale rij met hoogte-budget: buildLegend
+    // degradeert zelf (korps → delta's → '+N meer') tot het past.
+    legend = buildLegend(
+      entries,
+      theme,
+      labelSize,
+      contentW,
+      Math.max(labelSize * 2, Math.floor(contentH * 0.35)),
+      true,
+    );
     root.appendChild(legend);
-    legendH = legend.height + root.itemSpacing;
   }
 
   const labelRowH = Math.round(labelSize * 1.6);
-  const plotH = Math.max(80, contentH - legendH - labelRowH - root.itemSpacing);
-  const pad = DOT_SIZE; // marge zodat dots niet clippen op de plot-rand
-  // showValues: waarde-labels staan op yFor(v) - DOT_SIZE - labelhoogte.
-  // Zonder extra top-marge valt het label van het hoogste punt volledig
-  // boven het plot-frame (root clipt children) — reserveer headroom.
   const valueSize = Math.round(labelSize * 0.85);
-  const padTop = model.showValues ? pad + Math.round(valueSize * 1.4) : pad;
+  const valueH = model.showValues
+    ? Math.ceil(
+        Math.max(
+          probeTextHeight('Inter', 'Medium', valueSize),
+          probeTextHeight('Instrument Sans', 'SemiBold', valueSize),
+        ),
+      )
+    : 0;
+
+  const pad = DOT_SIZE; // marge zodat dots niet clippen op de plot-rand
   const innerW = contentW - pad * 2;
-  const innerH = Math.max(10, plotH - padTop - pad);
+  // Horizontaal budget per punt: labels/badges breder dan hun step
+  // overlappen hun buren onleesbaar → per stuk laten vallen (research:
+  // auto-hide on overlap, geen vaste px-drempel).
+  const slotStep = pointCount > 1 ? innerW / (pointCount - 1) : contentW;
+  const deltaMaxW = pointCount > 1 ? Math.max(8, Math.floor(slotStep)) : contentW;
+
+  // T52 — delta-nodes vooraf bouwen mét punt-step-cap: het verticale
+  // budget rekent met de ECHTE node-hoogte (badge-clone vs. tekst-
+  // fallback) i.p.v. een aanname, en de engine degradeert te brede
+  // badges zelf naar een afgekapte tekst-variant.
+  const deltaNodes: (SceneNode | null)[] = [];
+  let deltaH = 0;
+  if (model.showDelta === true) {
+    for (let i = 0; i < pointCount; i++) {
+      const node = buildDeltaNode(deltaCtx, i, deltaMaxW);
+      deltaNodes.push(node);
+      if (node !== null && node.height > deltaH) deltaH = node.height;
+    }
+    deltaH = Math.ceil(deltaH);
+  }
+
+  // T52 — fit-voorcheck via één herbruikbare probe: past er ÜBERHAUPT
+  // een waarde-label/badge, anders vervalt de verticale reservering.
+  let anyValueFits = false;
+  if (model.showValues) {
+    const wProbe = figma.createText();
+    wProbe.fontSize = valueSize;
+    for (let s = 0; s < model.series.length && !anyValueFits; s++) {
+      for (let i = 0; i < pointCount && !anyValueFits; i++) {
+        wProbe.fontName = isPointEmphasized(model.series[s], i)
+          ? { family: 'Instrument Sans', style: 'SemiBold' }
+          : { family: 'Inter', style: 'Medium' };
+        wProbe.characters = chartValueLabel(model.series[s], model.series[s].values[i]);
+        if (wProbe.width <= slotStep) anyValueFits = true;
+      }
+    }
+    wProbe.remove();
+  }
+  let anyDeltaFits = false;
+  for (let i = 0; i < deltaNodes.length; i++) {
+    const n = deltaNodes[i];
+    if (n !== null && n.width <= slotStep) anyDeltaFits = true;
+  }
+
+  // ---- T52: verticaal budget — plot = contentH minus gemeten legenda,
+  // x-as-rij en gaps; padTop = dot-marge + GEMETEN waarde/delta-stapel.
+  let valuesOn = model.showValues && valueH > 0 && anyValueFits;
+  let deltaOn = model.showDelta === true && deltaH > 0 && anyDeltaFits;
+  let legendOn = legend !== null;
+
+  const padTopFor = function (): number {
+    let h = pad;
+    if (valuesOn) h += valueH;
+    if (deltaOn) h += deltaH;
+    return h;
+  };
+  const availPlotH = function (): number {
+    let h = contentH - labelRowH - rootGap;
+    if (legendOn && legend !== null) h -= legend.height + rootGap;
+    return h;
+  };
+  const fits = function (): boolean {
+    return availPlotH() - padTopFor() - pad >= MIN_INNER_H;
+  };
+
+  // Disproportioneel hoge (gewrapte) legenda eerst weg — eet anders de
+  // hele plot op smalle kaarten op (Highcharts responsive rule 1).
+  if (legendOn && legend !== null && legend.height + rootGap > contentH * 0.4) {
+    legend.remove();
+    legend = null;
+    legendOn = false;
+  }
+  if (!fits() && valuesOn) valuesOn = false;
+  if (!fits() && deltaOn) deltaOn = false;
+  if (!fits() && legendOn && legend !== null) {
+    legend.remove();
+    legend = null;
+    legendOn = false;
+  }
+  if (!deltaOn) {
+    for (let i = 0; i < deltaNodes.length; i++) {
+      const n = deltaNodes[i];
+      if (n !== null) {
+        try {
+          n.remove();
+        } catch (_e) {
+          /* al verwijderd */
+        }
+        deltaNodes[i] = null;
+      }
+    }
+  }
+
+  // Exact de rest van het budget — geen vloer die het budget overschrijdt
+  // (de oude max(80, ...) duwde de x-as-rij de kaart uit op lage slots).
+  const plotH = Math.max(10, availPlotH());
+  const padTop = padTopFor();
+  const innerH = Math.max(4, plotH - padTop - pad);
 
   const plot = figma.createFrame();
   plot.name = 'Plot';
@@ -131,21 +260,33 @@ export function buildLine(
       plot.appendChild(dot);
 
       // Label-stapel boven het punt: waarde bovenaan, delta-badge
-      // (T48, alleen serie 0) eronder, dichtst bij de dot.
+      // (T48, alleen serie 0) eronder, dichtst bij de dot. padTop
+      // reserveert exact DOT_SIZE + valueH + deltaH, dus de stapel
+      // van het hoogste punt blijft binnen het plot-frame.
       let stackY = yFor(model.series[s].values[i]) - DOT_SIZE;
-      if (model.showDelta === true && s === 0) {
-        const deltaNode = buildDeltaNode(deltaCtx, i);
+      if (deltaOn && s === 0) {
+        const deltaNode = deltaNodes[i];
         if (deltaNode !== null) {
-          plot.appendChild(deltaNode);
-          deltaNode.x = Math.min(
-            contentW - deltaNode.width,
-            Math.max(0, xFor(i) - deltaNode.width / 2),
-          );
-          deltaNode.y = stackY - deltaNode.height;
-          stackY = deltaNode.y;
+          if (deltaNode.width > contentW || (pointCount > 1 && deltaNode.width > slotStep)) {
+            // T52 — breder dan de punt-step: vervalt per stuk.
+            try {
+              deltaNode.remove();
+            } catch (_e) {
+              /* al verwijderd */
+            }
+            deltaNodes[i] = null;
+          } else {
+            plot.appendChild(deltaNode);
+            deltaNode.x = Math.min(
+              contentW - deltaNode.width,
+              Math.max(0, xFor(i) - deltaNode.width / 2),
+            );
+            deltaNode.y = stackY - deltaNode.height;
+            stackY = deltaNode.y;
+          }
         }
       }
-      if (model.showValues) {
+      if (valuesOn) {
         const valueText = figma.createText();
         valueText.fontName = isPointEmphasized(model.series[s], i)
           ? { family: 'Instrument Sans', style: 'SemiBold' }
@@ -154,14 +295,19 @@ export function buildLine(
         valueText.characters = chartValueLabel(model.series[s], model.series[s].values[i]);
         valueText.textAutoResize = 'WIDTH_AND_HEIGHT';
         valueText.fills = [{ type: 'SOLID', color: color }];
-        plot.appendChild(valueText);
-        // Clamp binnen het plot-frame (zelfde patroon als de x-as-labels):
-        // randpunten (i=0 / laatste) zouden anders w/2 - pad uitsteken.
-        valueText.x = Math.min(
-          contentW - valueText.width,
-          Math.max(0, xFor(i) - valueText.width / 2),
-        );
-        valueText.y = stackY - valueText.height;
+        if (valueText.width > contentW || (pointCount > 1 && valueText.width > slotStep)) {
+          // T52 — breder dan de punt-step: vervalt per stuk.
+          valueText.remove();
+        } else {
+          plot.appendChild(valueText);
+          // Clamp binnen het plot-frame (zelfde patroon als de x-as-
+          // labels): randpunten zouden anders w/2 - pad uitsteken.
+          valueText.x = Math.min(
+            contentW - valueText.width,
+            Math.max(0, xFor(i) - valueText.width / 2),
+          );
+          valueText.y = stackY - valueText.height;
+        }
       }
     }
   }
@@ -169,6 +315,9 @@ export function buildLine(
   root.appendChild(plot);
 
   // X-as-labels: zelfde x-posities als de datapunten (layout NONE).
+  // T52 — labels breder dan hun punt-step worden getruncate (ECharts
+  // axisLabel.overflow 'truncate'); x is geclampt binnen contentW.
+  const maxXLabelW = pointCount > 1 ? Math.max(24, Math.floor(contentW / pointCount)) : contentW;
   const labels = figma.createFrame();
   labels.name = 'XLabels';
   labels.resize(contentW, labelRowH);
@@ -188,6 +337,11 @@ export function buildLine(
         theme.textVar,
       ),
     ];
+    // T52 — single-line ellipsen (maxLines 1): zonder maxLines zou een
+    // lang label wikkelen en de vaste labelRowH-rij uitlopen.
+    if (t.width > maxXLabelW) {
+      truncateToWidth(t, maxXLabelW);
+    }
     labels.appendChild(t);
     t.x = Math.min(contentW - t.width, Math.max(0, xFor(i) - t.width / 2));
     t.y = 0;

@@ -12,9 +12,11 @@
 //      zetten via de TEXT-component-property, BOOLEAN-icon-prop
 //      best-effort uit, rescalen naar chart-proporties.
 //   2. TEKST-fallback — wanneer er geen template is, geen TEXT-property
-//      bestaat, of een clone-stap faalt (partiële node wordt dan
-//      opgeruimd), valt de engine terug op de losse tekst-variant
-//      (▲/▼ zit al in het label via chartDeltaDisplay).
+//      bestaat, een clone-stap faalt (partiële node wordt dan
+//      opgeruimd), of de clone na rescale buiten de door de caller
+//      meegegeven maxW/maxH-budgetten valt (T52), valt de engine terug
+//      op de losse tekst-variant (▲/▼ zit al in het label via
+//      chartDeltaDisplay). De tekst-variant zelf wordt op maxW afgekapt.
 //
 // Builders zijn synchroon: GEEN async font-loads hier — daarom is de
 // TEXT-property-route de enige label-route op de clone.
@@ -72,15 +74,34 @@ export function createDeltaContext(
  * Delta-node voor categorie i (serie 0), of null wanneer er geen delta
  * is (eerste categorie zonder override, beide waarden 0, ...). De caller
  * appendt en positioneert; de node meet zichzelf (HUG/auto-resize).
+ *
+ * T52 — optionele budgetten: maxW (kolom-cap) en maxH (rij-cap). Een
+ * badge-clone die er na rescale niet in past degradeert naar de
+ * tekst-variant; de tekst-variant wordt op maxW afgekapt zodat de
+ * geretourneerde node het budget NOOIT overschrijdt in de breedte.
  */
-export function buildDeltaNode(ctx: DeltaBadgeContext, i: number): SceneNode | null {
+export function buildDeltaNode(
+  ctx: DeltaBadgeContext,
+  i: number,
+  maxW?: number,
+  maxH?: number,
+): SceneNode | null {
   const label = chartDeltaDisplay(ctx.model, i);
   if (label === null) return null;
+  const widthCap = typeof maxW === 'number' && isFinite(maxW) && maxW > 0 ? maxW : null;
+  const heightCap = typeof maxH === 'number' && isFinite(maxH) && maxH > 0 ? maxH : null;
   if (ctx.badgeTemplate !== null) {
-    const badge = buildDeltaBadgeClone(ctx.badgeTemplate, label, i, ctx.labelSize);
+    const badge = buildDeltaBadgeClone(
+      ctx.badgeTemplate,
+      label,
+      i,
+      ctx.labelSize,
+      widthCap,
+      heightCap,
+    );
     if (badge !== null) return badge;
   }
-  return buildDeltaText(ctx, label);
+  return buildDeltaText(ctx, label, widthCap);
 }
 
 /**
@@ -92,6 +113,8 @@ function buildDeltaBadgeClone(
   label: string,
   i: number,
   labelSize: number,
+  maxW: number | null,
+  maxH: number | null,
 ): InstanceNode | null {
   let clone: InstanceNode;
   try {
@@ -209,6 +232,30 @@ function buildDeltaBadgeClone(
         }
       }
     }
+
+    // T52 — harde sanity-check NA rescale: een clone die breder is dan
+    // de kolom-cap, hoger dan het rij-budget, of wild van de doelhoogte
+    // afwijkt (rescale geskipt/mislukt, vreemd template) wordt
+    // opgeruimd → tekst-fallback. Liever een compacte tekst dan een
+    // badge die de content-frame uit clipt.
+    const cloneH = clone.height;
+    const cloneW = clone.width;
+    const deviates = cloneH <= 0 || cloneH > targetH * 1.5 || cloneH < targetH * 0.5;
+    const tooWide = maxW !== null && cloneW > maxW;
+    const tooTall = maxH !== null && cloneH > maxH;
+    if (deviates || tooWide || tooTall) {
+      console.log(
+        '[chart] delta: badge clone outside budget (w=' +
+          String(Math.round(cloneW)) +
+          ', h=' +
+          String(Math.round(cloneH)) +
+          ', targetH=' +
+          String(Math.round(targetH)) +
+          '), falling back to text',
+      );
+      clone.remove();
+      return null;
+    }
     return clone;
   } catch (e) {
     console.log('[chart] delta: badge route failed, falling back to text: ' + String(e));
@@ -222,11 +269,14 @@ function buildDeltaBadgeClone(
 }
 
 /** Tekst-variant: Inter Medium ~70% labelSize in Text Dimmer-binding. */
-function buildDeltaText(ctx: DeltaBadgeContext, label: string): TextNode {
+function buildDeltaText(ctx: DeltaBadgeContext, label: string, maxW: number | null): TextNode {
   const t = figma.createText();
   t.name = 'DeltaText';
   t.fontName = { family: 'Inter', style: 'Medium' };
-  t.fontSize = Math.round(ctx.labelSize * 0.7);
+  // T52 — 10px-vloer: het korps kan op kleine kaarten al gekrompen
+  // zijn (progress geeft een band-gekrompen labelSize door); 70% daarvan
+  // zou onder de praktische leesbaarheids-ondergrens duiken.
+  t.fontSize = Math.max(10, Math.round(ctx.labelSize * 0.7));
   t.characters = label;
   t.textAutoResize = 'WIDTH_AND_HEIGHT';
   t.fills = [
@@ -236,5 +286,13 @@ function buildDeltaText(ctx: DeltaBadgeContext, label: string): TextNode {
       ctx.theme.dimmerVar,
     ),
   ];
+  // T52 — kolom-cap: liever een afgekapte override-tekst dan een delta
+  // die de kolom (en daarmee de content-frame) uit loopt.
+  if (maxW !== null && t.width > maxW) {
+    t.textTruncation = 'ENDING';
+    t.maxLines = 1;
+    t.textAutoResize = 'HEIGHT';
+    t.resize(maxW, t.height);
+  }
   return t;
 }
