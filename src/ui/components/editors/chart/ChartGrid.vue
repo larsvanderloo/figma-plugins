@@ -32,6 +32,7 @@ const emit = defineEmits<{
   'value-edit': [s: number, i: number, raw: string | number];
   'cell-emphasis': [s: number, i: number, emphasis: boolean];
   'delta-override-edit': [i: number, value: string];
+  'series-percent': [s: number, percent: boolean];
   'category-emphasis': [i: number, emphasis: boolean];
   'add-category-before': [i: number];
   'add-category-after': [i: number];
@@ -62,6 +63,29 @@ function deltaPlaceholder(i: number): string {
 function deltaOverrideValue(i: number): string {
   const overrides = props.model.deltaOverrides;
   return overrides !== undefined && i < overrides.length ? overrides[i] : '';
+}
+
+// T50.3 — pijl-optie bij delta-bewerking: zet/verwijder ▲/▼ vooraan de
+// override. Zonder override wordt de auto-tekst als startpunt gebruikt.
+function setDeltaArrow(i: number, arrow: string | null): void {
+  let text = deltaOverrideValue(i).trim();
+  if (text === '') {
+    const auto = chartDeltaDisplay({ ...props.model, deltaOverrides: undefined }, i);
+    text = auto !== null ? auto : '';
+  }
+  text = text.replace(/^[▲▼△▽↑↓]\s*/, '');
+  const next = arrow !== null ? (text !== '' ? arrow + ' ' + text : arrow) : text;
+  emit('delta-override-edit', i, next);
+}
+
+function deltaArrowMenuItems(i: number): DropdownMenuItem[][] {
+  return [
+    [
+      { label: 'Pijl omhoog', icon: 'i-lucide-arrow-up', onSelect: () => setDeltaArrow(i, '▲') },
+      { label: 'Pijl omlaag', icon: 'i-lucide-arrow-down', onSelect: () => setDeltaArrow(i, '▼') },
+      { label: 'Pijl verwijderen', icon: 'i-lucide-eraser', onSelect: () => setDeltaArrow(i, null) },
+    ],
+  ];
 }
 
 // Per-serie swatch (Pitch-patroon) — zelfde ramp-idee als de canvas-tinten.
@@ -105,7 +129,17 @@ function rowMenuItems(i: number): DropdownMenuItem[][] {
 }
 
 function seriesMenuItems(s: number): DropdownMenuItem[][] {
+  const percentOn = props.model.series[s].percent === true;
+  const percentItem: DropdownMenuItem = {
+    label: percentOn ? 'Procentteken verbergen' : 'Procentteken tonen',
+    icon: 'i-lucide-percent',
+    onSelect: () => emit('series-percent', s, !percentOn),
+  };
+  // Single-series types: alleen het procent-item (insert/delete is daar
+  // verborgen — serie 0 is de enige zichtbare kolom).
+  if (props.singleSeries) return [[percentItem]];
   return [
+    [percentItem],
     [
       {
         label: 'Serie links invoegen',
@@ -307,7 +341,6 @@ function categoryCellClass(i: number): string {
                   @update:model-value="(v: string | number) => emit('series-name', sIdx, String(v))"
                 />
                 <UDropdownMenu
-                  v-if="!singleSeries"
                   :items="seriesMenuItems(sIdx)"
                   :content="menuContent"
                   :ui="dropdownUi"
@@ -431,7 +464,7 @@ function categoryCellClass(i: number): string {
           </td>
           <td
             v-if="sIdx === 0 && showDeltaColumn"
-            class="border-b border-r border-muted px-1 py-0.5 last:border-r-0"
+            class="group/delta relative border-b border-r border-muted px-1 py-0.5 last:border-r-0"
           >
             <UInput
               :model-value="deltaOverrideValue(cIdx)"
@@ -439,10 +472,28 @@ function categoryCellClass(i: number): string {
               size="sm"
               variant="none"
               class="w-full"
-              :ui="{ base: 'text-right text-dimmed placeholder:text-dimmed/60' }"
+              :ui="{ base: 'pr-7 text-right text-dimmed placeholder:text-dimmed/60' }"
               :aria-label="'Delta-override rij ' + (cIdx + 1)"
               @update:model-value="(v: string | number) => emit('delta-override-edit', cIdx, String(v))"
             />
+            <UDropdownMenu
+              :items="deltaArrowMenuItems(cIdx)"
+              :content="cellMenuContent"
+              :ui="dropdownUi"
+              :modal="false"
+              size="xs"
+            >
+              <UButton
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                square
+                icon="i-lucide-arrow-up-down"
+                class="absolute right-0.5 top-1/2 -translate-y-1/2 opacity-0 transition-opacity hover:bg-muted/70 focus:opacity-100 group-focus-within/delta:opacity-70 group-hover/delta:opacity-70"
+                :aria-label="'Pijl voor delta rij ' + (cIdx + 1)"
+                :title="'Pijl voor delta rij ' + (cIdx + 1)"
+              />
+            </UDropdownMenu>
           </td>
           </template>
         </tr>

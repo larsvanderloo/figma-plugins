@@ -10,12 +10,15 @@
 // ============================================================
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type { ChartType, ChartWrapModel } from '../../../shared/types';
+import type { DropdownMenuItem } from '@nuxt/ui';
 import {
   CHART_MAX_CATEGORIES,
   CHART_MAX_SERIES,
   chartModelsEqual,
+  chartValueLabel,
   isSingleSeriesChartType,
   normalizeChartModel,
+  seriesTotal,
 } from '../../../shared/chart-calculations';
 import { debugLog } from '../../../shared/debug';
 import ChartGrid from './chart/ChartGrid.vue';
@@ -43,12 +46,17 @@ function cloneModel(model: ChartWrapModel): ChartWrapModel {
       name: s.name,
       values: s.values.slice(),
       emphasis: s.emphasis !== undefined ? s.emphasis.slice() : undefined,
+      percent: s.percent,
     })),
     showLegend: model.showLegend,
     showValues: model.showValues,
     showDelta: model.showDelta,
     deltaOverrides: model.deltaOverrides !== undefined ? model.deltaOverrides.slice() : undefined,
     progressMax: model.progressMax,
+    donutTotalOverride: model.donutTotalOverride,
+    donutTotalLabel: model.donutTotalLabel,
+    donutTotalEmphasis: model.donutTotalEmphasis,
+    donutTotalLabelEmphasis: model.donutTotalLabelEmphasis,
   });
 }
 
@@ -127,6 +135,61 @@ function setShowValues(v: boolean): void {
 function setShowDelta(v: boolean): void {
   local.value.showDelta = v;
   scheduleEmit('delta-toggle');
+}
+
+// T50.2 — procentteken per serie (kolom), zoals de tabel.
+function setSeriesPercent(s: number, v: boolean): void {
+  local.value.series[s].percent = v;
+  scheduleEmit('series-percent');
+}
+
+// T50.4 — donut center-totaal: override, onderschrift en nadruk.
+const donutTotalPlaceholder = computed<string>(() => {
+  if (local.value.series.length === 0) return '';
+  const serie = local.value.series[0];
+  return chartValueLabel(serie, seriesTotal(serie));
+});
+
+function setDonutTotalOverride(v: string): void {
+  local.value.donutTotalOverride = v;
+  scheduleEmit('donut-total');
+}
+
+function setDonutTotalLabel(v: string): void {
+  local.value.donutTotalLabel = v;
+  scheduleEmit('donut-total-label');
+}
+
+function donutTotalMenuItems(): DropdownMenuItem[][] {
+  const emphasized = local.value.donutTotalEmphasis !== false;
+  return [
+    [
+      {
+        label: emphasized ? 'Nadruk verwijderen' : 'Cel benadrukken',
+        icon: 'i-lucide-bold',
+        onSelect: () => {
+          local.value.donutTotalEmphasis = !emphasized;
+          scheduleEmit('donut-total-emphasis');
+        },
+      },
+    ],
+  ];
+}
+
+function donutLabelMenuItems(): DropdownMenuItem[][] {
+  const emphasized = local.value.donutTotalLabelEmphasis === true;
+  return [
+    [
+      {
+        label: emphasized ? 'Nadruk verwijderen' : 'Cel benadrukken',
+        icon: 'i-lucide-bold',
+        onSelect: () => {
+          local.value.donutTotalLabelEmphasis = !emphasized;
+          scheduleEmit('donut-label-emphasis');
+        },
+      },
+    ],
+  ];
 }
 
 // T50 — per-cel delta-override; lege string = auto.
@@ -319,6 +382,61 @@ function removeSeries(s: number): void {
       </template>
     </UFormField>
 
+    <div v-if="local.chartType === 'donut'" class="flex items-end gap-2">
+      <UFormField name="donut-total" label="Totaal" class="flex-1">
+        <div class="group/total relative">
+          <UInput
+            :model-value="local.donutTotalOverride !== undefined ? local.donutTotalOverride : ''"
+            :placeholder="donutTotalPlaceholder"
+            class="w-full"
+            :ui="{ base: (local.donutTotalEmphasis !== false ? 'font-semibold ' : '') + 'pr-7' }"
+            aria-label="Center-totaal override"
+            @update:model-value="(v: string | number) => setDonutTotalOverride(String(v))"
+          />
+          <UDropdownMenu
+            :items="donutTotalMenuItems()"
+            :modal="false"
+            size="xs"
+          >
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              square
+              icon="i-lucide-ellipsis"
+              class="absolute right-0.5 top-1/2 -translate-y-1/2 opacity-0 transition-opacity hover:bg-muted/70 focus:opacity-100 group-focus-within/total:opacity-70 group-hover/total:opacity-70"
+              aria-label="Menu voor totaal"
+              title="Menu voor totaal"
+            />
+          </UDropdownMenu>
+        </div>
+      </UFormField>
+      <UFormField name="donut-total-label" label="Onderschrift" class="flex-1">
+        <div class="group/sublabel relative">
+          <UInput
+            :model-value="local.donutTotalLabel !== undefined ? local.donutTotalLabel : 'totaal'"
+            placeholder="totaal"
+            class="w-full"
+            :ui="{ base: (local.donutTotalLabelEmphasis === true ? 'font-semibold ' : '') + 'pr-7' }"
+            aria-label="Onderschrift onder het totaal"
+            @update:model-value="(v: string | number) => setDonutTotalLabel(String(v))"
+          />
+          <UDropdownMenu :items="donutLabelMenuItems()" :modal="false" size="xs">
+            <UButton
+              color="neutral"
+              variant="ghost"
+              size="xs"
+              square
+              icon="i-lucide-ellipsis"
+              class="absolute right-0.5 top-1/2 -translate-y-1/2 opacity-0 transition-opacity hover:bg-muted/70 focus:opacity-100 group-focus-within/sublabel:opacity-70 group-hover/sublabel:opacity-70"
+              aria-label="Menu voor onderschrift"
+              title="Menu voor onderschrift"
+            />
+          </UDropdownMenu>
+        </div>
+      </UFormField>
+    </div>
+
     <p v-if="singleSeriesType && local.series.length > 1" class="text-xs text-dimmed">
       Dit grafiektype toont alleen de eerste serie.
     </p>
@@ -333,6 +451,7 @@ function removeSeries(s: number): void {
       @value-edit="setValue"
       @cell-emphasis="setCellEmphasis"
       @delta-override-edit="setDeltaOverride"
+      @series-percent="setSeriesPercent"
       @category-emphasis="setCategoryEmphasis"
       @add-category-before="(i: number) => insertCategoryAt(i)"
       @add-category-after="(i: number) => insertCategoryAt(i + 1)"

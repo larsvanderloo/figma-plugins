@@ -1,6 +1,10 @@
 // useChartEditor — binds the Graphs → Chart instance(s) to the store + bridge.
+//
+// T51.3 — geen selectie-state meer: de Graphs-tab toont ALLE chart-
+// instances als eigen editor-cards; updates routeren op het slotId in
+// het ge-emitte model.
 
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, reactive } from 'vue';
 import { debugLog } from '../../shared/debug';
 import { chartModelsEqual } from '../../shared/chart-calculations';
 import { usePluginView } from '../stores/usePluginView';
@@ -12,38 +16,15 @@ export function useChartEditor() {
   const bridge = usePluginBridge();
   const tracker = useBridgePending(bridge);
 
-  // T47: graphs.instances bevat tables én charts — filter op charts.
   const instances = computed<GraphInstance[]>(
     () => (view.state.graphs?.instances ?? []).filter((i) => i.chartModel != null),
   );
 
-  // Eigen selectie-state (de gedeelde selectedGraphId stuurt de
-  // table-sectie aan); default + resync naar de eerste chart-instance.
-  const selectedId = ref<string>('');
-  watch(
-    instances,
-    (next) => {
-      if (next.length === 0) {
-        selectedId.value = '';
-        return;
-      }
-      const stillThere = next.some((i) => i.nodeId === selectedId.value);
-      if (!stillThere) selectedId.value = next[0].nodeId;
-    },
-    { immediate: true },
-  );
-
-  const selected = computed<GraphInstance | null>(() => {
-    if (selectedId.value === '') return null;
-    return instances.value.find((i) => i.nodeId === selectedId.value) ?? null;
-  });
-
-  const model = computed<ChartWrapModel | null>(() => selected.value?.chartModel ?? null);
-
   function update(next: ChartWrapModel): void {
     const slideId = view.state.currentSlideId;
-    const inst = selected.value;
-    if (slideId === null || inst === null) return;
+    if (slideId === null) return;
+    const inst = instances.value.find((i) => i.chartModel?.slotId === next.slotId) ?? null;
+    if (inst === null) return;
 
     if (chartModelsEqual(inst.chartModel ?? null, next)) {
       debugLog('chart-editor', 'skip-duplicate-update', {
@@ -64,27 +45,23 @@ export function useChartEditor() {
     });
   }
 
-  function importCsv(csv: string): void {
+  function importCsvFor(slotId: string, csv: string): void {
     const slideId = view.state.currentSlideId;
-    const inst = selected.value;
-    if (slideId === null || inst === null || inst.chartModel == null) return;
+    if (slideId === null || slotId === '') return;
 
     tracker.register();
     bridge.post({
       type: 'import-chart-csv',
       slideId: slideId,
-      slotId: inst.chartModel.slotId,
+      slotId: slotId,
       csv: csv,
     });
   }
 
   return reactive({
     instances,
-    selectedId,
-    selected,
-    model,
     pending: tracker.pending,
     update,
-    importCsv,
+    importCsvFor,
   });
 }

@@ -13,13 +13,7 @@ const tableEditor = useTableEditor();
 const chartEditor = useChartEditor();
 
 const showSelector = computed<boolean>(() => tableEditor.instances.length >= 2);
-const showChartSelector = computed<boolean>(() => chartEditor.instances.length >= 2);
-const chartSelectorItems = computed(() => {
-  return chartEditor.instances.map((inst, idx) => ({
-    label: inst.label !== '' ? inst.label : `Grafiek ${idx + 1}`,
-    value: inst.nodeId,
-  }));
-});
+
 const selectorItems = computed(() => {
   return tableEditor.instances.map((inst, idx) => ({
     label: inst.label !== '' ? inst.label : `Tabel ${idx + 1}`,
@@ -62,27 +56,20 @@ const selectorItems = computed(() => {
     </EditorWrapper>
 
     <EditorWrapper v-if="chartEditor.instances.length > 0" title="Grafiek" data-tour="grafiek">
-      <WCard v-if="showChartSelector" title="Selectie">
-        <UFormField name="chart-instance" label="Grafiek">
-          <USelectMenu
-            v-model="chartEditor.selectedId"
-            :items="chartSelectorItems"
-            value-key="value"
-            class="w-full"
-          />
-        </UFormField>
-      </WCard>
-
-      <ChartEditor
-        v-if="
-          chartEditor.selected !== null &&
-          view.state.currentSlideId !== null &&
-          chartEditor.model !== null
-        "
-        :model-value="chartEditor.model"
-        @update:model-value="chartEditor.update"
-        @import-csv="chartEditor.importCsv"
-      />
+      <template v-for="(inst, idx) in chartEditor.instances" :key="inst.nodeId">
+        <p
+          v-if="chartEditor.instances.length > 1"
+          class="text-sm font-semibold text-default"
+        >
+          {{ inst.label !== '' ? inst.label : `Grafiek ${idx + 1}` }}
+        </p>
+        <ChartEditor
+          v-if="inst.chartModel != null && view.state.currentSlideId !== null"
+          :model-value="inst.chartModel"
+          @update:model-value="chartEditor.update"
+          @import-csv="(csv: string) => chartEditor.importCsvFor(inst.chartModel!.slotId, csv)"
+        />
+      </template>
     </EditorWrapper>
   </UContainer>
 </template>
