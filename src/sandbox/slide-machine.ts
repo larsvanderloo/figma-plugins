@@ -66,8 +66,8 @@ export function matchSurfaceSignature(node: SceneNode): SurfaceSignature | null 
  * wordt. Bounded op 20 hops — een TableWrap-slot zit typisch slide → ... →
  * TableWrap → Slot, ruim binnen 20, met harde safety-break.
  *
- * Gebruikt door de table-renderer om surface-passende breedte-presets te
- * kiezen (Slide 1920 vs Whitepaper 1240 hebben verschillende Slot-breedtes).
+ * Gebruikt door de table-renderer om surface-passende tabelbreedte te kiezen
+ * (Slide 1920 vs Whitepaper 1240 hebben verschillende Slot-breedtes).
  */
 export function findEnclosingSurfaceName(node: BaseNode): string | null {
   let cur: BaseNode | null = node;

@@ -13,6 +13,12 @@
 //   - applyTable(slot, desired) → full-state PUT (clear + rebuild)
 //
 // CSV-import zit in `./csv.ts` (split om de 200-LOC-budget te halen).
+// Idem voor de overige concerns: `./metrics.ts` (layout-metrics),
+// `./plugin-data.ts` (pluginData read/write), `./scan.ts` (slot-scan),
+// `./build-rows.ts` (body/header-rows), `./footer.ts` (footer-rij) en
+// `./sizing.ts` (width/autofit/truncation). Dit bestand is de composer;
+// de read-API wordt hieronder ge-re-exporteerd zodat importers
+// `./renderer` blijven zien.
 //
 // Theme-binding: cell-kleuren + row-dividers via `setBoundVariableForPaint`
 // op de library-variables `Text` + `Text Dimmer`. Theme-switching werkt
@@ -21,175 +27,50 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
-import { tableWidthsForSurface } from '../../../shared/constants';
+import type { TableWrapModel, TableRowModel } from '../../../shared/types';
+import {
+  TABLE_AUTOFIT_MIN_COL,
+  TABLE_AUTOFIT_MAX_COL_FRACTION,
+} from '../../../shared/constants';
+import { debugLog } from '../../../shared/debug';
+import {
+  computeNumericColumns,
+  computeTableColumnSummaries,
+  hasColumnCalculations,
+  normalizeColumnCalculations,
+  normalizeColumnEmphasis,
+  normalizeColumnLabels,
+} from '../../../shared/table-calculations';
 import { findEnclosingSurfaceName } from '../../slide-machine';
 import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from '../_shared/accent-vars';
+import { computeColumnWidths } from './column-autofit';
+import { createTextMeasurer } from './measure';
+import { getFontSizes, computeRowPadding, computeTableLayoutMetrics } from './metrics';
+import {
+  writeColumnCalculations,
+  writeColumnCalculationEmphasis,
+  writeColumnCalculationCurrency,
+  writeColumnCalculationPercent,
+  writeColumnCalculationLabel,
+} from './plugin-data';
+import { buildRow, buildHeaderRow } from './build-rows';
+import { buildFooterRow } from './footer';
+import {
+  buildColumnSpecs,
+  applyColumnSizing,
+  tableCellBudget,
+  applyBodyTruncation,
+  resolveTableRenderWidth,
+} from './sizing';
 
-type WidthKey = 'sm' | 'md' | 'lg';
-
-/**
- * Tekst-fontSize afgeleid van actual rowHeight (T39.1.1, v0.2.2).
- * Vervangt user-pick textSize én de eerdere rowCount-matrix uit T39.1.
- *
- * `rowHeight` is hier de OUTER row-height (= row's eigen FILL-share van de
- * container). Inner content-area per rij is rowHeight - 40 (rowFrame
- * paddingTop+paddingBottom = 20+20). De ratios 0.36/0.30 zijn empirisch
- * gekalibreerd op outer-rowHeight zodat heading + body comfortabel binnen
- * inner-area passen met line-height ~1.2.
- *
- * Formule:
- *   rowHeight = (slotHeight - 48) / rowCount        // T41.9: container.padding 24+24
- *   heading   = clamp(round(rowHeight * 0.36 * mult), 16, 40)
- *   body      = clamp(round(rowHeight * 0.30 * mult), 12, 32)
- *
- * Multiplier (T42.9 — textSize-picker terug):
- *   sm: 0.75 — kleinere tekst
- *   md: 1.00 — default
- *   lg: 1.25 — grotere tekst
- *
- * T42.9: width-clamp uit T42.6-T42.8 verwijderd. Responsiveness blijft
- * alleen op hoogte; user-control via textSize-picker (sm/md/lg).
- */
-function getFontSizes(
-  slotHeight: number,
-  rowCount: number,
-  textSize: 'sm' | 'md' | 'lg',
-): { heading: number; body: number } {
-  var safeRowCount = rowCount > 0 ? rowCount : 1;
-  var rowHeight = (slotHeight - 48) / safeRowCount;
-  if (rowHeight < 16) rowHeight = 16;
-  // T42.21: getoned-down clamps na user-feedback dat lg te groot was en
-  // sm niet klein genoeg. Drie altijd-onderscheiden waardes met
-  // realistischere typografie-range.
-  var mult: number;
-  var headingMin: number;
-  var headingMax: number;
-  var bodyMin: number;
-  var bodyMax: number;
-  if (textSize === 'sm') {
-    mult = 0.55;
-    headingMin = 12;
-    headingMax = 22;
-    bodyMin = 10;
-    bodyMax = 16;
-  } else if (textSize === 'lg') {
-    mult = 1.3;
-    headingMin = 24;
-    headingMax = 48;
-    bodyMin = 20;
-    bodyMax = 36;
-  } else {
-    mult = 1.0;
-    headingMin = 16;
-    headingMax = 32;
-    bodyMin = 14;
-    bodyMax = 24;
-  }
-
-  var heading = Math.round(rowHeight * 0.36 * mult);
-  if (heading < headingMin) heading = headingMin;
-  if (heading > headingMax) heading = headingMax;
-
-  var body = Math.round(rowHeight * 0.3 * mult);
-  if (body < bodyMin) body = bodyMin;
-  if (body > bodyMax) body = bodyMax;
-
-  return { heading: heading, body: body };
-}
-
-// -------------------------------------------------------------------
-// Scan — lees huidige Slot-content in een TableWrapModel
-// -------------------------------------------------------------------
-
-function readWidth(slot: SlotNode): WidthKey {
-  const v = slot.getPluginData('width');
-  if (v === 'sm' || v === 'md' || v === 'lg') return v;
-  return 'md';
-}
-
-/** T40 — leest of de tabel een header-rij heeft. Default false. */
-function readHasColumnHeader(slot: SlotNode): boolean {
-  return slot.getPluginData('hasColumnHeader') === '1';
-}
-
-/** T42.9 — leest textSize-preset (sm/md/lg). Default 'md'. */
-function readTextSize(slot: SlotNode): 'sm' | 'md' | 'lg' {
-  const v = slot.getPluginData('textSize');
-  if (v === 'sm' || v === 'md' || v === 'lg') return v;
-  return 'md';
-}
-
-/**
- * Lees de huidige Slot-inhoud. Row-FRAMEs heten `TableRow-*`,
- * cell-FRAMEs `TableItem-*`; overige kinderen worden overgeslagen.
- *
- * T39.2: legacy `textSize`-pluginData wordt niet meer gelezen — fontSize
- * wordt door applyTable afgeleid uit slot.height + rows.length.
- */
-export function scanTableSlot(slot: SlotNode): TableWrapModel {
-  // Legacy-detection (T34.4): oude v0.1.x slides hadden pluginData op de
-  // TableWrap-INSTANCE met `kind='welder-table'` + `v='2'`; nu zit de
-  // canonieke marker op de Slot zelf als `kind='welder-tablewrap'` + `v='3'`.
-  // Als we een oude marker zien, log het en ga door met canvas-truth
-  // (geen data-mapping, de canvas is leading).
-  const legacyKind = slot.getPluginData('kind');
-  const legacyV = slot.getPluginData('v');
-  if (legacyKind === 'welder-table' && legacyV === '2') {
-    console.log(
-      '[welder-slide-editor] T34.4 legacy pluginData detected (v0.1.x format) — using canvas-truth',
-    );
-  }
-
-  // Rows kunnen ofwel direct in de Slot staan (legacy layout, geen outer
-  // wrapper) of genest in een `WelderTableContent`-container (huidige layout
-  // met border+padding). Zoek eerst de container; fallback op slot.children.
-  let rowParent: SlotNode | FrameNode = slot;
-  for (let i = 0; i < slot.children.length; i++) {
-    const child = slot.children[i];
-    if (child.type === 'FRAME' && child.name === 'WelderTableContent') {
-      rowParent = child as FrameNode;
-      break;
-    }
-  }
-
-  const rows: TableRowModel[] = [];
-  for (let i = 0; i < rowParent.children.length; i++) {
-    const rowNode = rowParent.children[i];
-    if (rowNode.type !== 'FRAME') continue;
-    // T40: matcht óók TableHeaderRow zodat re-edit de header-rij niet verliest.
-    if (rowNode.name.indexOf('TableRow') !== 0 && rowNode.name.indexOf('TableHeaderRow') !== 0)
-      continue;
-    const rowFrame = rowNode as FrameNode;
-
-    const cells: TableCellModel[] = [];
-    for (let j = 0; j < rowFrame.children.length; j++) {
-      const cellNode = rowFrame.children[j];
-      if (cellNode.type !== 'FRAME') continue;
-      // T40: matcht óók TableHeaderItem (header-cells).
-      if (
-        cellNode.name.indexOf('TableItem') !== 0 &&
-        cellNode.name.indexOf('TableHeaderItem') !== 0
-      )
-        continue;
-      const cellFrame = cellNode as FrameNode;
-
-      const textNode = cellFrame.findOne((n: SceneNode) => n.type === 'TEXT');
-      const value =
-        textNode !== null && textNode.type === 'TEXT' ? (textNode as TextNode).characters : '';
-      cells.push({ cellNodeId: cellFrame.id, value: value });
-    }
-    rows.push({ rowNodeId: rowFrame.id, cells: cells });
-  }
-
-  return {
-    slotId: slot.id,
-    width: readWidth(slot),
-    hasColumnHeader: readHasColumnHeader(slot),
-    textSize: readTextSize(slot),
-    rows: rows,
-  };
-}
+export { scanTableSlot } from './scan';
+export {
+  readColumnCalculations,
+  readColumnCalculationEmphasis,
+  readColumnCalculationCurrency,
+  readColumnCalculationPercent,
+  readColumnCalculationLabel,
+} from './plugin-data';
 
 // -------------------------------------------------------------------
 // Apply — full-state PUT binnen de Slot
@@ -201,9 +82,8 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
  * - 2px border bound aan Text Dimmer
  * - 32px corner radius
  * - 32px horizontaal + 24px verticaal padding
- * Caller roept `container.resize(TABLE_WIDTHS[width], container.height)`
- * NA appendChild aan de Slot, zodat de container onafhankelijk van de
- * slot-breedte altijd de preset-breedte aanneemt (karakter-wrap-fix).
+ * Caller roept `container.resize(targetWidth, targetHeight)` NA appendChild
+ * aan de Slot, zodat de container de actuele Slot-afmetingen volgt.
  */
 function buildTableContainer(dimmerVar: Variable, dimmerRGB: RGB): FrameNode {
   const container = figma.createFrame();
@@ -239,346 +119,16 @@ function buildTableContainer(dimmerVar: Variable, dimmerRGB: RGB): FrameNode {
 }
 
 /**
- * Bouwt één cell-FRAME met TEXT-kind. Eerste kolom (j===0) krijgt
- * Instrument Sans SemiBold + heading-size; overige Inter Regular + body-size.
- * TEXT-fill is bound aan de `Text`-library-variable.
- * Caller zet `layoutSizingHorizontal='FILL'` + `layoutSizingVertical='HUG'`
- * NA appendChild aan de row (Figma-API-quirk).
- */
-function buildCell(
-  cell: TableCellModel,
-  j: number,
-  sizes: { heading: number; body: number },
-  textVar: Variable,
-  textRGB: RGB,
-): FrameNode {
-  const cellFrame = figma.createFrame();
-  cellFrame.name = 'TableItem-c' + String(j);
-  cellFrame.layoutMode = 'HORIZONTAL';
-  cellFrame.counterAxisSizingMode = 'AUTO';
-  cellFrame.primaryAxisSizingMode = 'FIXED';
-  cellFrame.fills = [];
-
-  const isFirst = j === 0;
-  const fontName: FontName = isFirst
-    ? { family: 'Instrument Sans', style: 'SemiBold' }
-    : { family: 'Inter', style: 'Regular' };
-
-  const t = figma.createText();
-  t.fontName = fontName;
-  t.fontSize = isFirst ? sizes.heading : sizes.body;
-  t.characters = cell.value;
-  t.textAutoResize = 'HEIGHT';
-  // T41.8: alle body-cells LEFT-aligned voor consistente, minimalistische
-  // look. Cells krijgen uniforme cell-width via FILL-distribution; padding
-  // tussen cells komt van row.itemSpacing (32).
-  t.textAlignHorizontal = 'LEFT';
-  // T42.10: maxLines + textTruncation verwijderd — body-text mag vrij
-  // wrappen zolang er ruimte is. Truncation eerder (T42.5) zorgde voor
-  // ge-trunceerde 1-regel wanneer wrapping juist beter was. Container
-  // clipsContent=true (T42.5) blijft visuele overflow voorkomen.
-  t.fills = [
-    figma.variables.setBoundVariableForPaint({ type: 'SOLID', color: textRGB }, 'color', textVar),
-  ];
-
-  cellFrame.appendChild(t);
-  try {
-    t.layoutSizingHorizontal = 'FILL';
-  } catch (_e) {
-    /* silent */
-  }
-  try {
-    t.layoutSizingVertical = 'HUG';
-  } catch (_e) {
-    /* silent */
-  }
-  return cellFrame;
-}
-
-/**
- * Bouwt één rij-FRAME met horizontale auto-layout. Rij 2+ krijgt een
- * top-stroke (1px) bound aan `Text Dimmer`.
- */
-/**
- * T43.4 — responsive row-padding op basis van bodyRowCount.
- * Bij weinig rijen: ruime padding voor breathing room. Bij veel rijen:
- * compactere padding zodat text-area per rij voldoende blijft.
- */
-function computeRowPadding(rowCount: number): number {
-  if (rowCount <= 3) return 28;
-  if (rowCount <= 6) return 20;
-  if (rowCount <= 9) return 14;
-  return 8; // 10-15 rijen
-}
-
-function buildRow(
-  row: TableRowModel,
-  i: number,
-  sizes: { heading: number; body: number },
-  textVar: Variable,
-  dimmerVar: Variable,
-  textRGB: RGB,
-  dimmerRGB: RGB,
-  rowPadding: number,
-): FrameNode {
-  const rowFrame = figma.createFrame();
-  rowFrame.name = 'TableRow-' + String(i);
-  rowFrame.layoutMode = 'HORIZONTAL';
-  rowFrame.counterAxisSizingMode = 'AUTO';
-  rowFrame.primaryAxisAlignItems = 'MIN';
-  rowFrame.counterAxisAlignItems = 'CENTER';
-  rowFrame.itemSpacing = 56;
-  rowFrame.paddingTop = rowPadding;
-  rowFrame.paddingBottom = rowPadding;
-  // T41.6: horizontal padding verhuisd vanaf container — top-dividers (i > 0)
-  // spannen nu de volle container.width en raken de container-borders.
-  rowFrame.paddingLeft = 32;
-  rowFrame.paddingRight = 32;
-  rowFrame.fills = [];
-
-  if (i > 0) {
-    rowFrame.strokes = [
-      figma.variables.setBoundVariableForPaint(
-        { type: 'SOLID', color: dimmerRGB },
-        'color',
-        dimmerVar,
-      ),
-    ];
-    rowFrame.strokeAlign = 'INSIDE';
-    rowFrame.strokeTopWeight = 1;
-    rowFrame.strokeBottomWeight = 0;
-    rowFrame.strokeLeftWeight = 0;
-    rowFrame.strokeRightWeight = 0;
-  } else {
-    rowFrame.strokes = [];
-  }
-
-  for (let j = 0; j < row.cells.length; j++) {
-    const cellFrame = buildCell(row.cells[j], j, sizes, textVar, textRGB);
-    rowFrame.appendChild(cellFrame);
-    // Modern sizing-API (vervangt legacy `layoutGrow=1`); MOET na appendChild.
-    try {
-      cellFrame.layoutSizingHorizontal = 'FILL';
-    } catch (_e) {
-      /* silent */
-    }
-    try {
-      cellFrame.layoutSizingVertical = 'HUG';
-    } catch (_e) {
-      /* silent */
-    }
-  }
-  return rowFrame;
-}
-
-/**
- * T40 / T41.2 / T41.3 — bouwt een header-cell met centered text in
- * Text-color, fontSize 22. Cells met j > 0 krijgen een 1px left-stroke
- * in Text Dimmer als verticale kolom-separator. Corner-cell (j===0)
- * heeft geen left-stroke (dat zou aan de container-binnenkant rusten).
- */
-function buildHeaderCell(
-  cell: TableCellModel,
-  j: number,
-  textVar: Variable,
-  textRGB: RGB,
-): FrameNode {
-  const cellFrame = figma.createFrame();
-  cellFrame.name = 'TableHeaderItem-c' + String(j);
-  cellFrame.layoutMode = 'HORIZONTAL';
-  // T41.5: cell-padding zodat row-edges (bottom-divider) blijven werken
-  // ook bij FILL-vertical cells.
-  cellFrame.counterAxisSizingMode = 'FIXED';
-  cellFrame.primaryAxisSizingMode = 'FIXED';
-  cellFrame.primaryAxisAlignItems = 'MIN';
-  cellFrame.counterAxisAlignItems = 'CENTER';
-  // T41.10: asymmetrische padding voor header-cell — 14 top / 24 bottom
-  // matcht user's canvas-design (header-text iets dichter naar de top).
-  cellFrame.paddingTop = 14;
-  cellFrame.paddingBottom = 24;
-  cellFrame.fills = [];
-
-  // T41.8: verticale cell-separators verwijderd — minimalistische look.
-
-  const t = figma.createText();
-  // T41.10: header → Inter Medium + Text-color (full contrast) per
-  // user-edits direct op canvas. Was Inter Regular + Text Dimmer (T41.9).
-  t.fontName = { family: 'Inter', style: 'Medium' };
-  t.fontSize = 18;
-  t.characters = cell.value;
-  t.textAutoResize = 'HEIGHT';
-  t.textAlignHorizontal = 'LEFT';
-  // T42.4: lange header-text wrapt anders naar meerdere regels en duwt
-  // row HUG-vertical enorm op. Single-line + ellipsis = clean grid look.
-  try {
-    t.maxLines = 1;
-  } catch (_e) {
-    /* silent — oudere Figma API */
-  }
-  try {
-    t.textTruncation = 'ENDING';
-  } catch (_e) {
-    /* silent */
-  }
-  t.fills = [
-    figma.variables.setBoundVariableForPaint({ type: 'SOLID', color: textRGB }, 'color', textVar),
-  ];
-
-  cellFrame.appendChild(t);
-  try {
-    t.layoutSizingHorizontal = 'FILL';
-  } catch (_e) {
-    /* silent */
-  }
-  try {
-    t.layoutSizingVertical = 'HUG';
-  } catch (_e) {
-    /* silent */
-  }
-  return cellFrame;
-}
-
-/**
- * T40 / T41.8 — bouwt de header-rij. HUG-vertical (compact), 2px bottom-
- * border in Text Dimmer. Cells minimaal: muted Text Dimmer color,
- * left-aligned, 18px Instrument Sans SemiBold, geen verticale separators.
- */
-function buildHeaderRow(
-  row: TableRowModel,
-  textVar: Variable,
-  dimmerVar: Variable,
-  textRGB: RGB,
-  dimmerRGB: RGB,
-): FrameNode {
-  const rowFrame = figma.createFrame();
-  rowFrame.name = 'TableHeaderRow';
-  rowFrame.layoutMode = 'HORIZONTAL';
-  rowFrame.counterAxisSizingMode = 'AUTO';
-  rowFrame.primaryAxisAlignItems = 'MIN';
-  rowFrame.counterAxisAlignItems = 'CENTER';
-  rowFrame.itemSpacing = 56;
-  // T41.5: padding verhuisd naar cell-niveau (24+24 op elke cell) zodat
-  // cells FILL-vertical kunnen en verticale strokes tot row-edges reiken
-  // (raken bottom-divider). Row zelf heeft nu 0 vertical padding.
-  rowFrame.paddingTop = 0;
-  rowFrame.paddingBottom = 0;
-  // T41.6: horizontal padding 32 (was 0) — verhuisd vanaf container zodat
-  // de bottom-divider full container.width spant en de container-borders
-  // raakt op beide hoeken.
-  rowFrame.paddingLeft = 32;
-  rowFrame.paddingRight = 32;
-  rowFrame.fills = [];
-
-  // Bottom-divider in Text Dimmer — 2px voor duidelijke header-body-scheiding.
-  rowFrame.strokes = [
-    figma.variables.setBoundVariableForPaint(
-      { type: 'SOLID', color: dimmerRGB },
-      'color',
-      dimmerVar,
-    ),
-  ];
-  rowFrame.strokeAlign = 'INSIDE';
-  rowFrame.strokeTopWeight = 0;
-  rowFrame.strokeBottomWeight = 2;
-  rowFrame.strokeLeftWeight = 0;
-  rowFrame.strokeRightWeight = 0;
-
-  for (let j = 0; j < row.cells.length; j++) {
-    const cellFrame = buildHeaderCell(row.cells[j], j, textVar, textRGB);
-    rowFrame.appendChild(cellFrame);
-    try {
-      cellFrame.layoutSizingHorizontal = 'FILL';
-    } catch (_e) {
-      /* silent */
-    }
-    // T41.5: cells FILL vertical zodat strokes de volle row-hoogte beslaan.
-    try {
-      cellFrame.layoutSizingVertical = 'FILL';
-    } catch (_e) {
-      /* silent */
-    }
-  }
-  return rowFrame;
-}
-
-/**
- * T42.18 — direct cell+text FILL-vertical + textTruncation. Vervangt
- * de maxLines-berekening (T42.16/T42.17) die niet betrouwbaar werkte.
- *
- * Aanpak:
- * 1. Cell layoutSizingVertical = 'FILL' → cell.height = row's FILL-share.
- * 2. Text layoutSizingHorizontal/Vertical = 'FILL' → text exact cell-bounds.
- * 3. Text textTruncation = 'ENDING' + textAutoResize = 'NONE' → Figma
- *    truncate't visueel wanneer content niet past in cell-bounds.
- *
- * Geen maxLines-formule meer nodig — Figma doet de math native via FILL.
- */
-function applyBodyTruncation(bodyRows: FrameNode[]): void {
-  for (var r = 0; r < bodyRows.length; r++) {
-    var row = bodyRows[r];
-
-    for (var c = 0; c < row.children.length; c++) {
-      var cell = row.children[c];
-      if (cell.type !== 'FRAME') continue;
-      var cellFrame = cell as FrameNode;
-
-      // Cell vertical FILL → cell.height = row.FILL-share. Vereist
-      // counterAxisSizingMode='FIXED' (was 'AUTO' = HUG).
-      try {
-        cellFrame.counterAxisSizingMode = 'FIXED';
-      } catch (_e) {
-        /* silent */
-      }
-      try {
-        cellFrame.layoutSizingVertical = 'FILL';
-      } catch (_e) {
-        /* silent */
-      }
-
-      var t = cellFrame.findOne(function (n: SceneNode): boolean {
-        return n.type === 'TEXT';
-      });
-      if (t === null || t.type !== 'TEXT') continue;
-
-      var textNode = t as TextNode;
-      // Text fills cell-bounds exact. textAutoResize='NONE' = beide
-      // dimensies zijn extern bepaald (via FILL).
-      try {
-        textNode.textAutoResize = 'NONE';
-      } catch (_e) {
-        /* silent */
-      }
-      try {
-        textNode.layoutSizingHorizontal = 'FILL';
-      } catch (_e) {
-        /* silent */
-      }
-      try {
-        textNode.layoutSizingVertical = 'FILL';
-      } catch (_e) {
-        /* silent */
-      }
-      try {
-        textNode.textTruncation = 'ENDING';
-      } catch (_e) {
-        /* silent */
-      }
-    }
-  }
-}
-
-/**
  * Full-state PUT: clear alle Slot-children en bouw opnieuw uit `desired`.
- * Persisteer `width` + migration-marker op pluginData. (T39.2: textSize-write
- * verwijderd — fontSize wordt rendertime afgeleid uit slot.height + rowCount.)
+ * Persisteer `hasColumnHeader` + migration-marker op pluginData. (T44:
+ * width/textSize-keys worden actief gewist — tabelbreedte volgt de actuele
+ * Slot-breedte, fontSize wordt rendertime afgeleid uit slot.height + rowCount.)
  *
- * Width-strategie (T37-fix — karakter-wrap in smalle slots):
- * 1. Probeer parent-chain (TableWrap-instance, dan Slot) te resizen naar
- *    `TABLE_WIDTHS[width]` zodat het omringende layout mee-schaalt.
- * 2. Zet EXPLICIT `container.resize(...)` zodat de content altijd de
- *    preset-breedte heeft, ook als slot/parent niet konden resizen
- *    (container overflow't dan visueel — user-feedback om slide-layout
- *    aan te passen).
+ * Width-strategie:
+ * - Container rendert full-width binnen de actuele Slot-breedte.
+ * - Surface presets zijn alleen fallback voor legacy/invalid slots.
+ * - De renderer pusht TableWrap/Slot niet meer terug naar de surface-width,
+ *   zodat toekomstige smallere slot-varianten automatisch gevolgd worden.
  *
  * Silent-fallback wanneer library-vars niet geladen kunnen worden:
  * pluginData wordt nog steeds geschreven, alleen de content-rebuild
@@ -603,11 +153,45 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     }
   }
 
-  // Surface-aware breedte: een Slide (1920) en een Whitepaper (1240) hebben
-  // verschillende Slot-breedte-presets. Bepaal de omsluitende surface vanaf
-  // de Slot en kies de bijbehorende preset-tabel; onbekend → Slide-default.
+  // Pad ragged rows (CSV-import kan rijen met minder cellen leveren) tot een
+  // rechthoek — FIXED kolom-breedtes mogen niet per rij verspringen.
+  let columnCount = 0;
+  for (let i = 0; i < desired.rows.length; i++) {
+    if (desired.rows[i].cells.length > columnCount) columnCount = desired.rows[i].cells.length;
+  }
+  for (let i = 0; i < desired.rows.length; i++) {
+    const cells = desired.rows[i].cells;
+    while (cells.length < columnCount) cells.push({ cellNodeId: '', value: '' });
+  }
+  const columnCalculations = normalizeColumnCalculations(desired.columnCalculations, columnCount);
+  const columnCalculationEmphasis = normalizeColumnEmphasis(
+    desired.columnCalculationEmphasis,
+    columnCount,
+  );
+  const columnCalculationCurrency = normalizeColumnEmphasis(
+    desired.columnCalculationCurrency,
+    columnCount,
+  );
+  const columnCalculationPercent = normalizeColumnEmphasis(
+    desired.columnCalculationPercent,
+    columnCount,
+  );
+  const columnCalculationLabel = normalizeColumnLabels(
+    desired.columnCalculationLabel,
+    columnCount,
+  );
+  // T46.1/T46.3 — getallen-kolommen worden volledig rechts uitgelijnd
+  // (Notion/Excel number-column-stijl): header, body én footer. De
+  // detectie is content-driven via computeNumericColumns — '45' telt,
+  // '45 mensen' niet — onafhankelijk van een som-toggle.
+  const rightAlignColumns = computeNumericColumns(
+    desired.rows,
+    desired.hasColumnHeader && desired.rows.length > 0,
+    columnCount,
+  );
+
   const surfaceName = findEnclosingSurfaceName(slot);
-  const desiredWidth = tableWidthsForSurface(surfaceName)[desired.width];
+  const targetWidth = resolveTableRenderWidth(slot, surfaceName, columnCount);
 
   if (vars.text !== null && vars.dimmer !== null) {
     const textRGB = resolveColor(vars.text, slot, { r: 1, g: 0.957, b: 0.918 });
@@ -618,31 +202,14 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     const container = buildTableContainer(vars.dimmer, dimmerRGB);
     slot.appendChild(container);
 
-    // Probeer de parent-chain (TableWrap-INSTANCE, dan Slot) te resizen
-    // zodat het omringende layout mee-schaalt. Silent-fallback wanneer
-    // parents in auto-layout constraint-locked zijn.
-    const slotParent = slot.parent;
-    if (slotParent !== null && 'resize' in slotParent) {
-      try {
-        const p = slotParent as FrameNode | InstanceNode;
-        p.resize(desiredWidth, p.height);
-      } catch (_e) {
-        /* silent — TableWrap kan locked zijn in auto-layout Layout */
-      }
-    }
-    try {
-      slot.resize(desiredWidth, slot.height);
-    } catch (_e) {
-      /* silent — slot kan auto-layout-managed zijn */
-    }
-
     // T39.1.1: SlotNode host geen auto-layout-FILL-children — `layoutSizingVertical='FILL'`
     // faalt silent voor slot-kinderen. Gebruik EXPLICIETE resize naar slot.height,
-    // vergelijkbaar met de bestaande T38 width-resize-strategie.
+    // en naar de gemeten slot.width zodat content met toekomstige
+    // smallere slot-varianten meebeweegt.
     // Container blijft FIXED in beide assen (al ingesteld in buildTableContainer).
     const targetHeight = slot.height > 0 ? slot.height : container.height;
     try {
-      container.resize(desiredWidth, targetHeight);
+      container.resize(targetWidth, targetHeight);
     } catch (_e) {
       /* silent — slot/container kan resize-locked zijn */
     }
@@ -656,11 +223,6 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     // echo-guard zodat de user's in-progress structure niet geclobberd wordt
     // door de canvas-truth scan na een filter-shrink (zie 2026-05-07 fix).
     const hasHeader = desired.hasColumnHeader && desired.rows.length > 0;
-
-    // T41.10: container.paddingTop conditioneel — 17px bij header (header-cell
-    // heeft eigen 14/24 padding wat dit balanceert), 24px zonder header voor
-    // symmetrische breathing room rond de eerste body-row.
-    container.paddingTop = hasHeader ? 17 : 24;
 
     const effectiveRows: TableRowModel[] = [];
     for (let i = 0; i < desired.rows.length; i++) {
@@ -681,15 +243,63 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     // T40 — body-fontSize-formule: alleen body-rijen krijgen FILL;
     // header reserveert ~50px van de slot-hoogte (text-area + 16+16 padding).
     const HEADER_HEIGHT_ESTIMATE = 50;
+    const FOOTER_HEIGHT_ESTIMATE = 40;
     const bodyRowCount = hasHeader ? effectiveRows.length - 1 : effectiveRows.length;
-    const adjustedSlotHeight = hasHeader ? slot.height - HEADER_HEIGHT_ESTIMATE : slot.height;
-    // T42.9: width-clamp uit T42.6-T42.8 verwijderd. Alleen hoogte +
-    // textSize-multiplier (sm/md/lg user-pick).
-    const sizes = getFontSizes(
-      adjustedSlotHeight,
-      bodyRowCount > 0 ? bodyRowCount : 1,
-      desired.textSize,
+    const hasFooter = hasColumnCalculations(columnCalculations);
+    const footerSummaries = computeTableColumnSummaries(
+      desired.rows,
+      hasHeader,
+      columnCalculations,
+      columnCount,
+      columnCalculationEmphasis,
+      columnCalculationCurrency,
+      columnCalculationPercent,
     );
+    const adjustedSlotHeight =
+      slot.height - (hasHeader ? HEADER_HEIGHT_ESTIMATE : 0) - (hasFooter ? FOOTER_HEIGHT_ESTIMATE : 0);
+    const metrics = computeTableLayoutMetrics(columnCount, bodyRowCount);
+    container.paddingLeft = metrics.containerPadX;
+    container.paddingRight = metrics.containerPadX;
+    container.paddingTop = hasHeader ? metrics.headerPadTop + 3 : metrics.headerPadBottom;
+    container.paddingBottom = metrics.headerPadBottom;
+
+    // T44: fontSize volledig automatisch uit hoogte + rowCount.
+    const sizes = getFontSizes(adjustedSlotHeight, bodyRowCount > 0 ? bodyRowCount : 1);
+
+    const cellBudget = tableCellBudget(targetWidth, columnCount, metrics);
+    const columnSpecs = buildColumnSpecs(
+      effectiveRows,
+      hasHeader,
+      sizes,
+      columnCount,
+      footerSummaries,
+    );
+    const measurer = createTextMeasurer();
+    const measured = measurer !== null;
+    let colWidths: number[] = [];
+    try {
+      colWidths = computeColumnWidths(
+        columnSpecs,
+        {
+          totalWidth: cellBudget,
+          minColWidth: TABLE_AUTOFIT_MIN_COL,
+          maxColFraction: TABLE_AUTOFIT_MAX_COL_FRACTION,
+        },
+        measurer !== null ? measurer.measure : null,
+      );
+    } finally {
+      if (measurer !== null) measurer.dispose();
+    }
+    debugLog('table', 'autofit', {
+      colWidths: colWidths,
+      budget: cellBudget,
+      targetWidth: targetWidth,
+      slotWidth: slot.width,
+      measured: measured,
+      gap: metrics.rowGap,
+      rowPadX: metrics.rowPadX,
+      containerPadX: metrics.containerPadX,
+    });
 
     // T42.16: collect body-rows voor post-FILL truncation pass.
     const bodyRows: FrameNode[] = [];
@@ -697,7 +307,16 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     for (let i = 0; i < effectiveRows.length; i++) {
       let rowFrame: FrameNode;
       if (hasHeader && i === 0) {
-        rowFrame = buildHeaderRow(effectiveRows[i], vars.text, vars.dimmer, textRGB, dimmerRGB);
+        rowFrame = buildHeaderRow(
+          effectiveRows[i],
+          vars.text,
+          vars.dimmer,
+          textRGB,
+          dimmerRGB,
+          rightAlignColumns,
+          metrics,
+        );
+        applyColumnSizing(rowFrame, colWidths);
         container.appendChild(rowFrame);
         try {
           rowFrame.layoutSizingHorizontal = 'FILL';
@@ -724,7 +343,10 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
           textRGB,
           dimmerRGB,
           rowPadding,
+          rightAlignColumns,
+          metrics,
         );
+        applyColumnSizing(rowFrame, colWidths);
         container.appendChild(rowFrame);
         try {
           rowFrame.layoutSizingHorizontal = 'FILL';
@@ -741,6 +363,32 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
       }
     }
 
+    if (hasFooter) {
+      const footerRow = buildFooterRow(
+        footerSummaries,
+        columnCalculationLabel,
+        sizes,
+        vars.text,
+        textRGB,
+        vars.dimmer,
+        dimmerRGB,
+        computeRowPadding(bodyRowCount),
+        metrics,
+      );
+      applyColumnSizing(footerRow, colWidths);
+      container.appendChild(footerRow);
+      try {
+        footerRow.layoutSizingHorizontal = 'FILL';
+      } catch (_e) {
+        /* silent */
+      }
+      try {
+        footerRow.layoutSizingVertical = 'HUG';
+      } catch (_e) {
+        /* silent */
+      }
+    }
+
     // T42.18: cell + text beide FILL-vertical → text fills exact cell-bounds,
     // textTruncation='ENDING' truncate't visueel. Geen analytische berekening
     // meer nodig; Figma doet de math native.
@@ -749,9 +397,15 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     console.log('[welder-slide-editor] applyTable: library-vars missing, skipping rebuild');
   }
 
-  slot.setPluginData('width', desired.width);
+  // T44: stale width/textSize-keys actief wissen (lege string = delete).
+  slot.setPluginData('width', '');
+  slot.setPluginData('textSize', '');
   slot.setPluginData('hasColumnHeader', desired.hasColumnHeader ? '1' : '0');
-  slot.setPluginData('textSize', desired.textSize); // T42.9: re-introduced
+  writeColumnCalculations(slot, columnCalculations, columnCount);
+  writeColumnCalculationEmphasis(slot, columnCalculationEmphasis, columnCount);
+  writeColumnCalculationCurrency(slot, columnCalculationCurrency, columnCount);
+  writeColumnCalculationPercent(slot, columnCalculationPercent, columnCount);
+  writeColumnCalculationLabel(slot, columnCalculationLabel, columnCount);
   slot.setPluginData('kind', 'welder-tablewrap');
-  slot.setPluginData('v', '3');
+  slot.setPluginData('v', '4');
 }

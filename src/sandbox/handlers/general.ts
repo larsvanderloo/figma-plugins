@@ -181,6 +181,9 @@ export async function handleSetTypographyVisibility(
         paragraphVisible: msg.field === 'paragraph' ? msg.visible : undefined,
       });
     }
+    if (msg.field === 'heading' || msg.field === 'paragraph') {
+      await refreshTablesOnSlide(visSlide);
+    }
   } catch (e) {
     console.log('[set-typography-visibility] failed: ' + String(e));
     postToUI({
@@ -190,6 +193,7 @@ export async function handleSetTypographyVisibility(
     });
     return;
   }
+  markSelfWrite();
   postToUI({ type: 'target-updated', ok: true, targetId: visSlide.id });
   return;
 }
@@ -232,6 +236,7 @@ export async function handleSetCopywrapSize(
     const overrides: { [k: string]: string } = {};
     overrides[sizeHostInfo.key] = msg.size;
     sizeHostInfo.host.setProperties(overrides);
+    await refreshTablesOnSlide(sizeSlide);
   } catch (e) {
     console.log('[set-copywrap-size] setProperties failed: ' + String(e));
     postToUI({
@@ -241,6 +246,7 @@ export async function handleSetCopywrapSize(
     });
     return;
   }
+  markSelfWrite();
   postToUI({ type: 'target-updated', ok: true, targetId: sizeHostInfo.host.id });
   return;
 }

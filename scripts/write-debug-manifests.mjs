@@ -1,9 +1,13 @@
-import { copyFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
+import vm from 'node:vm';
 import { createSyncRunner, readPackageVersion, watchPathsForChange } from './lib.mjs';
 
 const rootDir = process.cwd();
 const watchMode = process.argv.includes('--watch');
+const copyRetries = watchMode ? 10 : 3;
+const copyRetryDelayMs = 100;
 
 const manifests = [
   {
@@ -30,23 +34,62 @@ function assertLocalManifestPath(manifestPath, field) {
   }
 }
 
-async function copyManifestAsset(targetDir, manifestPath, field) {
+function isJavaScriptAsset(relativePath) {
+  return relativePath.endsWith('.js');
+}
+
+function assertBundleText(relativePath, text, version) {
+  if (!text.includes(version)) {
+    throw new Error(`${relativePath} does not contain package version ${version}`);
+  }
+
+  if (!isJavaScriptAsset(relativePath)) {
+    return;
+  }
+
+  try {
+    new vm.Script(text, { filename: relativePath });
+  } catch (error) {
+    throw new Error(`${relativePath} is not valid JavaScript: ${error.message}`);
+  }
+}
+
+async function copyManifestAsset(targetDir, manifestPath, field, version) {
   assertLocalManifestPath(manifestPath, field);
 
   const sourcePath = path.resolve(rootDir, manifestPath);
   const targetPath = path.resolve(targetDir, manifestPath);
+  const sourceRelativePath = path.relative(rootDir, sourcePath);
+  const targetRelativePath = path.relative(rootDir, targetPath);
 
   await mkdir(path.dirname(targetPath), { recursive: true });
-  await copyFile(sourcePath, targetPath);
 
-  return sourcePath;
-}
+  let lastError;
+  for (let attempt = 1; attempt <= copyRetries; attempt += 1) {
+    const tempPath = `${targetPath}.${process.pid}.${attempt}.tmp`;
 
-async function assertCopiedBundleVersion(relativePath, version) {
-  const text = await readFile(path.resolve(rootDir, relativePath), 'utf8');
-  if (!text.includes(version)) {
-    throw new Error(`${relativePath} does not contain package version ${version}`);
+    try {
+      const sourceText = await readFile(sourcePath, 'utf8');
+      assertBundleText(sourceRelativePath, sourceText, version);
+
+      await writeFile(tempPath, sourceText);
+      const tempText = await readFile(tempPath, 'utf8');
+      assertBundleText(targetRelativePath, tempText, version);
+      await rename(tempPath, targetPath);
+
+      return sourcePath;
+    } catch (error) {
+      lastError = error;
+      await rm(tempPath, { force: true });
+
+      if (attempt < copyRetries) {
+        await delay(copyRetryDelayMs * attempt);
+      }
+    }
   }
+
+  throw lastError;
+
 }
 
 async function writeDebugManifests() {
@@ -64,10 +107,8 @@ async function writeDebugManifests() {
 
     await mkdir(targetDir, { recursive: true });
     await writeFile(targetPath, `${JSON.stringify(manifest, null, 2)}\n`);
-    watchedSources.add(await copyManifestAsset(targetDir, manifest.main, 'main'));
-    watchedSources.add(await copyManifestAsset(targetDir, manifest.ui, 'ui'));
-    await assertCopiedBundleVersion(path.relative(rootDir, path.resolve(targetDir, manifest.main)), version);
-    await assertCopiedBundleVersion(path.relative(rootDir, path.resolve(targetDir, manifest.ui)), version);
+    watchedSources.add(await copyManifestAsset(targetDir, manifest.main, 'main', version));
+    watchedSources.add(await copyManifestAsset(targetDir, manifest.ui, 'ui', version));
     console.log(`[debug-manifest] wrote ${target}`);
   }
 

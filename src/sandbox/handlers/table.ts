@@ -7,8 +7,9 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { postToUI } from '../bridge';
-import { findSlideById } from '../slides';
+import { markSelfWrite, postToUI } from '../bridge';
+import { findSlideById, summaryForSlide } from '../slides';
+import { scanSlide } from '../scan/slide-scan';
 import { applyTable } from '../editors/table/renderer';
 import { importCSV } from '../editors/table/csv';
 import type { UIToPluginMessage } from '../../shared/types';
@@ -38,6 +39,7 @@ export async function handleUpdateTable(
   }
   figma.commitUndo();
   await applyTable(slotNode as SlotNode, msg.desired);
+  markSelfWrite();
   postToUI({
     type: 'target-updated',
     ok: true,
@@ -49,8 +51,8 @@ export async function handleUpdateTable(
 export async function handleImportCsv(
   msg: Extract<UIToPluginMessage, { type: 'import-csv' }>,
 ): Promise<void> {
-  // T34.2 / T39.2: parse + truncate + applyTable. Width blijft behouden
-  // (gelezen uit pluginData) — import verandert alleen row/cel-inhoud.
+  // T34.2 / T44: parse + truncate + applyTable. Import verandert alleen
+  // row/cel-inhoud; de tabel rendert rendertime full-width per surface.
   const slide = await findSlideById(msg.slideId);
   if (slide === null) {
     postToUI({
@@ -71,10 +73,28 @@ export async function handleImportCsv(
   }
   figma.commitUndo();
   await importCSV(slotNode as SlotNode, msg.csv);
+  markSelfWrite();
   postToUI({
     type: 'target-updated',
     ok: true,
     targetId: msg.slotId,
   });
+  // Re-sync de iframe-grid met de geïmporteerde data. De UI stuurde
+  // alleen ruwe CSV-tekst, dus kent de geparste rijen niet; de
+  // documentchange-route is bovendien onderdrukt door markSelfWrite().
+  // Expliciete scan + slide-loaded post — zelfde patroon als
+  // handleTriggerUndo in handlers/slide.ts.
+  try {
+    const scan = await scanSlide(slide);
+    postToUI({
+      type: 'slide-loaded',
+      summary: summaryForSlide(slide),
+      general: scan.general,
+      content: scan.content,
+      graphs: scan.graphs,
+    });
+  } catch (err: unknown) {
+    console.log('[welder-slide-editor] post-import scanSlide failed:', err);
+  }
   return;
 }

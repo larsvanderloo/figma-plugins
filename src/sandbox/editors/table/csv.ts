@@ -13,9 +13,8 @@
 // formats — bv. een cel "Acme, Inc.,100" werd in 3 cellen geknipt en
 // liet de quotes letterlijk op de waarde staan.
 //
-// Truncate naar TABLE_MAX_ROWS rijen en TABLE_MAX_COLS[width] kolommen.
-// De Slot-width wordt niet gewijzigd door import — user blijft in control
-// via de width-picker.
+// Truncate naar TABLE_MAX_ROWS rijen en TABLE_MAX_COLS kolommen (T44:
+// flat max — de Slot-breedte rendert altijd full-width per surface).
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
@@ -23,33 +22,22 @@
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../shared/constants';
 import { tokenize } from '../../../shared/csv';
-import { applyTable } from './renderer';
-
-type WidthKey = 'sm' | 'md' | 'lg';
-
-function readWidth(slot: SlotNode): WidthKey {
-  const v = slot.getPluginData('width');
-  if (v === 'sm' || v === 'md' || v === 'lg') return v;
-  return 'md';
-}
+import {
+  applyTable,
+  readColumnCalculations,
+  readColumnCalculationEmphasis,
+  readColumnCalculationCurrency,
+  readColumnCalculationPercent,
+  readColumnCalculationLabel,
+} from './renderer';
 
 function readHasColumnHeader(slot: SlotNode): boolean {
   // T40: '1' = true, alles anders (incl. afwezig) = false (default).
   return slot.getPluginData('hasColumnHeader') === '1';
 }
 
-function readTextSize(slot: SlotNode): 'sm' | 'md' | 'lg' {
-  // T42.9: textSize-preset terug, default 'md'.
-  const v = slot.getPluginData('textSize');
-  if (v === 'sm' || v === 'md' || v === 'lg') return v;
-  return 'md';
-}
-
 export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
-  const width = readWidth(slot);
   const hasColumnHeader = readHasColumnHeader(slot);
-  const textSize = readTextSize(slot);
-  const maxCols = TABLE_MAX_COLS[width];
 
   const tokenized = tokenize(csv);
   const rows: TableRowModel[] = [];
@@ -68,7 +56,7 @@ export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
     if (allEmpty) continue;
 
     const cells: TableCellModel[] = [];
-    for (let j = 0; j < row.length && cells.length < maxCols; j++) {
+    for (let j = 0; j < row.length && cells.length < TABLE_MAX_COLS; j++) {
       // T42.16: input-cap verwijderd; truncation gebeurt rendertime via
       // maxLines+textTruncation in renderer.ts.
       cells.push({ cellNodeId: '', value: row[j].trim() });
@@ -77,12 +65,19 @@ export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
       rows.push({ rowNodeId: '', cells: cells });
     }
   }
+  let columnCount = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].cells.length > columnCount) columnCount = rows[i].cells.length;
+  }
 
   const desired: TableWrapModel = {
     slotId: slot.id,
-    width: width,
     hasColumnHeader: hasColumnHeader,
-    textSize: textSize,
+    columnCalculations: readColumnCalculations(slot, columnCount),
+    columnCalculationEmphasis: readColumnCalculationEmphasis(slot, columnCount),
+    columnCalculationCurrency: readColumnCalculationCurrency(slot, columnCount),
+    columnCalculationPercent: readColumnCalculationPercent(slot, columnCount),
+    columnCalculationLabel: readColumnCalculationLabel(slot, columnCount),
     rows: rows,
   };
   await applyTable(slot, desired);

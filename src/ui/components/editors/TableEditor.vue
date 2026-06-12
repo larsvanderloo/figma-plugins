@@ -1,13 +1,11 @@
 <script setup lang="ts">
-import { computed, ref, watch, onBeforeUnmount } from 'vue';
-import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
+import type { TableWrapModel } from '../../../shared/types';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../shared/constants';
-import { tokenize } from '../../../shared/csv';
-import { useNotifications } from '../../stores/useNotifications';
-import WInput from '../ui/WInput.vue';
+import { useTableEditorState } from './table/useTableEditorState';
+import { useTableMutations } from './table/useTableMutations';
+import { useCsvImport } from './table/useCsvImport';
+import TableGrid from './table/TableGrid.vue';
 import WCard from '../ui/WCard.vue';
-
-const notifications = useNotifications();
 
 interface Props {
   modelValue: TableWrapModel;
@@ -20,349 +18,51 @@ const emit = defineEmits<{
   'import-csv': [csv: string];
 }>();
 
-type SizeKey = 'sm' | 'md' | 'lg';
+const state = useTableEditorState(props, emit);
+const {
+  localHasColumnHeader,
+  localRows,
+  localColumnCalculations,
+  localColumnCalculationEmphasis,
+  localColumnCalculationCurrency,
+  localColumnCalculationPercent,
+  localColumnCalculationLabel,
+  currentCols,
+} = state;
 
-const SIZE_OPTIONS: Array<{ value: SizeKey; label: string }> = [
-  { value: 'sm', label: 'Klein' },
-  { value: 'md', label: 'Middel' },
-  { value: 'lg', label: 'Groot' },
-];
-function cloneRows(rows: TableRowModel[]): TableRowModel[] {
-  let maxLen = 0;
-  for (let i = 0; i < rows.length; i++) {
-    if (rows[i].cells.length > maxLen) maxLen = rows[i].cells.length;
-  }
-  const out: TableRowModel[] = [];
-  for (let i = 0; i < rows.length; i++) {
-    const cells: TableCellModel[] = [];
-    for (let j = 0; j < rows[i].cells.length; j++) {
-      cells.push({
-        cellNodeId: rows[i].cells[j].cellNodeId,
-        value: rows[i].cells[j].value,
-      });
-    }
-    while (cells.length < maxLen) cells.push({ cellNodeId: '', value: '' });
-    out.push({ rowNodeId: rows[i].rowNodeId, cells: cells });
-  }
-  return out;
-}
-const localWidth = ref<SizeKey>(props.modelValue.width);
-const localTextSize = ref<SizeKey>(props.modelValue.textSize);
-const localHasColumnHeader = ref<boolean>(props.modelValue.hasColumnHeader);
-const localRows = ref<TableRowModel[]>(cloneRows(props.modelValue.rows));
+const {
+  gridStatus,
+  setHasColumnHeader,
+  updateCell,
+  setCellEmphasis,
+  setColumnCalculation,
+  setColumnCalculationEmphasis,
+  setColumnCalculationCurrency,
+  setColumnCalculationPercent,
+  setColumnLabel,
+  insertRowBefore,
+  insertRowAfter,
+  removeRow,
+  insertColumnBefore,
+  insertColumnAfter,
+  removeColumn,
+  moveRow,
+  moveColumn,
+  pasteMatrix,
+} = useTableMutations(state);
 
-const maxCols = computed<number>(() => TABLE_MAX_COLS[localWidth.value]);
-const canAddRow = computed<boolean>(() => localRows.value.length < TABLE_MAX_ROWS);
-const currentCols = computed<number>(() =>
-  localRows.value.length > 0 ? localRows.value[0].cells.length : 0,
-);
-const canAddColumn = computed<boolean>(
-  () => localRows.value.length > 0 && currentCols.value < maxCols.value,
-);
-const bodyRowOffset = computed<number>(() => (localHasColumnHeader.value ? 1 : 0));
-watch(
-  () => props.modelValue.width,
-  (next) => {
-    if (next !== localWidth.value) localWidth.value = next;
-  },
-);
-
-watch(
-  () => props.modelValue.hasColumnHeader,
-  (next) => {
-    if (next !== localHasColumnHeader.value) localHasColumnHeader.value = next;
-  },
-);
-
-watch(
-  () => props.modelValue.textSize,
-  (next) => {
-    if (next !== localTextSize.value) localTextSize.value = next;
-  },
-);
-function rowsDiffer(a: TableRowModel[], b: TableRowModel[]): boolean {
-  if (a.length !== b.length) return true;
-  for (let i = 0; i < a.length; i++) {
-    if (a[i].cells.length !== b[i].cells.length) return true;
-    if (a[i].rowNodeId !== b[i].rowNodeId) return true;
-    for (let j = 0; j < a[i].cells.length; j++) {
-      if (a[i].cells[j].value !== b[i].cells[j].value) return true;
-      if (a[i].cells[j].cellNodeId !== b[i].cells[j].cellNodeId) return true;
-    }
-  }
-  return false;
-}
-let echoExpected = false;
-let echoResetTimer: ReturnType<typeof setTimeout> | null = null;
-
-watch(
-  () => props.modelValue.rows,
-  (next) => {
-    if (echoExpected) return;
-    if (rowsDiffer(next, localRows.value)) localRows.value = cloneRows(next);
-  },
-);
-let debounceTimer: ReturnType<typeof setTimeout> | null = null;
-
-function scheduleEmit(): void {
-  if (debounceTimer !== null) clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(() => {
-    debounceTimer = null;
-    echoExpected = true;
-    if (echoResetTimer !== null) clearTimeout(echoResetTimer);
-    echoResetTimer = setTimeout(() => {
-      echoExpected = false;
-      echoResetTimer = null;
-    }, 2000);
-    emit('update:modelValue', {
-      slotId: props.modelValue.slotId,
-      width: localWidth.value,
-      hasColumnHeader: localHasColumnHeader.value,
-      textSize: localTextSize.value,
-      rows: cloneRows(localRows.value),
-    });
-  }, 200);
-}
-
-onBeforeUnmount(() => {
-  if (debounceTimer !== null) clearTimeout(debounceTimer);
-  if (lastImportTimer !== null) clearTimeout(lastImportTimer);
-  if (echoResetTimer !== null) clearTimeout(echoResetTimer);
-});
-function setWidth(w: SizeKey): void {
-  if (localWidth.value === w) return;
-  localWidth.value = w;
-  scheduleEmit();
-}
-
-function setHasColumnHeader(v: boolean): void {
-  if (localHasColumnHeader.value === v) return;
-  localHasColumnHeader.value = v;
-  scheduleEmit();
-}
-
-function setTextSize(s: SizeKey): void {
-  if (localTextSize.value === s) return;
-  localTextSize.value = s;
-  scheduleEmit();
-}
-
-function onWidthChange(value: string | number | undefined): void {
-  if (value === 'sm' || value === 'md' || value === 'lg') setWidth(value);
-}
-
-function onTextSizeChange(value: string | number | undefined): void {
-  if (value === 'sm' || value === 'md' || value === 'lg') setTextSize(value);
-}
-
-function addRow(): void {
-  if (!canAddRow.value) return;
-  const cellCount = currentCols.value > 0 ? Math.min(currentCols.value, maxCols.value) : 1;
-  const cells: TableCellModel[] = [];
-  for (let j = 0; j < cellCount; j++) cells.push({ cellNodeId: '', value: '' });
-  localRows.value.push({ rowNodeId: '', cells: cells });
-  scheduleEmit();
-}
-
-function removeRow(i: number): void {
-  if (i < 0 || i >= localRows.value.length) return;
-  localRows.value.splice(i, 1);
-  scheduleEmit();
-}
-
-function addColumn(): void {
-  if (!canAddColumn.value) return;
-  for (let i = 0; i < localRows.value.length; i++) {
-    localRows.value[i].cells.push({ cellNodeId: '', value: '' });
-  }
-  scheduleEmit();
-}
-
-function removeColumn(j: number): void {
-  if (j < 0 || j >= currentCols.value) return;
-  for (let i = 0; i < localRows.value.length; i++) {
-    if (j < localRows.value[i].cells.length) {
-      localRows.value[i].cells.splice(j, 1);
-    }
-  }
-  scheduleEmit();
-}
-
-function updateCell(i: number, j: number, value: string): void {
-  const row = localRows.value[i];
-  if (row === undefined) return;
-  const cell = row.cells[j];
-  if (cell === undefined || cell.value === value) return;
-  cell.value = value;
-  scheduleEmit();
-}
-const csvText = ref<string>('');
-const csvUploadFile = ref<File | null>(null);
-const csvError = ref<string>('');
-
-function validateCSV(text: string): string {
-  const rows = tokenize(text).rows;
-  const nonEmpty = rows.filter((r) => r.some((c) => c.length > 0));
-  if (nonEmpty.length === 0) return 'CSV is leeg.';
-  if (nonEmpty.length > TABLE_MAX_ROWS) {
-    return `Maximum ${TABLE_MAX_ROWS} rijen — CSV heeft er ${nonEmpty.length}.`;
-  }
-  for (let i = 0; i < nonEmpty.length; i++) {
-    const cellCount = nonEmpty[i].length;
-    if (cellCount > maxCols.value) {
-      return `Rij ${i + 1}: ${cellCount} kolommen — max ${maxCols.value} bij breedte ${localWidth.value}.`;
-    }
-  }
-  return '';
-}
-const lastImport = ref<{ fileName: string | null; rows: number; cols: number } | null>(null);
-let lastImportTimer: ReturnType<typeof setTimeout> | null = null;
-
-function clearLastImport(): void {
-  lastImport.value = null;
-  if (lastImportTimer !== null) {
-    clearTimeout(lastImportTimer);
-    lastImportTimer = null;
-  }
-}
-
-function recordImport(text: string, fileName: string | null): void {
-  const rows = tokenize(text).rows.filter((r) => r.some((c) => c.length > 0));
-  const cols = rows.reduce((m, r) => (r.length > m ? r.length : m), 0);
-  lastImport.value = { fileName, rows: rows.length, cols };
-  if (lastImportTimer !== null) clearTimeout(lastImportTimer);
-  lastImportTimer = setTimeout(clearLastImport, 10_000);
-}
-
-function applyCSV(fileName: string | null = null): void {
-  const text = csvText.value.trim();
-  if (text === '') return;
-  const err = validateCSV(text);
-  if (err !== '') {
-    csvError.value = err;
-    notifications.pushError('CSV-import mislukt', err);
-    return;
-  }
-  csvError.value = '';
-  emit('import-csv', text);
-  recordImport(text, fileName);
-  csvText.value = '';
-}
-
-function onCsvFileChange(file: File | null | undefined): void {
-  if (file === null || file === undefined) return;
-  clearLastImport();
-  const reader = new FileReader();
-  reader.onload = () => {
-    csvText.value = String(reader.result !== null ? reader.result : '');
-    applyCSV(file.name);
-    csvUploadFile.value = null;
-  };
-  reader.readAsText(file);
-}
-watch(
-  () => props.modelValue.slotId,
-  () => {
-    clearLastImport();
-  },
-);
-
-watch(csvText, () => {
-  if (csvError.value !== '') csvError.value = '';
-});
+const { csvUploadFile, csvError, lastImport, onCsvFileChange } = useCsvImport(props, emit);
 </script>
 
 <template>
   <WCard>
-    <UFormField name="table-width" label="Breedte">
-      <UTabs
-        :model-value="localWidth"
-        :items="SIZE_OPTIONS"
-        value-key="value"
-        color="neutral"
-        variant="pill"
-        size="xs"
-        :content="false"
-        :ui="{ trigger: 'h-7 px-2 py-0', indicator: 'bg-inverted/15' }"
-        @update:model-value="onWidthChange"
-      />
-    </UFormField>
-    <UFormField name="table-text-size" label="Tekstgrootte">
-      <URadioGroup
-        :model-value="localTextSize"
-        :items="SIZE_OPTIONS"
-        value-key="value"
-        variant="card"
-        orientation="horizontal"
-        indicator="hidden"
-        :ui="{ fieldset: 'grid grid-cols-3 gap-2', item: 'min-w-0' }"
-        @update:model-value="onTextSizeChange"
-      >
-        <template #label="{ item }">
-          <span
-            class="flex flex-col items-center gap-1 px-3 py-2 transition-colors"
-            :class="
-              localTextSize === item.value
-                ? 'text-primary'
-                : 'text-default'
-            "
-          >
-            <span
-              class="font-semibold"
-              :class="item.value === 'sm' ? 'text-xs' : item.value === 'lg' ? 'text-xl' : 'text-base'"
-            >Aa</span>
-            <span class="text-xs text-muted">{{ item.label }}</span>
-          </span>
-        </template>
-      </URadioGroup>
-    </UFormField>
-
-    <USeparator />
-
     <div class="flex items-center gap-3">
       <span class="text-xs text-muted">{{ localRows.length }} / {{ TABLE_MAX_ROWS }} rijen</span>
-      <span class="text-xs text-muted">{{ currentCols }} / {{ maxCols }} kolommen</span>
+      <span class="text-xs text-muted">{{ currentCols }} / {{ TABLE_MAX_COLS }} kolommen</span>
     </div>
 
-    <UEmpty
-      v-if="localRows.length === 0"
-      icon="i-lucide-table"
-      description="Tabel is leeg — voeg een rij toe om te starten."
-      variant="naked"
-    >
-      <template #actions>
-        <UButton color="neutral" variant="soft" icon="i-lucide-plus" @click="addRow">
-          Eerste rij toevoegen
-        </UButton>
-      </template>
-    </UEmpty>
-
-    <template v-else>
-      <span class="text-xs font-medium text-muted">Kolommen</span>
-      <div class="flex flex-wrap items-center gap-2">
-        <UButton
-          v-for="j in currentCols"
-          :key="'colchip-' + j"
-          color="neutral"
-          variant="subtle"
-          trailing-icon="i-lucide-x"
-          :aria-label="`Verwijder kolom ${j}`"
-          @click="removeColumn(j - 1)"
-          >Kolom {{ j }}</UButton
-        >
-        <UButton
-          color="neutral"
-          variant="ghost"
-          icon="i-lucide-plus"
-          :disabled="!canAddColumn"
-          @click="addColumn"
-          >Kolom toevoegen</UButton
-        >
-      </div>
-
-      <USeparator />
-
-      <div class="flex items-center justify-between gap-2">
+    <div class="flex flex-wrap items-center gap-2">
+      <div class="flex items-center gap-2">
         <span class="text-sm font-semibold text-default">Koprij</span>
         <USwitch
           :model-value="localHasColumnHeader"
@@ -371,65 +71,37 @@ watch(csvText, () => {
           @update:model-value="(v: boolean) => setHasColumnHeader(v)"
         />
       </div>
-      <UCollapsible v-if="localRows.length > 0" :open="localHasColumnHeader">
-        <template #content>
-          <div
-            v-for="(cell, j) in localRows[0].cells"
-            :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'kolomkop-' + j"
-            class="grid grid-cols-[80px_1fr] items-center gap-3"
-          >
-            <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-            <WInput
-              :model-value="cell.value"
-              :placeholder="`Waarde voor kolom ${j + 1}`"
-              @update:model-value="(v: string) => updateCell(0, j, v)"
-            />
-          </div>
-        </template>
-      </UCollapsible>
+    </div>
 
-      <template
-        v-for="(row, idx) in localRows"
-        :key="row.rowNodeId !== '' ? row.rowNodeId : 'row-' + idx"
-      >
-        <template v-if="idx >= bodyRowOffset">
-          <USeparator />
-          <div class="flex items-center justify-between gap-2">
-            <span class="text-sm font-semibold text-default"
-              >Rij {{ idx + 1 - bodyRowOffset }}</span
-            >
-            <UButton
-              color="neutral"
-              variant="ghost"
-              icon="i-lucide-x"
-              :aria-label="`Verwijder rij ${idx + 1 - bodyRowOffset}`"
-              @click="removeRow(idx)"
-            />
-          </div>
-          <div
-            v-for="(cell, j) in row.cells"
-            :key="cell.cellNodeId !== '' ? cell.cellNodeId : 'row-' + idx + '-' + j"
-            class="grid grid-cols-[80px_1fr] items-center gap-3"
-          >
-            <span class="text-xs font-medium text-muted">Kolom {{ j + 1 }}</span>
-            <WInput
-              :model-value="cell.value"
-              :placeholder="`Waarde voor kolom ${j + 1}`"
-              @update:model-value="(v: string) => updateCell(idx, j, v)"
-            />
-          </div>
-        </template>
-      </template>
-      <UButton
-        color="neutral"
-        variant="subtle"
-        icon="i-lucide-plus"
-        :disabled="!canAddRow"
-        block
-        @click="addRow"
-        >Rij toevoegen</UButton
-      >
-    </template>
+    <TableGrid
+      :rows="localRows"
+      :has-column-header="localHasColumnHeader"
+      :column-calculations="localColumnCalculations"
+      :column-calculation-emphasis="localColumnCalculationEmphasis"
+      :column-calculation-currency="localColumnCalculationCurrency"
+      :column-calculation-percent="localColumnCalculationPercent"
+      :column-calculation-label="localColumnCalculationLabel"
+      :max-rows="TABLE_MAX_ROWS"
+      :max-cols="TABLE_MAX_COLS"
+      @cell-edit="updateCell"
+      @cell-style="setCellEmphasis"
+      @column-calculation="setColumnCalculation"
+      @column-calculation-emphasis="setColumnCalculationEmphasis"
+      @column-calculation-currency="setColumnCalculationCurrency"
+      @column-calculation-percent="setColumnCalculationPercent"
+      @column-calculation-label="setColumnLabel"
+      @add-row-before="insertRowBefore"
+      @add-row-after="insertRowAfter"
+      @remove-row="removeRow"
+      @add-column-before="insertColumnBefore"
+      @add-column-after="insertColumnAfter"
+      @remove-column="removeColumn"
+      @move-row="moveRow"
+      @move-column="moveColumn"
+      @paste-matrix="pasteMatrix"
+    />
+
+    <div class="sr-only" aria-live="polite">{{ gridStatus }}</div>
 
     <USeparator />
 
@@ -438,7 +110,7 @@ watch(csvText, () => {
       accept=".csv,text/csv"
       icon="i-lucide-folder-plus"
       label="Sleep je CSV hier of klik om te bladeren"
-      :description="`Max ${TABLE_MAX_ROWS} rijen · ${maxCols} kolommen bij breedte ${localWidth}.`"
+      :description="`Max ${TABLE_MAX_ROWS} rijen · ${TABLE_MAX_COLS} kolommen.`"
       color="neutral"
       :preview="false"
       reset
@@ -464,7 +136,7 @@ watch(csvText, () => {
       </span>
     </div>
     <div v-else class="text-xs text-muted">
-      Max {{ TABLE_MAX_ROWS }} rijen · {{ maxCols }} kolommen bij breedte {{ localWidth }}.
+      Max {{ TABLE_MAX_ROWS }} rijen · {{ TABLE_MAX_COLS }} kolommen.
     </div>
   </WCard>
 </template>
