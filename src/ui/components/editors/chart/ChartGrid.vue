@@ -51,6 +51,10 @@ const shownSeries = computed(() =>
   props.singleSeries ? props.model.series.slice(0, 1) : props.model.series,
 );
 const showDeltaColumn = computed<boolean>(() => props.model.showDelta === true);
+// T53.2 — kolommen na de categorie: zichtbare series + optionele delta-kolom.
+const colCount = computed<number>(
+  () => shownSeries.value.length + (showDeltaColumn.value ? 1 : 0),
+);
 
 function deltaPlaceholder(i: number): string {
   const auto = chartDeltaDisplay(
@@ -319,6 +323,11 @@ function categoryCellClass(i: number): string {
   <div class="overflow-x-auto rounded-sm border border-muted bg-default">
     <table class="w-full border-separate border-spacing-0 text-sm">
       <caption class="sr-only">Grafiekdata bewerken</caption>
+      <colgroup>
+        <col class="w-8" />
+        <col class="min-w-28" />
+        <col v-for="cgi in colCount" :key="'cg-' + cgi" class="w-16" />
+      </colgroup>
       <thead>
         <tr class="bg-muted/30 text-dimmed">
           <th scope="col" class="w-9 border-b border-r border-default px-1 py-1">
@@ -438,7 +447,7 @@ function categoryCellClass(i: number): string {
               size="sm"
               variant="none"
               class="w-full"
-              :ui="{ base: 'pr-7 text-right ' + cellClass(sIdx, cIdx) }"
+              :ui="{ base: 'px-1 text-center tabular-nums [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none ' + cellClass(sIdx, cIdx) }"
               :aria-label="'Waarde ' + (serie.name !== '' ? serie.name : 'serie ' + (sIdx + 1)) + ', ' + category"
               @update:model-value="(v: string | number) => emit('value-edit', sIdx, cIdx, v)"
               @keydown.enter.prevent="onEnter(sIdx, cIdx)"

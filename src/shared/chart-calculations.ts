@@ -17,7 +17,7 @@ import { formatTableNumber } from './table-calculations';
 export const CHART_MAX_CATEGORIES = 12;
 export const CHART_MAX_SERIES = 4;
 
-export const CHART_TYPES: ChartType[] = ['donut', 'pie', 'bar', 'progress', 'line'];
+export const CHART_TYPES: ChartType[] = ['donut', 'pie', 'bar', 'progress', 'line', 'matrix'];
 
 export function isChartType(value: string): value is ChartType {
   for (let i = 0; i < CHART_TYPES.length; i++) {

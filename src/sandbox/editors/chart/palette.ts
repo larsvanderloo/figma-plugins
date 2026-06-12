@@ -40,3 +40,25 @@ export function cardRamp(light: RGB, accent: RGB, count: number): RGB[] {
 export function trackPaint(light: RGB): SolidPaint {
   return { type: 'SOLID', color: light, opacity: 0.3 };
 }
+
+/**
+ * T53 — matrix-cel-tint: blend van de lichte kaart-tint naar de accent
+ * o.b.v. een genormaliseerde waarde (0 = licht, 1 = vol accent). Geclampt
+ * op 0.85 zodat de donkerste cel leesbaar blijft tegen de kaart.
+ */
+export function cellTint(light: RGB, accent: RGB, t: number): RGB {
+  let clamped = t;
+  if (clamped < 0) clamped = 0;
+  if (clamped > 1) clamped = 1;
+  // T53.4 — schoon licht→accent verloop zoals de donut-segmenten: start
+  // bij near-white (niet de cream-kaartkleur, die maakt lichte cellen
+  // modderig), eindig op de accent. Lege/0-cel = near-white ≈ kaart.
+  const near = { r: 0.99, g: 0.97, b: 0.95 };
+  return blend(near, accent, clamped * 0.92);
+}
+
+/** T53 — zwart of wit tekst op een cel-tint o.b.v. luminantie. */
+export function readableTextOn(bg: RGB): RGB {
+  const lum = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b;
+  return lum > 0.6 ? { r: 0.15, g: 0.12, b: 0.1 } : { r: 1, g: 1, b: 1 };
+}
