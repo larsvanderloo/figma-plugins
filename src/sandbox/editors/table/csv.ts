@@ -14,7 +14,7 @@
 // liet de quotes letterlijk op de waarde staan.
 //
 // Truncate naar TABLE_MAX_ROWS rijen en TABLE_MAX_COLS kolommen (T44:
-// flat max — de Slot-breedte volgt rendertime het kolom-aantal).
+// flat max — de Slot-breedte rendert altijd full-width per surface).
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
@@ -22,7 +22,12 @@
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../shared/constants';
 import { tokenize } from '../../../shared/csv';
-import { applyTable } from './renderer';
+import {
+  applyTable,
+  readColumnCalculations,
+  readColumnCalculationEmphasis,
+  readColumnCalculationCurrency,
+} from './renderer';
 
 function readHasColumnHeader(slot: SlotNode): boolean {
   // T40: '1' = true, alles anders (incl. afwezig) = false (default).
@@ -58,10 +63,17 @@ export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
       rows.push({ rowNodeId: '', cells: cells });
     }
   }
+  let columnCount = 0;
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i].cells.length > columnCount) columnCount = rows[i].cells.length;
+  }
 
   const desired: TableWrapModel = {
     slotId: slot.id,
     hasColumnHeader: hasColumnHeader,
+    columnCalculations: readColumnCalculations(slot, columnCount),
+    columnCalculationEmphasis: readColumnCalculationEmphasis(slot, columnCount),
+    columnCalculationCurrency: readColumnCalculationCurrency(slot, columnCount),
     rows: rows,
   };
   await applyTable(slot, desired);
