@@ -14,7 +14,7 @@
 // ============================================================
 
 /** Ondersteunde chart-types; per instance switchbaar in de editor. */
-export type ChartType = 'donut' | 'pie' | 'bar' | 'progress' | 'line';
+export type ChartType = 'donut' | 'pie' | 'bar' | 'progress' | 'line' | 'matrix';
 
 /** Eén data-serie: naam + één waarde per categorie. */
 export interface ChartSeriesModel {

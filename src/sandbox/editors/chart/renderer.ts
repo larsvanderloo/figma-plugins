@@ -36,6 +36,7 @@ import { buildDonut } from './donut';
 import { buildBars } from './bars';
 import { buildProgress } from './progress';
 import { buildLine } from './line';
+import { buildMatrix } from './matrix';
 
 export { readChartModel } from './plugin-data';
 
@@ -244,6 +245,8 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
       content = buildBars(model, contentW, contentH, ramp, theme, labelSize, deltaCtx);
     } else if (model.chartType === 'progress') {
       content = buildProgress(model, contentW, contentH, ramp, lightRGB, theme, labelSize, deltaCtx);
+    } else if (model.chartType === 'matrix') {
+      content = buildMatrix(model, contentW, contentH, lightRGB, accentRGB, theme, labelSize);
     } else {
       content = buildLine(model, contentW, contentH, ramp, lightRGB, theme, labelSize, deltaCtx);
     }

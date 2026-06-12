@@ -107,6 +107,7 @@ const chartTypeItems = [
   { label: 'Staafdiagram', value: 'bar', icon: 'i-lucide-chart-column' },
   { label: 'Voortgangsbalken', value: 'progress', icon: 'i-lucide-chart-no-axes-gantt' },
   { label: 'Lijndiagram', value: 'line', icon: 'i-lucide-chart-line' },
+  { label: 'Prestatiematrix', value: 'matrix', icon: 'i-lucide-grid-3x3' },
 ] as const;
 
 function setChartType(next: ChartType): void {
