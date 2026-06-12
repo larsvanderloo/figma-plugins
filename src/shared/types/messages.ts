@@ -10,6 +10,7 @@ import type { TitleDescriptionPayload, BadgePayload, GeneralSections } from './g
 import type { ContentItems } from './content';
 import type { GraphItems } from './graphs';
 import type { TableWrapModel } from './table';
+import type { ChartWrapModel } from './chart';
 import type { SlideSummary, PluginRuntimeInfo } from './runtime';
 
 /**
@@ -107,6 +108,17 @@ export type UIToPluginMessage =
       slideId: string;
       slotId: string;
       desired: TableWrapModel;
+    }
+  | {
+      /**
+       * Full-state PUT van een ChartWrap (T47). `slotId` identificeert de
+       * SlotNode binnen de ChartWrap-INSTANCE; `desired` is het complete
+       * gewenste chart-model (type, categories, series, weergave-opties).
+       */
+      type: 'update-chart';
+      slideId: string;
+      slotId: string;
+      desired: ChartWrapModel;
     }
   | {
       /**

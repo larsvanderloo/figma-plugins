@@ -7,6 +7,7 @@
 // ============================================================
 
 import type { TableWrapModel } from './table';
+import type { ChartWrapModel } from './chart';
 
 /**
  * Eén bewerkbaar TableWrap-instance binnen de Graphs-tab.
@@ -21,8 +22,15 @@ export interface GraphInstance {
   /**
    * Slot-based table-model. `null` wanneer de TableWrap geen Slot bevat
    * (nieuwe variant zonder inhoud) óf wanneer de scan geen rijen vindt.
+   * Precies één van tableModel/chartModel is non-null per instance.
    */
   tableModel: TableWrapModel | null;
+  /**
+   * Slot-based chart-model (T47). `null` voor table-instances of wanneer
+   * de ChartWrap geen Slot bevat. Verse charts krijgen een default-model
+   * van de scan zodat de editor direct kan bewerken.
+   */
+  chartModel?: ChartWrapModel | null;
 }
 
 export interface GraphItems {
