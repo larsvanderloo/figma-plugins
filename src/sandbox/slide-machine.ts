@@ -176,8 +176,16 @@ function findFirstInstance(
   predicate: (n: InstanceNode) => boolean,
 ): InstanceNode | null {
   const found = slide.findOne((n: SceneNode) => {
-    if (n.type !== 'INSTANCE') return false;
-    return predicate(n as InstanceNode);
+    // T50.6 — dynamic-pages kunnen stale instance-sublayers aanbieden
+    // tijdens een interleaved rebuild (chart-clones): property-access
+    // (n.type/n.name) gooit dan "node does not exist". Stale nodes
+    // matchen nooit.
+    try {
+      if (n.type !== 'INSTANCE') return false;
+      return predicate(n as InstanceNode);
+    } catch (_e) {
+      return false;
+    }
   });
   if (found === null) return null;
   if (found.type !== 'INSTANCE') return null;
@@ -330,6 +338,116 @@ export function findTableSlot(slide: InstanceNode): SlotNode | null {
   if (slot === null) return null;
   if (slot.type !== 'SLOT') return null;
   return slot as SlotNode;
+}
+
+/**
+ * ChartWrap: instances die een chart representeren (T47).
+ * Matcht:
+ *   - legacy exacte naam `ChartWrap`
+ *   - Slide Machine variant-namen met `Chart` erin (`Chart=`,
+ *     `Property 1=... Chart ...`) — spiegel van findTableWrap, maar dan
+ *     mét Chart-vereiste i.p.v. Chart-uitsluiting.
+ * ES2017-compat: indexOf i.p.v. startsWith/includes.
+ */
+export function findChartWrap(slide: InstanceNode): InstanceNode | null {
+  return findFirstInstance(slide, (n) => {
+    if (n.name === 'ChartWrap') return true;
+    if (n.name.indexOf('Chart=') === 0 && n.name.indexOf('Timeline') < 0) return true;
+    if (
+      n.name.indexOf('Property 1=') === 0 &&
+      n.name.indexOf('Chart') >= 0 &&
+      n.name.indexOf('Timeline') < 0
+    ) {
+      return true;
+    }
+    return false;
+  });
+}
+
+/**
+ * Locate de SlotNode binnen de ChartWrap-INSTANCE van een slide —
+ * zelfde wandeling als findTableSlot: slide → ChartWrap → Slot.
+ */
+export function findChartSlot(slide: InstanceNode): SlotNode | null {
+  const chartWrap = findChartWrap(slide);
+  if (chartWrap === null) return null;
+  const slot = chartWrap.findOne((n: SceneNode) => n.type === 'SLOT');
+  if (slot === null) return null;
+  if (slot.type !== 'SLOT') return null;
+  return slot as SlotNode;
+}
+
+/**
+ * T51 — alle TableWrap-instances op een slide/whitepaper (zelfde
+ * matcher als findTableWrap). Slides kunnen meerdere wrappers dragen;
+ * de Graphs-tab toont ze via de instance-selector.
+ */
+export function findAllTableWraps(slide: InstanceNode): InstanceNode[] {
+  return findAllInstances(slide, isTableWrapName);
+}
+
+/** T51 — alle ChartWrap-instances (zelfde matcher als findChartWrap). */
+export function findAllChartWraps(slide: InstanceNode): InstanceNode[] {
+  return findAllInstances(slide, isChartWrapName);
+}
+
+/** T51 — SlotNode binnen een specifieke wrap-instance. */
+export function findSlotInWrap(wrap: InstanceNode): SlotNode | null {
+  const slot = wrap.findOne((n: SceneNode) => n.type === 'SLOT');
+  if (slot === null) return null;
+  if (slot.type !== 'SLOT') return null;
+  return slot as SlotNode;
+}
+
+function isTableWrapName(n: InstanceNode): boolean {
+  if (n.name === 'TableWrap') return true;
+  if (n.name.indexOf('Tabel=') === 0 && n.name.indexOf('Timeline') < 0) return true;
+  if (n.name.indexOf('Table=') === 0 && n.name.indexOf('Timeline') < 0) return true;
+  if (
+    n.name.indexOf('Property 1=') === 0 &&
+    n.name.indexOf('Timeline') < 0 &&
+    n.name.indexOf('Chart') < 0
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function isChartWrapName(n: InstanceNode): boolean {
+  if (n.name === 'ChartWrap') return true;
+  if (n.name.indexOf('Chart=') === 0 && n.name.indexOf('Timeline') < 0) return true;
+  if (
+    n.name.indexOf('Property 1=') === 0 &&
+    n.name.indexOf('Chart') >= 0 &&
+    n.name.indexOf('Timeline') < 0
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function findAllInstances(
+  slide: InstanceNode,
+  predicate: (n: InstanceNode) => boolean,
+): InstanceNode[] {
+  const out: InstanceNode[] = [];
+  try {
+    const found = slide.findAll((n: SceneNode) => {
+      // Zelfde stale-node-guard als findFirstInstance (T50.6).
+      try {
+        if (n.type !== 'INSTANCE') return false;
+        return predicate(n as InstanceNode);
+      } catch (_e) {
+        return false;
+      }
+    });
+    for (let i = 0; i < found.length; i++) {
+      if (found[i].type === 'INSTANCE') out.push(found[i] as InstanceNode);
+    }
+  } catch (e) {
+    console.log('[welder-slide-editor] findAllInstances failed: ' + String(e));
+  }
+  return out;
 }
 
 /**

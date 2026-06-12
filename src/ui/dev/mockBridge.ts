@@ -165,6 +165,23 @@ export function installMockBridge(): void {
               ],
             },
           },
+          {
+            nodeId: 'chart-slot-1',
+            label: 'Chart — ChartWrap',
+            tableModel: null,
+            chartModel: {
+              slotId: 'chart-slot-1',
+              chartType: 'donut',
+              categories: ['Backlog', 'In Progress', 'In Review', 'Blocked', 'Testing'],
+              series: [
+                { name: 'Taken', values: [28, 24, 18, 16, 14] },
+                { name: 'Vorige sprint', values: [22, 28, 14, 20, 12] },
+              ],
+              showLegend: true,
+              showValues: true,
+              showDelta: false,
+            },
+          },
         ],
       },
     },

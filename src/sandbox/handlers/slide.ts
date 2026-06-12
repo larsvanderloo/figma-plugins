@@ -8,6 +8,7 @@
 // ============================================================
 
 import { markSelfWrite, postToUI } from '../bridge';
+import { refreshChartsOnSlide } from '../scan/graphs';
 import { findSlideById, summaryForSlide } from '../slides';
 import { setLastSentSummarySignature } from '../session';
 import { findThemeCollectionsForSlide } from '../scan/theme';
@@ -85,6 +86,11 @@ export async function handleSetSlideTheme(
     });
     return;
   }
+  // T47.2: gebonden paints volgen de nieuwe mode vanzelf, maar de chart-
+  // ramp (segment/lijn-tinten) is rendertime-resolved RGB — re-render de
+  // ChartWrap zodat de tinten de nieuwe theme-mode pakken.
+  await refreshChartsOnSlide(themeSlide, true);
+  markSelfWrite();
   // No slide re-scan: a theme change doesn't affect any other content
   // (text, icons, structure all stay the same). The iframe applies the
   // new mode optimistically before posting; this confirmation just
