@@ -226,8 +226,17 @@ export function buildLine(
     if (pointCount <= 1) return pad + innerW / 2;
     return pad + (innerW * i) / (pointCount - 1);
   };
+  // T52.1 — 6% top-headroom binnen het plotvlak zodat de hoogste lijn/dot
+  // niet de bovenrand raakt; de waarde-labels zitten in padTop daarboven.
+  const plotTop = padTop + Math.round(innerH * 0.06);
+  const plotSpan = innerH - Math.round(innerH * 0.06);
   const yFor = function (value: number): number {
-    return padTop + innerH - (value / max) * innerH;
+    return plotTop + plotSpan - (value / max) * plotSpan;
+  };
+  // Een punt onderin (waarde ≈ 0) krijgt z'n waarde-label ONDER de dot,
+  // anders botst het met de x-as-labels (T52.1).
+  const labelBelow = function (value: number): boolean {
+    return value / max < 0.12;
   };
 
   for (let s = 0; s < model.series.length; s++) {
@@ -263,8 +272,9 @@ export function buildLine(
       // (T48, alleen serie 0) eronder, dichtst bij de dot. padTop
       // reserveert exact DOT_SIZE + valueH + deltaH, dus de stapel
       // van het hoogste punt blijft binnen het plot-frame.
+      const lowPoint = labelBelow(model.series[s].values[i]);
       let stackY = yFor(model.series[s].values[i]) - DOT_SIZE;
-      if (deltaOn && s === 0) {
+      if (deltaOn && s === 0 && !lowPoint) {
         const deltaNode = deltaNodes[i];
         if (deltaNode !== null) {
           if (deltaNode.width > contentW || (pointCount > 1 && deltaNode.width > slotStep)) {
@@ -306,7 +316,11 @@ export function buildLine(
             contentW - valueText.width,
             Math.max(0, xFor(i) - valueText.width / 2),
           );
-          valueText.y = stackY - valueText.height;
+          if (labelBelow(model.series[s].values[i])) {
+            valueText.y = yFor(model.series[s].values[i]) + DOT_SIZE / 2 + 2;
+          } else {
+            valueText.y = stackY - valueText.height;
+          }
         }
       }
     }
