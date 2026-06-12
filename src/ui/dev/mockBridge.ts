@@ -179,6 +179,7 @@ export function installMockBridge(): void {
               ],
               showLegend: true,
               showValues: true,
+              showDelta: false,
             },
           },
         ],
