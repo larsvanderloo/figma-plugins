@@ -325,36 +325,24 @@ export const TABLE_MAX_ROWS = 15;
 // renderer.ts via maxLines+textTruncation, berekend per cell uit de
 // werkelijke row.height.
 
-/**
- * T44: flat maximum — de eerdere per-breedte-preset-koppeling
- * (sm 3 / md 4 / lg 6) is weg; breedte volgt nu het kolom-aantal.
- */
+/** T44: flat maximum — de eerdere per-breedte-preset-koppeling is weg. */
 export const TABLE_MAX_COLS = 6;
 
-/**
- * T44 — breedte per kolom in Figma-pixels. De oude presets waren
- * impliciet al "~280px per kolom" (sm 840/3, md 1119/4, lg 1728/6);
- * 288 reproduceert het oude lg-footprint exact (288 × 6 = 1728).
- */
-export const TABLE_COL_WIDTH = 288;
-
-/** Maximale tabel-breedte per surface (was de oude lg-preset). */
+/** Fallback tabel-breedte per surface wanneer een Slot geen bruikbare width heeft. */
 export const TABLE_MAX_WIDTH_SLIDE = 1728;
 export const TABLE_MAX_WIDTH_WHITEPAPER = 1116;
 
+/** Column-autofit constraints for the renderer-side width distributor. */
+export const TABLE_AUTOFIT_MIN_COL = 160;
+export const TABLE_AUTOFIT_MAX_COL_FRACTION = 0.62;
+
 /**
- * T44 — afgeleide tabel-breedte: kolom-aantal × TABLE_COL_WIDTH, geclampt
- * op het surface-maximum. De `max(columnCount, 2)`-vloer voorkomt dat een
- * 1-koloms tabel 288px breed op een 1920-slide rendert — bewuste guard,
- * geen preset. Onbekende/afwezige surface-naam → Slide-max (default +
- * safe fallback voor legacy slides zonder herkenbare surface-ancestor).
+ * Fallback width for legacy/invalid slots. Normal table rendering uses the
+ * current Slot width so future narrower slot variants are respected. The
+ * number of columns affects autofit distribution, not the outer table width.
  */
-export function tableWidthForSurface(surfaceName: string | null, columnCount: number): number {
-  const surfaceMax =
-    surfaceName === WHITEPAPER_NODE_NAME ? TABLE_MAX_WIDTH_WHITEPAPER : TABLE_MAX_WIDTH_SLIDE;
-  const cols = columnCount > 2 ? columnCount : 2;
-  const derived = cols * TABLE_COL_WIDTH;
-  return derived < surfaceMax ? derived : surfaceMax;
+export function tableWidthForSurface(surfaceName: string | null, _columnCount: number): number {
+  return surfaceName === WHITEPAPER_NODE_NAME ? TABLE_MAX_WIDTH_WHITEPAPER : TABLE_MAX_WIDTH_SLIDE;
 }
 
 // T39.2: TABLE_TEXT_SIZES verwijderd. fontSize wordt nu in renderer.ts

@@ -15,18 +15,33 @@ export interface TableWrapModel {
   slotId: string;
   /**
    * T40 — wanneer true krijgt rij 0 een header-treatment: HUG-vertical,
-   * gecentreerde tekst, dimmer-color, divider eronder. Body-rijen (1+)
+   * header-typografie, divider eronder. Body-rijen (1+)
    * delen het restant van de container-hoogte via FILL.
    * Default: false (bestaande tabellen blijven onveranderd).
    */
   hasColumnHeader: boolean;
+  /**
+   * Per-column footer calculation, inspired by Notion database table
+   * calculations. `null` means no footer value for that column.
+   */
+  columnCalculations?: TableColumnCalculationSetting[];
+  /**
+   * Per-column emphasis for the footer/calculation value. Mirrors the
+   * per-cell `emphasis` flag but applies only to that column's footer
+   * value. `true` renders the sum in the emphasized (bold) style.
+   */
+  columnCalculationEmphasis?: boolean[];
+  /**
+   * Per-column currency formatting for the footer/calculation value.
+   * `true` renders the sum with a `€ ` prefix (UI footer + canvas).
+   */
+  columnCalculationCurrency?: boolean[];
   rows: TableRowModel[];
 }
 
 // T44: `width`-preset (sm/md/lg) en `textSize`-multiplier (T42.9) verwijderd.
-// Breedte wordt rendertime afgeleid uit het kolom-aantal (zie
-// tableWidthForSurface in shared/constants.ts); fontSize uit de
-// hoogte-formule in renderer.ts (getFontSizes — de eerdere 'md'-clamps).
+// De tabel rendert full-width binnen de actuele Slot-breedte; kolommen verdelen die breedte via
+// autofit. FontSize komt uit de hoogte-formule in renderer.ts.
 
 /** Eén rij binnen een TableWrapModel. */
 export interface TableRowModel {
@@ -40,4 +55,20 @@ export interface TableCellModel {
   /** FRAME-id van de bestaande cell-FRAME binnen de row; leeg bij nieuwe cellen. */
   cellNodeId: string;
   value: string;
+  /** Per-cell visual emphasis. Default false; set through the table UI. */
+  emphasis?: boolean;
+}
+
+export type TableColumnCalculation = 'sum';
+export type TableColumnCalculationSetting = TableColumnCalculation | null;
+
+export interface TableColumnSummary {
+  calculation: TableColumnCalculation;
+  value: string;
+  numericValue: number;
+  numericCount: number;
+  /** When true, the footer value renders in the emphasized (bold) style. */
+  emphasis: boolean;
+  /** When true, `value` is formatted as currency (`€ ` prefix). */
+  currency: boolean;
 }
