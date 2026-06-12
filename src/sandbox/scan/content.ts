@@ -8,7 +8,7 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { findCardWrap, findTimelineWrap } from '../slide-machine';
+import { findCardWrap, findAllCardWraps, findTimelineWrap } from '../slide-machine';
 import { ContentItems, CardItem, InstructorCardItem, TimelineItem } from '../../shared/types';
 import {
   findInstructorListTexts,
@@ -199,11 +199,13 @@ async function extractInstructorCards(scope: InstanceNode): Promise<InstructorCa
  * Beide worden gevonden via findAll (recursieve descendant-walk, bounded tot wrapper-scope).
  */
 export async function scanContent(slide: InstanceNode): Promise<ContentItems | null> {
-  const cardWrap = findCardWrap(slide);
+  // T53.1 — ALLE CardWraps scannen (whitepapers dragen er meerdere).
+  const cardWraps = findAllCardWraps(slide);
+  const cardWrap = cardWraps.length > 0 ? cardWraps[0] : findCardWrap(slide);
   const timelineWrap = findTimelineWrap(slide);
 
   // Retourneer null wanneer geen van alle wrappers aanwezig is.
-  if (cardWrap === null && timelineWrap === null) return null;
+  if (cardWraps.length === 0 && timelineWrap === null) return null;
 
   const cards: CardItem[] = [];
   const instructorCards: InstructorCardItem[] = [];
@@ -212,13 +214,15 @@ export async function scanContent(slide: InstanceNode): Promise<ContentItems | n
   // CardWrap: Cards zijn directe children (Slide Machine-pattern); ook hier
   // gebruiken we extractCards zodat de helper consistent en testbaar blijft.
   // InstructorCards (Instructor-variant van de Card-slot) leven in dezelfde
-  // CardWrap maar heten 'InstructorCard' — aparte extractie.
-  if (cardWrap !== null) {
-    const fromCardWrap = extractCards(cardWrap, slide);
+  // CardWrap maar heten 'InstructorCard' — aparte extractie. Loopt over
+  // ALLE CardWraps zodat geen enkele card onzichtbaar blijft.
+  for (let cw = 0; cw < cardWraps.length; cw++) {
+    const wrap = cardWraps[cw];
+    const fromCardWrap = extractCards(wrap, slide);
     for (let i = 0; i < fromCardWrap.length; i++) {
       cards.push(fromCardWrap[i]);
     }
-    const instructorsFromWrap = await extractInstructorCards(cardWrap);
+    const instructorsFromWrap = await extractInstructorCards(wrap);
     for (let k = 0; k < instructorsFromWrap.length; k++) {
       instructorCards.push(instructorsFromWrap[k]);
     }

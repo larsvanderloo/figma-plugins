@@ -284,6 +284,15 @@ export function findCardWrap(slide: InstanceNode): InstanceNode | null {
 }
 
 /**
+ * T53.1 — ALLE CardWrap-instances (whitepapers/slides kunnen er meerdere
+ * dragen, bv. naast een ChartWrap in een SlotWrapGroup). findCardWrap gaf
+ * alleen de eerste, waardoor cards in een 2e+ CardWrap onzichtbaar bleven.
+ */
+export function findAllCardWraps(slide: InstanceNode): InstanceNode[] {
+  return findAllInstances(slide, (n) => n.name === 'CardWrap');
+}
+
+/**
  * TableWrap: instances die een tabel representeren (NIET timeline).
  * Matcht:
  *   - legacy exacte naam `TableWrap`
