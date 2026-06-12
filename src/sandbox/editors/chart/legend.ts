@@ -13,6 +13,8 @@ export interface LegendEntry {
   color: RGB;
   /** T47.3 — benadrukt datapunt: label in Instrument Sans SemiBold. */
   emphasis?: boolean;
+  /** T50 — optionele delta-badge-node, ge-append na het label. */
+  deltaNode?: SceneNode | null;
 }
 
 /** Theme-bundel: Variable + resolved RGB-hint, zoals de tabel-renderer. */
@@ -21,9 +23,19 @@ export interface ChartTheme {
   dimmerVar: Variable;
   textRGB: RGB;
   dimmerRGB: RGB;
+  /** T50.5 — slide-level resolved accent (zelfde bron als de ramp). */
+  accentRGB: RGB;
+  /** T50.8 — contrast-kleur op de kaart: accent of light, wat het verst
+   * van de werkelijke kaart-kleur af ligt (mode-flip-proof). */
+  onCardRGB: RGB;
 }
 
-export function buildLegend(entries: LegendEntry[], theme: ChartTheme, fontSize: number): FrameNode {
+export function buildLegend(
+  entries: LegendEntry[],
+  theme: ChartTheme,
+  fontSize: number,
+  maxWidth?: number,
+): FrameNode {
   const legend = figma.createFrame();
   legend.name = 'ChartLegend';
   legend.layoutMode = 'VERTICAL';
@@ -65,6 +77,22 @@ export function buildLegend(entries: LegendEntry[], theme: ChartTheme, fontSize:
       ),
     ];
     row.appendChild(t);
+
+    const deltaNode = entries[i].deltaNode;
+    if (deltaNode !== undefined && deltaNode !== null) {
+      row.appendChild(deltaNode);
+    }
+
+    // T51.2 — width-budget: lange labels truncaten i.p.v. de kaart
+    // uitlopen (zichtbaar op smalle wrappers).
+    if (typeof maxWidth === 'number' && maxWidth > 0 && row.width > maxWidth) {
+      const overshoot = row.width - maxWidth;
+      const minLabelW = Math.round(fontSize * 3);
+      const targetW = Math.max(minLabelW, t.width - overshoot);
+      t.textTruncation = 'ENDING';
+      t.textAutoResize = 'HEIGHT';
+      t.resize(targetW, t.height);
+    }
 
     legend.appendChild(row);
   }

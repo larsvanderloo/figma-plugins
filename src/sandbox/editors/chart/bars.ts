@@ -16,6 +16,7 @@ import type { ChartWrapModel } from '../../../shared/types';
 import {
   chartDeltaLabel,
   chartMaxValue,
+  chartValueLabel,
   formatChartValue,
   isCategoryEmphasized,
   isPointEmphasized,
@@ -53,7 +54,7 @@ export function buildBars(
         color: ramp[s % ramp.length],
       });
     }
-    const legend = buildLegend(entries, theme, labelSize);
+    const legend = buildLegend(entries, theme, labelSize, contentW);
     legend.layoutMode = 'HORIZONTAL';
     legend.itemSpacing = Math.round(labelSize * 1.6);
     root.appendChild(legend);
@@ -62,7 +63,9 @@ export function buildBars(
 
   const labelRowH = Math.round(labelSize * 1.5);
   const valueRowH = model.showValues ? Math.round(labelSize * 1.4) : 0;
-  const deltaRowH = model.showDelta === true ? Math.round(labelSize * 1.1) : 0;
+  // T51.2 — badge-hoogte is labelSize*1.4 (delta-badge rescale-target);
+  // reserveer dat + marge, anders overlapt de badge de bar-top.
+  const deltaRowH = model.showDelta === true ? Math.round(labelSize * 1.6) : 0;
   const plotH = Math.max(
     60,
     contentH - legendH - labelRowH - root.itemSpacing - valueRowH - deltaRowH,
@@ -147,7 +150,7 @@ export function buildBars(
           ? { family: 'Instrument Sans', style: 'SemiBold' }
           : { family: 'Inter', style: 'Medium' };
         valueText.fontSize = Math.round(labelSize * 0.85);
-        valueText.characters = formatChartValue(value);
+        valueText.characters = chartValueLabel(model.series[s], value);
         valueText.textAutoResize = 'WIDTH_AND_HEIGHT';
         valueText.fills = [
           figma.variables.setBoundVariableForPaint(

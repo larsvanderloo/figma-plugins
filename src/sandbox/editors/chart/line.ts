@@ -15,6 +15,7 @@ import type { ChartWrapModel } from '../../../shared/types';
 import {
   chartDeltaLabel,
   chartMaxValue,
+  chartValueLabel,
   formatChartValue,
   isCategoryEmphasized,
   isPointEmphasized,
@@ -57,7 +58,7 @@ export function buildLine(
         color: ramp[s % ramp.length],
       });
     }
-    const legend = buildLegend(entries, theme, labelSize);
+    const legend = buildLegend(entries, theme, labelSize, contentW);
     legend.layoutMode = 'HORIZONTAL';
     legend.itemSpacing = Math.round(labelSize * 1.6);
     root.appendChild(legend);
@@ -150,7 +151,7 @@ export function buildLine(
           ? { family: 'Instrument Sans', style: 'SemiBold' }
           : { family: 'Inter', style: 'Medium' };
         valueText.fontSize = valueSize;
-        valueText.characters = formatChartValue(model.series[s].values[i]);
+        valueText.characters = chartValueLabel(model.series[s], model.series[s].values[i]);
         valueText.textAutoResize = 'WIDTH_AND_HEIGHT';
         valueText.fills = [{ type: 'SOLID', color: color }];
         plot.appendChild(valueText);

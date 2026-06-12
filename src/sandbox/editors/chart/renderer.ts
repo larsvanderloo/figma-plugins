@@ -180,11 +180,28 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
         ? await resolveColorInNodeMode(backgroundVar, modeContext, { r: 1, g: 0.957, b: 0.918 })
         : { r: 1, g: 0.957, b: 0.918 };
     const labelVar = backgroundVar !== null ? backgroundVar : vars.dimmer;
+    // T50.8 — de wrap kan een geflipte theme-mode voeren: de kaart-fill
+    // (Text-binding) rendert dan in een ANDERE kleur dan accentRGB op
+    // slide-niveau. Resolve Text in de kaart-mode (de kaart hangt nu in
+    // de tree) en kies als on-card-tekstkleur de variant met het meeste
+    // kanaal-contrast t.o.v. de werkelijke kaartkleur.
+    const cardRGB = await resolveColorInNodeMode(vars.text, card, accentRGB);
+    const distAccent =
+      Math.abs(cardRGB.r - accentRGB.r) +
+      Math.abs(cardRGB.g - accentRGB.g) +
+      Math.abs(cardRGB.b - accentRGB.b);
+    const distLight =
+      Math.abs(cardRGB.r - lightRGB.r) +
+      Math.abs(cardRGB.g - lightRGB.g) +
+      Math.abs(cardRGB.b - lightRGB.b);
+    const onCardRGB = distAccent >= distLight ? accentRGB : lightRGB;
     const theme: ChartTheme = {
       textVar: labelVar,
       dimmerVar: vars.dimmer,
       textRGB: lightRGB,
       dimmerRGB: dimmerRGB,
+      accentRGB: accentRGB,
+      onCardRGB: onCardRGB,
     };
     // T39.1.1 (zelfde als de tabel): SlotNode host geen FILL-children —
     // expliciete resize naar de actuele slot-afmetingen, zodat de kaart

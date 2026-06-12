@@ -16,13 +16,14 @@
 import type { ChartWrapModel } from '../../../shared/types';
 import {
   chartDeltaDisplay,
+  chartValueLabel,
   formatChartValue,
   isCategoryEmphasized,
   isPointEmphasized,
   seriesTotal,
 } from '../../../shared/chart-calculations';
 import { buildLegend, ChartTheme, LegendEntry } from './legend';
-import type { DeltaBadgeContext } from './delta-badge';
+import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
 
 const DONUT_INNER = 0.66; // innerRadius-ratio voor donut
 
@@ -34,26 +35,34 @@ export function buildDonut(
   theme: ChartTheme,
   labelSize: number,
   cardPaint: SolidPaint,
-  _deltaCtx: DeltaBadgeContext,
+  deltaCtx: DeltaBadgeContext,
 ): FrameNode {
   const isDonut = model.chartType === 'donut';
   const series = model.series[0];
   const total = seriesTotal(series);
 
+  // T50.10 — breakpoint: op smalle/portrait-kaarten past de legenda
+  // niet meer naast de cirkel (clipt aan de rechterrand). Onder
+  // ~560px content-breedte of bij portrait stapelt de layout verticaal:
+  // cirkel boven, legenda eronder.
+  const stacked = contentW < 560 || contentW < contentH;
+
   const root = figma.createFrame();
   root.name = isDonut ? 'ChartDonut' : 'ChartPie';
-  root.layoutMode = 'HORIZONTAL';
+  root.layoutMode = stacked ? 'VERTICAL' : 'HORIZONTAL';
   root.primaryAxisSizingMode = 'FIXED';
   root.counterAxisSizingMode = 'FIXED';
   root.primaryAxisAlignItems = 'CENTER';
   root.counterAxisAlignItems = 'CENTER';
-  root.itemSpacing = Math.round(contentW * 0.06);
+  root.itemSpacing = stacked ? Math.round(contentH * 0.06) : Math.round(contentW * 0.06);
   root.fills = [];
   root.resize(contentW, contentH);
 
   // Cirkel-container (layout NONE zodat segmenten + center-totaal
   // absoluut gepositioneerd kunnen worden).
-  const diameter = Math.min(contentH, contentW * 0.55);
+  const diameter = stacked
+    ? Math.min(contentW * 0.8, contentH * 0.55)
+    : Math.min(contentH, contentW * 0.55);
   const circle = figma.createFrame();
   circle.name = 'Segments';
   circle.resize(diameter, diameter);
@@ -93,32 +102,40 @@ export function buildDonut(
 
   // Donut: center-totaal zoals het referentie-dashboard ("100 / totaal").
   if (isDonut) {
+    // T50.4 — override + nadruk op het center-totaal; label editbaar.
+    const totalOverride =
+      typeof model.donutTotalOverride === 'string' ? model.donutTotalOverride.trim() : '';
+    const totalEmphasis = model.donutTotalEmphasis !== false;
     const totalText = figma.createText();
-    totalText.fontName = { family: 'Instrument Sans', style: 'SemiBold' };
+    totalText.fontName = totalEmphasis
+      ? { family: 'Instrument Sans', style: 'SemiBold' }
+      : { family: 'Inter', style: 'Regular' };
     totalText.fontSize = Math.max(32, Math.round(diameter * 0.16));
-    totalText.characters = formatChartValue(total);
+    totalText.characters = totalOverride !== '' ? totalOverride : chartValueLabel(series, total);
+    // T50.5 — totaal in de slide-level accent (zelfde kleurbron als de
+    // segmenten): binnen de wrap resolven gebonden paints in de
+    // geïnverteerde card-mode (Text = card-kleur → onzichtbaar), dus
+    // solid; theme-switch re-rendert charts toch al.
     totalText.textAutoResize = 'WIDTH_AND_HEIGHT';
-    totalText.fills = [
-      figma.variables.setBoundVariableForPaint(
-        { type: 'SOLID', color: theme.textRGB },
-        'color',
-        theme.textVar,
-      ),
-    ];
+    totalText.fills = [{ type: 'SOLID', color: theme.onCardRGB }];
     circle.appendChild(totalText);
 
     const subText = figma.createText();
-    subText.fontName = { family: 'Inter', style: 'Regular' };
+    // T50.9 — brandregel: Instrument Sans bestaat alleen in SemiBold;
+    // niet-benadrukte tekst is altijd Inter Regular.
+    subText.fontName =
+      model.donutTotalLabelEmphasis === true
+        ? { family: 'Instrument Sans', style: 'SemiBold' }
+        : { family: 'Inter', style: 'Regular' };
     subText.fontSize = labelSize;
-    subText.characters = 'totaal';
+    subText.characters =
+      typeof model.donutTotalLabel === 'string' && model.donutTotalLabel !== ''
+        ? model.donutTotalLabel
+        : 'totaal';
     subText.textAutoResize = 'WIDTH_AND_HEIGHT';
-    subText.fills = [
-      figma.variables.setBoundVariableForPaint(
-        { type: 'SOLID', color: theme.dimmerRGB },
-        'color',
-        theme.dimmerVar,
-      ),
-    ];
+    // T50.5 — onderschrift in dezelfde slide-level accent als het totaal
+    // (dimmer-binding resolvede in de card-mode te bleek).
+    subText.fills = [{ type: 'SOLID', color: theme.onCardRGB }];
     circle.appendChild(subText);
 
     const blockH = totalText.height + subText.height;
@@ -141,18 +158,18 @@ export function buildDonut(
     for (let i = 0; i < model.categories.length; i++) {
       // Nul-waarden wel in de legenda tonen — data bestaat nog steeds.
       let label = model.categories[i];
-      if (model.showValues) label = label + '  —  ' + formatChartValue(series.values[i]);
-      if (model.showDelta === true) {
-        const delta = chartDeltaDisplay(model, i);
-        if (delta !== null) label = label + '  ' + delta;
-      }
+      if (model.showValues) label = label + '  —  ' + chartValueLabel(series, series.values[i]);
       entries.push({
         label: label,
         color: ramp[i % ramp.length],
         emphasis: isPointEmphasized(series, i) || isCategoryEmphasized(model, i),
+        deltaNode: model.showDelta === true ? buildDeltaNode(deltaCtx, i) : null,
       });
     }
-    root.appendChild(buildLegend(entries, theme, labelSize));
+    const legendBudget = stacked
+      ? contentW
+      : Math.max(120, contentW - diameter - root.itemSpacing);
+    root.appendChild(buildLegend(entries, theme, labelSize, legendBudget));
   }
 
   return root;

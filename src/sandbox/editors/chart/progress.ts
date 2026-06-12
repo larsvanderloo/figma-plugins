@@ -15,6 +15,7 @@ import type { ChartWrapModel } from '../../../shared/types';
 import {
   chartDeltaLabel,
   chartProgressReference,
+  chartValueLabel,
   formatChartValue,
   isCategoryEmphasized,
   isPointEmphasized,
@@ -109,12 +110,14 @@ export function buildProgress(
     fill.cornerRadius = trackH / 2;
     fill.fills = [{ type: 'SOLID', color: light }];
     track.appendChild(fill);
+    fill.x = 0;
+    fill.y = 0;
     row.appendChild(track);
 
     const value = figma.createText();
     value.fontName = { family: 'Instrument Sans', style: 'SemiBold' };
     value.fontSize = labelSize;
-    value.characters = model.showValues ? formatChartValue(series.values[i]) : '';
+    value.characters = model.showValues ? chartValueLabel(series, series.values[i]) : '';
     value.textAutoResize = 'HEIGHT';
     value.textAlignHorizontal = 'RIGHT';
     value.fills = [
