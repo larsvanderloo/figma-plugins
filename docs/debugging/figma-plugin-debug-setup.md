@@ -82,6 +82,9 @@ The debug setup keeps that split intact:
     - `debug:restart`: runs `debug:stop`, then starts `debug:session`.
   - Production scripts also run version sync/assertions so release builds cannot ship with a stale UI tag.
 
+- `scripts/clear-stale-manifest-cache.sh`
+  - After a debug session, `manifest-cache/*/dist/` holds debug bundle copies at the version they were built. Bump + `npm run build` prod afterwards and `version:assert` will flag those stale copies (they are gitignored and never ship, but the assert scans them). Run `bash scripts/clear-stale-manifest-cache.sh --force` to drop a stale cache when no debug session is live (it refuses while the log server on :4789 is up). Optionally wire it as a personal Claude Code `PreToolUse(Bash)` hook in `.claude/settings.json` (gitignored) so it runs automatically before release/build commands.
+
 - `vite.config.ts`
   - Reads `process.env.PLUGIN_DEBUG === "1"`.
   - Reads `process.env.PLUGIN_DEBUG_LOG_ENDPOINT` only in debug mode.
