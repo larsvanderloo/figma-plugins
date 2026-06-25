@@ -1,7 +1,8 @@
 # Build artifacts
-# dist/ is intentionally tracked so a fresh clone loads in Figma without
-# requiring `npm install && npm run build` — rebuild + commit alongside
-# source changes to keep them in sync.
+# dist/ is build output, not tracked. Figma loads it from the local working
+# tree via manifest.json (main: dist/code.js, ui: dist/ui.html); a fresh
+# clone runs `npm install && npm run build` once before importing the plugin.
+dist/
 build/
 out/
 .cache/
