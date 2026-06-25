@@ -1,6 +1,6 @@
 {
   "name": "welder-editor",
-  "version": "0.5.257",
+  "version": "0.5.258",
   "type": "module",
   "scripts": {
     "workspace:assert": "node scripts/assert-workspace-hygiene.mjs",
