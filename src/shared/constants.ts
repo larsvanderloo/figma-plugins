@@ -6,9 +6,9 @@
 // geen dynamische expressies) zodat tree-shaking en esbuild's
 // constant-folding zonder verrassingen werken.
 //
-// Theme-palet en font-mapping 1-op-1 gelijk aan chart-builder v0.3.0
-// en welder-table v0.2.0, zodat slide-output visueel consistent blijft
-// tussen oude widget-instances en de nieuwe plugin-renderers.
+// Theme-palet en font-mapping 1-op-1 gelijk aan chart-builder en
+// welder-table, zodat slide-output visueel consistent blijft tussen
+// oude widget-instances en de nieuwe plugin-renderers.
 // ============================================================
 
 // ============================================================
@@ -95,13 +95,13 @@ export const REQUIRED_FONTS: ReadonlyArray<{ family: string; style: string }> = 
 // Icon-opties — curated Lucide-icon-namen (~150 business-relevante slugs)
 //
 // Uitgebreide set t.o.v. de originele BADGE_ICON_OPTIONS uit
-// welder-table v0.2.0. Alle originele icons zijn behouden; nieuwe
-// icons zijn gegroepeerd per categorie. Elke string mapt op een
-// Lucide-icon-body uit @iconify-json/lucide.
+// welder-table. Alle originele icons zijn behouden; nieuwe icons zijn
+// gegroepeerd per categorie. Elke string mapt op een Lucide-icon-body
+// uit @iconify-json/lucide.
 // ============================================================
 
 export const ICON_OPTIONS: string[] = [
-  // --- Originele set (welder-table v0.2.0, ongewijzigd) ---
+  // --- Originele set (welder-table, ongewijzigd) ---
   'trending-up',
   'trending-down',
   'arrow-up',
@@ -270,7 +270,7 @@ export const ICON_OPTIONS: string[] = [
 export const BADGE_ICON_OPTIONS = ICON_OPTIONS;
 
 // ============================================================
-// Slide-detectie constanten (spec §7)
+// Slide-detectie constanten
 //
 // De plugin herkent twee bewerkbare "surfaces", elk een vaste-grootte
 // INSTANCE met een eigen naam:
@@ -307,25 +307,25 @@ export const SURFACE_SIGNATURES: ReadonlyArray<SurfaceSignature> = [
 ];
 
 // ============================================================
-// Table-constanten (T34.6 — Slot-based TableWrap v0.2.0)
+// Table-constanten (Slot-based TableWrap)
 //
-// Validatie-grenzen + layout-presets voor de new Slot-based
-// TableWrap-renderer (T34.2). Constants zijn de single-source-of-truth
-// voor zowel main-thread (editors/table/renderer.ts) als UI-iframe
+// Validatie-grenzen + layout-presets voor de Slot-based
+// TableWrap-renderer. Constants zijn de single-source-of-truth voor
+// zowel main-thread (editors/table/renderer.ts) als UI-iframe
 // (TableEditor.vue — toon N/MAX-indicator).
 // ============================================================
 
 /** Maximum aantal rijen per TableWrap (inclusief header-rij). */
 export const TABLE_MAX_ROWS = 15;
 
-// T42.16: computeCellMaxChars (T42.15) en TABLE_CELL_MAX_CHARS (T42.14)
-// verwijderd. Input-niveau capping bleek niet werkbaar — de echte
-// rendering-bound is afhankelijk van de actuele row-FILL-share-height
-// die alleen na layout bekend is. Truncation gebeurt nu rendertime in
-// renderer.ts via maxLines+textTruncation, berekend per cell uit de
-// werkelijke row.height.
+// computeCellMaxChars en TABLE_CELL_MAX_CHARS verwijderd. Input-niveau
+// capping bleek niet werkbaar — de echte rendering-bound is afhankelijk
+// van de actuele row-FILL-share-height die alleen na layout bekend is.
+// Truncation gebeurt nu rendertime in renderer.ts via
+// maxLines+textTruncation, berekend per cell uit de werkelijke
+// row.height.
 
-/** T44: flat maximum — de eerdere per-breedte-preset-koppeling is weg. */
+/** Flat maximum — de eerdere per-breedte-preset-koppeling is weg. */
 export const TABLE_MAX_COLS = 6;
 
 /** Fallback tabel-breedte per surface wanneer een Slot geen bruikbare width heeft. */
@@ -345,6 +345,5 @@ export function tableWidthForSurface(surfaceName: string | null, _columnCount: n
   return surfaceName === WHITEPAPER_NODE_NAME ? TABLE_MAX_WIDTH_WHITEPAPER : TABLE_MAX_WIDTH_SLIDE;
 }
 
-// T39.2: TABLE_TEXT_SIZES verwijderd. fontSize wordt nu in renderer.ts
-// afgeleid via getFontSizes(slotHeight, rowCount) — formula-based met clamps,
-// geen preset-mapping meer. Zie spec.md §13 T39.1.1.
+// Geen TABLE_TEXT_SIZES-presets meer: fontSize wordt in renderer.ts
+// afgeleid via getFontSizes(slotHeight, rowCount) — formula-based met clamps.

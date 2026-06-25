@@ -1,18 +1,18 @@
 // ============================================================
 // editors/chart/donut.ts
 //
-// Donut- en pie-builder via native ellipse-arcData (T47): per categorie
+// Donut- en pie-builder via native ellipse-arcData: per categorie
 // één ELLIPSE-segment. Hoeken in radialen, 0 = 3 uur, positief = met de
 // klok mee; start bovenaan (-PI/2). Nul-waarden worden overgeslagen
 // (tenzij total === 0, dan gelijke verdeling). Naad-effect via stroke met
 // cardPaint: aangrenzende randen dragen elk een halve streek bij zodat de
-// naad even breed is ongeacht segmentbreedte (T50/R3).
-// Delta-badges (T48, showDelta): parts-of-whole — geen badge in de
+// naad even breed is ongeacht segmentbreedte.
+// Delta-badges (showDelta): parts-of-whole — geen badge in de
 // cirkel, de delta vs de vorige categorie staat als legenda-suffix.
 //
-// T52 — overflow-invariant (meet-dan-reserveer, Highcharts/ECharts-
-// boxmodel): de legenda wordt EERST gebouwd binnen een gecapt hoogte-
-// budget (degradatie-ladder in legend.ts), de cirkel krijgt de rest.
+// Overflow-invariant (meet-dan-reserveer, Highcharts/ECharts-boxmodel):
+// de legenda wordt EERST gebouwd binnen een gecapt hoogte-budget
+// (degradatie-ladder in legend.ts), de cirkel krijgt de rest.
 // Center-totaal past in het GAT (√(w²+h²) ≤ hole-diameter), met het
 // sublabel als eerste offer (R1-hide-volgorde). Eén zichtbaar segment
 // rendert zonder naad-stroke (anders tekent de volle cirkel een
@@ -33,7 +33,7 @@ import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
 
 const DONUT_INNER = 0.66; // innerRadius-ratio voor donut
 
-// T52 — minimale zinvolle diameter voor een center-gelabelde donut:
+// Minimale zinvolle diameter voor een center-gelabelde donut:
 // PatternFly's center-label (24px waarde) impliceert dat het gat ~24px
 // tekst moet kunnen dragen → ±64px totale diameter als ondergrens.
 const DONUT_MIN_DIAMETER = 64;
@@ -52,7 +52,7 @@ export function buildDonut(
   const series = model.series[0];
   const total = seriesTotal(series);
 
-  // T50.10 — breakpoint: op smalle/portrait-kaarten past de legenda
+  // Breakpoint: op smalle/portrait-kaarten past de legenda
   // niet meer naast de cirkel (clipt aan de rechterrand). Onder
   // ~560px content-breedte of bij portrait stapelt de layout verticaal:
   // cirkel boven, legenda eronder.
@@ -85,7 +85,7 @@ export function buildDonut(
     }
   }
 
-  // T52 — meet-dan-reserveer: legenda eerst (gecapt), cirkel = rest.
+  // Meet-dan-reserveer: legenda eerst (gecapt), cirkel = rest.
   // Voorheen was de cirkel vast (0.55×h) en kreeg de legenda GEEN
   // verticaal budget — 12 categorieën liepen dan ver de kaart uit.
   let legend: FrameNode | null = null;
@@ -131,7 +131,7 @@ export function buildDonut(
   circle.fills = [];
   circle.clipsContent = false;
 
-  // T52 — zichtbare segmenten tellen (zelfde skip-regel als de
+  // Zichtbare segmenten tellen (zelfde skip-regel als de
   // render-lus): bepaalt of er überhaupt naden bestaan.
   let visibleCount = 0;
   for (let i = 0; i < model.categories.length; i++) {
@@ -139,7 +139,7 @@ export function buildDonut(
   }
 
   // Naad-dikte: half op elk aangrenzend segment → constante naad.
-  // T52 — gecapt op 2.5% van de diameter zodat de naad op kleine
+  // Gecapt op 2.5% van de diameter zodat de naad op kleine
   // cirkels geen dunne slices opeet (≥3px zichtbare inkt-regel), en
   // 0 bij één zichtbaar segment: een volle-cirkel-arc zou anders een
   // card-kleurige radiale naadlijn door het segment tekenen.
@@ -151,7 +151,7 @@ export function buildDonut(
   let angle = -Math.PI / 2;
   for (let i = 0; i < model.categories.length; i++) {
     const value = series.values[i];
-    // Nul-waarden overslaan wanneer er een zinvol totaal is (T50/R3).
+    // Nul-waarden overslaan wanneer er een zinvol totaal is.
     if (total > 0 && value === 0) continue;
     const fraction = total > 0 ? value / total : 1 / model.categories.length;
     const sweep = fraction * (Math.PI * 2);
@@ -182,7 +182,7 @@ export function buildDonut(
 
   // Donut: center-totaal zoals het referentie-dashboard ("100 / totaal").
   if (isDonut) {
-    // T50.4 — override + nadruk op het center-totaal; label editbaar.
+    // Override + nadruk op het center-totaal; label editbaar.
     const totalOverride =
       typeof model.donutTotalOverride === 'string' ? model.donutTotalOverride.trim() : '';
     const totalEmphasis = model.donutTotalEmphasis !== false;
@@ -190,13 +190,13 @@ export function buildDonut(
     totalText.fontName = totalEmphasis
       ? { family: 'Instrument Sans', style: 'SemiBold' }
       : { family: 'Inter', style: 'Regular' };
-    // T52 — startkorps zoals voorheen; de fit-lus hieronder schaalt het
+    // Startkorps zoals voorheen; de fit-lus hieronder schaalt het
     // korps tegen het GAT (0.66×d) i.p.v. de cirkel, want bij kleine
     // diameters (<~140) liep het 32px-vloerkorps het gat uit.
     let totalFont = Math.max(32, Math.round(diameter * 0.16));
     totalText.fontSize = totalFont;
     totalText.characters = totalOverride !== '' ? totalOverride : chartValueLabel(series, total);
-    // T50.5 — totaal in de slide-level accent (zelfde kleurbron als de
+    // Totaal in de slide-level accent (zelfde kleurbron als de
     // segmenten): binnen de wrap resolven gebonden paints in de
     // geïnverteerde card-mode (Text = card-kleur → onzichtbaar), dus
     // solid; theme-switch re-rendert charts toch al.
@@ -205,7 +205,7 @@ export function buildDonut(
     circle.appendChild(totalText);
 
     const subText = figma.createText();
-    // T50.9 — brandregel: Instrument Sans bestaat alleen in SemiBold;
+    // Brandregel: Instrument Sans bestaat alleen in SemiBold;
     // niet-benadrukte tekst is altijd Inter Regular.
     subText.fontName =
       model.donutTotalLabelEmphasis === true
@@ -217,12 +217,12 @@ export function buildDonut(
         ? model.donutTotalLabel
         : 'totaal';
     subText.textAutoResize = 'WIDTH_AND_HEIGHT';
-    // T50.5 — onderschrift in dezelfde slide-level accent als het totaal
+    // Onderschrift in dezelfde slide-level accent als het totaal
     // (dimmer-binding resolvede in de card-mode te bleek).
     subText.fills = [{ type: 'SOLID', color: theme.onCardRGB }];
     circle.appendChild(subText);
 
-    // T52 — pasvorm: een blok w×h past in een cirkelgat met diameter D
+    // Pasvorm: een blok w×h past in een cirkelgat met diameter D
     // wanneer √(w²+h²) ≤ D. De binnenrand-stroke (CENTER) snoept een
     // halve naad per zijde van het gat af.
     const holeD = diameter * DONUT_INNER - seamWeight;

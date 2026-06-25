@@ -77,11 +77,11 @@ export async function scanSlide(slide: InstanceNode): Promise<SlideScan> {
 }
 
 /**
- * T39.5 — normaliseer Heading/Paragraph-zichtbaarheid op slide-load.
+ * Normaliseer Heading/Paragraph-zichtbaarheid op slide-load.
  *
  * Bestaande slides kunnen lege heading/paragraph text-nodes hebben die
  * nooit door de plugin gemuteerd zijn (visible=true ondanks characters="").
- * T39.4 fixt alleen het mutation-pad; deze helper handelt de existing-
+ * Het mutation-pad wordt elders gefixt; deze helper handelt de existing-
  * empty case op pick-slide.
  *
  * Returnt `true` als er minstens één visibility-flip plaatsvond, zodat
@@ -120,7 +120,7 @@ async function normalizeCopyWrapVisibility(slide: InstanceNode): Promise<boolean
     }
   }
 
-  // T39.6 — Placeholder is een Slide-Machine-template-hint die zich toont
+  // Placeholder is een Slide-Machine-template-hint die zich toont
   // wanneer Paragraph leeg is. Plugin is source-of-truth; placeholder is
   // designer-crutch en moet altijd verborgen zijn zodat CopyWrap-auto-
   // layout om de werkelijke content sluit. Naam "Placeholder" matcht alle

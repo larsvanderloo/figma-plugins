@@ -10,7 +10,6 @@
 // re-exporteert alles zodat bestaande 'shared/types'-imports blijven werken.
 //
 // Bridge-messages volgen FIG-MSG-01 (typed discriminated unions).
-// Zie spec.md §3 (Data-modellen) en §5 (Bridge-messages).
 // ============================================================
 
 export type * from './types/runtime';

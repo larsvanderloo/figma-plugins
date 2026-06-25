@@ -1,15 +1,15 @@
 // ============================================================
 // editors/chart/bars.ts
 //
-// Bar-chart-builder (T47): verticale (gegroepeerde) bars via
+// Bar-chart-builder: verticale (gegroepeerde) bars via
 // auto-layout. Per categorie een kolom-groep met per serie één bar;
 // hoogtes schalen tegen de hoogste waarde over alle series. Waarde-
 // labels boven de bars (showValues), categorie-labels eronder,
 // serie-legenda erboven bij meerdere series (showLegend).
-// Delta-badges (T48, showDelta): onder het waarde-label van serie 0
+// Delta-badges (showDelta): onder het waarde-label van serie 0
 // de verandering t.o.v. de vorige categorie (▲ +12% / ▼ −5%).
 //
-// T52 — hard overflow-budget (meet-dan-reserveer, à la het box-layout
+// Hard overflow-budget (meet-dan-reserveer, à la het box-layout
 // van Chart.js/Highcharts): alle niet-plot-elementen worden eerst
 // GEMETEN (tekst-probes + echte delta-nodes), de bar-zone krijgt
 // exact wat overblijft. Past het niet, dan degradeert de chart in
@@ -32,14 +32,14 @@ import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
 
 /** Verticale ruimte tussen waarde-label / delta-badge / bar in een kolom. */
 const COL_GAP = 6;
-/** T52 — minimaal leesbare bar-zone; daaronder degraderen i.p.v. clippen. */
+/** Minimaal leesbare bar-zone; daaronder degraderen i.p.v. clippen. */
 const MIN_PLOT_H = 48;
-/** T52 — absolute bar-breedte-vloer (antialiasing-grens, research ≥2-4px). */
+/** Absolute bar-breedte-vloer (antialiasing-grens, research ≥2-4px). */
 const MIN_BAR_W = 2;
-/** T52 — platte baseline-markering voor exacte 0 (Highcharts minPointLength). */
+/** Platte baseline-markering voor exacte 0 (Highcharts minPointLength). */
 const ZERO_BAR_H = 3;
 
-/** T52 — single-line teksthoogte voor font/korps via een wegwerp-probe
+/** Single-line teksthoogte voor font/korps via een wegwerp-probe
  * (fonts zijn al geladen door applyChart vóór de builders draaien). */
 function probeTextHeight(family: string, style: string, fontSize: number): number {
   const probe = figma.createText();
@@ -51,7 +51,7 @@ function probeTextHeight(family: string, style: string, fontSize: number): numbe
   return h;
 }
 
-/** T52 — best-effort batch-opruimen (degradatie-paden). */
+/** Best-effort batch-opruimen (degradatie-paden). */
 function removeNodes(nodes: SceneNode[]): void {
   for (let i = 0; i < nodes.length; i++) {
     try {
@@ -85,7 +85,7 @@ export function buildBars(
   root.resize(contentW, contentH);
   const rootGap = root.itemSpacing;
 
-  // ---- T52: meten — legenda (gewrapt), tekst-probes, echte delta-nodes.
+  // ---- Meten — legenda (gewrapt), tekst-probes, echte delta-nodes.
   let legend: FrameNode | null = null;
   if (model.showLegend && seriesCount > 1) {
     const entries: LegendEntry[] = [];
@@ -95,7 +95,7 @@ export function buildBars(
         color: ramp[s % ramp.length],
       });
     }
-    // T52 — gewrapte horizontale rij met hoogte-budget: buildLegend
+    // Gewrapte horizontale rij met hoogte-budget: buildLegend
     // degradeert zelf (korps → delta's → '+N meer') tot het past.
     legend = buildLegend(
       entries,
@@ -124,7 +124,7 @@ export function buildBars(
       )
     : 0;
 
-  // ---- T52: breedte-budget — bandverdeling met harde fit. De d3-
+  // ---- Breedte-budget — bandverdeling met harde fit. De d3-
   // scaleBand-gedachte blijft (groep ~80% van zijn step, bar ~90% van
   // zijn serie-slot, cap ~12% contentW), maar bars/gaps krimpen door
   // tot de groep ALTIJD binnen zijn band past (vloer MIN_BAR_W).
@@ -160,7 +160,7 @@ export function buildBars(
   // bandverdeling laten overlopen.
   const availValueW = seriesCount > 1 ? barW + barGap : maxLabelW;
 
-  // T52 — delta-nodes vooraf bouwen mét band-breedte-cap: het verticale
+  // Delta-nodes vooraf bouwen mét band-breedte-cap: het verticale
   // budget rekent met de ECHTE node-hoogte (badge-clone ≈ labelSize*1.4,
   // tekst-fallback lager) i.p.v. een aanname per route, en de engine
   // degradeert te brede badges zelf naar een afgekapte tekst-variant.
@@ -175,7 +175,7 @@ export function buildBars(
     deltaH = Math.ceil(deltaH);
   }
 
-  // T52 — fit-voorcheck via één herbruikbare probe: past er ÜBERHAUPT
+  // Fit-voorcheck via één herbruikbare probe: past er ÜBERHAUPT
   // een waarde-label/badge, anders vervalt de verticale reservering.
   let anyValueFits = false;
   if (model.showValues) {
@@ -198,7 +198,7 @@ export function buildBars(
     if (n !== null && n.width <= maxLabelW) anyDeltaFits = true;
   }
 
-  // ---- T52: verticaal budget — plot = contentH minus ALLE gemeten
+  // ---- Verticaal budget — plot = contentH minus ALLE gemeten
   // niet-plot-hoogtes en gaps. Zakt de bar-zone onder MIN_PLOT_H, dan
   // degraderen in vaste volgorde i.p.v. clippen.
   const groupGap = Math.round(labelSize * 0.5);
@@ -259,7 +259,7 @@ export function buildBars(
   plot.primaryAxisSizingMode = 'FIXED';
   plot.counterAxisSizingMode = 'FIXED';
   plot.primaryAxisAlignItems = 'CENTER';
-  // T52 — MIN i.p.v. MAX: alle bar-rijen zijn even hoog (rowH), dus
+  // MIN i.p.v. MAX: alle bar-rijen zijn even hoog (rowH), dus
   // top-uitlijnen houdt de baselines gelijk én laat de (per categorie
   // licht variërende) labelhoogte binnen de catLabelH-zone vallen.
   plot.counterAxisAlignItems = 'MIN';
@@ -291,7 +291,7 @@ export function buildBars(
 
     for (let s = 0; s < seriesCount; s++) {
       const value = model.series[s].values[i];
-      // T52 — exacte 0 rendert een platte baseline-markering; kleine-
+      // Exacte 0 rendert een platte baseline-markering; kleine-
       // maar-niet-nul waarden minimaal dezelfde zichtbare hoogte.
       const barH =
         value === 0 ? ZERO_BAR_H : Math.max(ZERO_BAR_H, Math.round((value / max) * plotH));
@@ -330,7 +330,7 @@ export function buildBars(
         }
       }
 
-      // Delta-badge (T48/T50): alleen serie 0, override-aware via engine.
+      // Delta-badge: alleen serie 0, override-aware via engine.
       if (deltaOn && s === 0) {
         const deltaNode = deltaNodes[i];
         if (deltaNode !== null) {
@@ -377,7 +377,7 @@ export function buildBars(
         theme.textVar,
       ),
     ];
-    // T52 — single-line ellipsen (maxLines 1): de oude HEIGHT-zonder-
+    // Single-line ellipsen (maxLines 1): de oude HEIGHT-zonder-
     // maxLines-route liet lange labels wikkelen en blies catLabelH op.
     if (label.width > maxLabelW) {
       truncateToWidth(label, maxLabelW);
@@ -387,7 +387,7 @@ export function buildBars(
     plot.appendChild(group);
   }
 
-  // ---- T52 backstop: GEMETEN totaalbreedte mag contentW nooit
+  // ---- Backstop: GEMETEN totaalbreedte mag contentW nooit
   // overschrijden (kolommen kunnen door labels/badges breder zijn dan
   // barW). Drop-volgorde: waarde-labels → delta-badges.
   const measureGroups = function (): number {

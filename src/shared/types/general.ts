@@ -1,6 +1,6 @@
 // ============================================================
 // General-tab types — update-general payloads en de slide-level
-// singleton-sections (spec §3.3).
+// singleton-sections.
 // ============================================================
 
 import type { ThemeSection } from './theme';
@@ -31,7 +31,7 @@ export interface BadgePayload {
 }
 
 // ============================================================
-// General-tab — slide-level singletons (spec §3.3)
+// General-tab — slide-level singletons
 // ============================================================
 
 export interface TitleDescriptionSection {
@@ -53,7 +53,7 @@ export interface TitleDescriptionSection {
    */
   paragraphVisible: boolean | null;
   /**
-   * CopyWrap heading-size VARIANT property (spec §7.2; variant typically
+   * CopyWrap heading-size VARIANT property (variant typically
    * ranges from "display" through "h4"). Null when the CopyWrap master
    * doesn't expose a Size property — the iframe hides the slider then.
    * `current` is the active value; `options` mirrors the master's
@@ -62,15 +62,14 @@ export interface TitleDescriptionSection {
    */
   size: { current: string; options: ReadonlyArray<string> } | null;
   /**
-   * Dim-accent-ranges op de heading (Text Dimmer-variable, spec §13 T30).
+   * Dim-accent-ranges op de heading (Text Dimmer-variable).
    *
    * - `Array<[start, end]>` — canonicale, niet-overlappende, gesorteerde
    *   ranges (`e_i < s_{i+1}`). Lege array = geen accent.
    * - `null` — library-variables (Text / Text Dimmer) niet bereikbaar op
    *   deze team-omgeving. UI verbergt dan het accent-blok.
    *
-   * Heading-only — paragraph-accent is permanent out-of-scope (user-besluit,
-   * zie spec §13 T30 en .archive/T28-accent-ranges-handoff).
+   * Heading-only — paragraph-accent is permanent out-of-scope (user-besluit).
    */
   headingDim: Array<[number, number]> | null;
 }
@@ -101,7 +100,7 @@ export interface ImageSection {
   imageWrapId: string;
   /** Figma ImagePaint-hash; null wanneer er nog een placeholder-fill staat. */
   imageHash: string | null;
-  /** v0.2.0 crop-support; blijft undefined in v0.1.0. Inline tuple matches Figma Transform = [[a,b,tx],[c,d,ty]]. */
+  /** Crop-support; blijft undefined zonder crop. Inline tuple matches Figma Transform = [[a,b,tx],[c,d,ty]]. */
   cropTransform?: [[number, number, number], [number, number, number]];
 }
 

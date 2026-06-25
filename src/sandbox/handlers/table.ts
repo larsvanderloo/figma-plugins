@@ -17,7 +17,7 @@ import type { UIToPluginMessage } from '../../shared/types';
 export async function handleUpdateTable(
   msg: Extract<UIToPluginMessage, { type: 'update-table' }>,
 ): Promise<void> {
-  // T34.2: Slot-based full-state PUT. msg.slotId adresseert de SlotNode
+  // Slot-based full-state PUT. msg.slotId adresseert de SlotNode
   // rechtstreeks (de UI ontving 'm via `GraphInstance.nodeId`).
   const slide = await findSlideById(msg.slideId);
   if (slide === null) {
@@ -51,7 +51,7 @@ export async function handleUpdateTable(
 export async function handleImportCsv(
   msg: Extract<UIToPluginMessage, { type: 'import-csv' }>,
 ): Promise<void> {
-  // T34.2 / T44: parse + truncate + applyTable. Import verandert alleen
+  // Parse + truncate + applyTable. Import verandert alleen
   // row/cel-inhoud; de tabel rendert rendertime full-width per surface.
   const slide = await findSlideById(msg.slideId);
   if (slide === null) {

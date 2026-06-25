@@ -1,7 +1,7 @@
 // ============================================================
 // Vue-app entry. Mount App.vue met Nuxt UI-plugin.
 //
-// Icon-bundling (T17): Figma plugin-iframe heeft `networkAccess:
+// Icon-bundling: Figma plugin-iframe heeft `networkAccess:
 // ["none"]`, dus Iconify's runtime-API-fetch (api.iconify.design)
 // wordt door CSP geblokkeerd. We registreren de volledige Lucide
 // collection compile-time via @iconify/vue's `addCollection`,

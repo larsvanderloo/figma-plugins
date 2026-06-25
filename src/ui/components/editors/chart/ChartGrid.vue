@@ -1,6 +1,6 @@
 <script setup lang="ts">
 // ============================================================
-// ChartGrid — categorieën × series datagrid (T47.3).
+// ChartGrid — categorieën × series datagrid.
 //
 // Zelfde interactiemodel als TableGrid: rij-gutter met rijmenu
 // (invoegen/verwijderen), serie-headers met seriemenu, per-cel
@@ -20,7 +20,7 @@ interface Props {
   model: ChartWrapModel;
   maxCategories: number;
   maxSeries: number;
-  /** T50 — single-series chart-types tonen alleen serie 0 (display-gating). */
+  /** Single-series chart-types tonen alleen serie 0 (display-gating). */
   singleSeries: boolean;
 }
 
@@ -46,12 +46,12 @@ const canAddCategory = computed<boolean>(() => props.model.categories.length < p
 const canAddSeries = computed<boolean>(
   () => !props.singleSeries && props.model.series.length < props.maxSeries,
 );
-// T50 — display-gating: verborgen series blijven in het model bewaard.
+// Display-gating: verborgen series blijven in het model bewaard.
 const shownSeries = computed(() =>
   props.singleSeries ? props.model.series.slice(0, 1) : props.model.series,
 );
 const showDeltaColumn = computed<boolean>(() => props.model.showDelta === true);
-// T53.2 — kolommen na de categorie: zichtbare series + optionele delta-kolom.
+// Kolommen na de categorie: zichtbare series + optionele delta-kolom.
 const colCount = computed<number>(
   () => shownSeries.value.length + (showDeltaColumn.value ? 1 : 0),
 );
@@ -69,7 +69,7 @@ function deltaOverrideValue(i: number): string {
   return overrides !== undefined && i < overrides.length ? overrides[i] : '';
 }
 
-// T50.3 — pijl-optie bij delta-bewerking: zet/verwijder ▲/▼ vooraan de
+// Pijl-optie bij delta-bewerking: zet/verwijder ▲/▼ vooraan de
 // override. Zonder override wordt de auto-tekst als startpunt gebruikt.
 function setDeltaArrow(i: number, arrow: string | null): void {
   let text = deltaOverrideValue(i).trim();

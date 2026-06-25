@@ -1,9 +1,8 @@
 // ============================================================
-// Chart-editor types — Slot-based ChartWrap (T47)
+// Chart-editor types — Slot-based ChartWrap
 //
-// Zelfde architectuur als de TableWrap-rewrite (T34): de plugin bouwt
-// zelf FRAMEs/ELLIPSEs/VECTORs binnen de SlotNode van een ChartWrap-
-// INSTANCE. Het model is multi-series vanaf dag één: `categories` zijn
+// De plugin bouwt zelf FRAMEs/ELLIPSEs/VECTORs binnen de SlotNode van
+// een ChartWrap-INSTANCE. Het model is multi-series: `categories` zijn
 // de labels (slices/bars/x-as), elke serie levert één waarde per
 // categorie.
 //
@@ -27,7 +26,7 @@ export interface ChartSeriesModel {
    * SemiBold. Index-aligned met `values`; afwezig = geen nadruk.
    */
   emphasis?: boolean[];
-  /** T50.2 — waarde-labels van deze serie als percentage ('41' → '41%'). */
+  /** Waarde-labels van deze serie als percentage ('41' → '41%'). */
   percent?: boolean;
 }
 
@@ -58,26 +57,26 @@ export interface ChartWrapModel {
   /** Waarde-labels tonen op segmenten/bars/punten. */
   showValues: boolean;
   /**
-   * Per-categorie delta-override (serie 0, T50). Index-aligned met
+   * Per-categorie delta-override (serie 0). Index-aligned met
    * `categories`. Lege string = auto (chartDeltaLabel vs vorige
    * categorie); niet-lege string = letterlijke badge-tekst.
    */
   deltaOverrides?: string[];
   /**
-   * Vaste referentieschaal voor progress-bars (T50). null/afwezig =
+   * Vaste referentieschaal voor progress-bars. null/afwezig =
    * auto: max(100, hoogste waarde). Alleen waarden > 0 zijn geldig.
    */
   progressMax?: number | null;
-  /** T50.4 — donut center-totaal override; lege string = auto (som serie 0). */
+  /** Donut center-totaal override; lege string = auto (som serie 0). */
   donutTotalOverride?: string;
-  /** T50.4 — onderschrift onder het center-totaal; default 'totaal'. */
+  /** Onderschrift onder het center-totaal; default 'totaal'. */
   donutTotalLabel?: string;
-  /** T50.4 — nadruk op het center-totaal (SemiBold); default true. */
+  /** Nadruk op het center-totaal (SemiBold); default true. */
   donutTotalEmphasis?: boolean;
-  /** T50.4 — nadruk op het onderschrift (SemiBold); default false. */
+  /** Nadruk op het onderschrift (SemiBold); default false. */
   donutTotalLabelEmphasis?: boolean;
   /**
-   * Delta-badges tonen (T48): per categorie de verandering t.o.v. de
+   * Delta-badges tonen: per categorie de verandering t.o.v. de
    * vorige categorie in serie 0 (▲ +12% / ▼ −5%). Optioneel zodat
    * bestaande gepersisteerde modellen geldig blijven; default false.
    */

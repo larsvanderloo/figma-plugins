@@ -1,14 +1,14 @@
 // ============================================================
 // editors/chart/progress.ts
 //
-// Progress-bar-builder (T47): per categorie een rij met label, track
+// Progress-bar-builder: per categorie een rij met label, track
 // en waarde. De referentieschaal is max(100, hoogste waarde) zodat
 // percentages (0-100) natuurlijk vullen en grotere reeksen relatief
 // schalen. Track in lichte accent-tint, fill in serie-0-kleur.
-// Delta-badges (T48, showDelta): extra kolom rechts van de waarde met
+// Delta-badges (showDelta): extra kolom rechts van de waarde met
 // de verandering t.o.v. de vorige categorie (▲ +12% / ▼ −5%).
 //
-// T52 — budget-discipline (meet-en-reserveer, à la het box-layout van
+// Budget-discipline (meet-en-reserveer, à la het box-layout van
 // Chart.js/Highcharts): elke niet-track-kolom wordt eerst gemeten én
 // gecapt, de track krijgt de rest. Verticaal krimpt het korps mee met
 // de rij-band en degraderen badges naar de tekst-variant vóórdat iets
@@ -56,7 +56,7 @@ export function buildProgress(
   root.clipsContent = true;
   root.resize(contentW, contentH);
 
-  // ---- Verticaal budget (T52) -------------------------------------
+  // ---- Verticaal budget -------------------------------------------
   // rowCap = de band (contentH / n) bij nul spacing: een rij mag die
   // NOOIT overschrijden, anders duwt n × rij de frame uit. Het korps
   // krimpt mee (regelhoogte ≈ 1.3 × korps), met 9px als absolute vloer
@@ -70,7 +70,7 @@ export function buildProgress(
   if (ef < 9) ef = 9;
   const lineH = Math.ceil(ef * 1.3);
 
-  // T49 — responsieve track-dikte via rij-banden (d3 scaleBand-idee):
+  // Responsieve track-dikte via rij-banden (d3 scaleBand-idee):
   // de track vult ~45% van zijn band, geklemd tussen een dunne
   // ondergrens (korps-gebonden, veel rijen) en 48px (chunky pill), en
   // nooit boven de rij-cap.
@@ -116,7 +116,7 @@ export function buildProgress(
     if (valueW > valueCap) valueW = valueCap;
   }
 
-  // Delta-kolom (T48/T50/T52): nodes eerst bouwen, dan de kolom op de
+  // Delta-kolom: nodes eerst bouwen, dan de kolom op de
   // breedste node maten — geen vaste 11%-gok die smaller kan zijn dan
   // een badge. Badges mogen alleen wanneer ze verticaal in de rij-cap
   // passen (anders forceert badgeTemplate=null de tekst-variant);
@@ -181,7 +181,7 @@ export function buildProgress(
     row.name = 'ProgressRow-' + String(i);
     row.layoutMode = 'HORIZONTAL';
     row.primaryAxisSizingMode = 'FIXED';
-    // T52 — vaste rijhoogte uit het budget i.p.v. HUG: geen meet-races
+    // Vaste rijhoogte uit het budget i.p.v. HUG: geen meet-races
     // met auto-layout en geen rijen die door wrappende tekst oprekken.
     row.counterAxisSizingMode = 'FIXED';
     row.counterAxisAlignItems = 'CENTER';
@@ -197,7 +197,7 @@ export function buildProgress(
     label.fontSize = ef;
     label.characters = model.categories[i];
     label.textAutoResize = 'HEIGHT';
-    // T52 — maxLines is VERPLICHT naast ENDING: bij autoResize HEIGHT
+    // maxLines is VERPLICHT naast ENDING: bij autoResize HEIGHT
     // truncate Figma anders nooit en wrappen lange labels de rij uit.
     label.textTruncation = 'ENDING';
     label.maxLines = 1;
@@ -218,7 +218,7 @@ export function buildProgress(
     track.fills = [trackPaint(light)];
     track.clipsContent = true;
 
-    // T52 — nul-conventie (Highcharts/Chart.js): GEEN inkt voor waarde
+    // Nul-conventie (Highcharts/Chart.js): GEEN inkt voor waarde
     // 0, en ook niet voor bijna-nul onder de halve pill-radius
     // (trackH / 4) — de oude Math.max(trackH, …) rendert anders een
     // losse cirkel die een waarde suggereert waar geen is.
@@ -250,14 +250,14 @@ export function buildProgress(
       value.resize(valueW, value.height);
     }
 
-    // Delta-kolom (T48/T50): vaste-breedte cel zodat rij-alignment
+    // Delta-kolom: vaste-breedte cel zodat rij-alignment
     // behouden blijft wanneer een categorie geen delta heeft.
     if (deltaW > 0) {
       const deltaCell = figma.createFrame();
       deltaCell.name = 'DeltaCell';
       deltaCell.layoutMode = 'HORIZONTAL';
       deltaCell.primaryAxisSizingMode = 'FIXED';
-      // T52 — GEEN hoogte-meting op de net-gevulde cel: dat racet met
+      // GEEN hoogte-meting op de net-gevulde cel: dat racet met
       // auto-layout en kneep badges tot een ~1px-sliver. De hoogte
       // komt uit het bekende rij-budget en de cel clipt nooit.
       deltaCell.counterAxisSizingMode = 'FIXED';

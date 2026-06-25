@@ -130,7 +130,7 @@ export async function handleSetCardSize(
 export async function handleUpdateTimelineItem(
   msg: Extract<UIToPluginMessage, { type: 'update-timeline-item' }>,
 ): Promise<void> {
-  // T31.2 — muteert heading/paragraph van één CopyWrap-item.
+  // Muteert heading/paragraph van één CopyWrap-item.
   // Zoek CopyWrap via slide.findOne(id) zodat ook genestede CopyWraps
   // (binnen tussenliggende Frames) gevonden worden — wrapper-agnostisch.
   const slide = await findSlideById(msg.slideId);
@@ -142,7 +142,7 @@ export async function handleUpdateTimelineItem(
     });
     return;
   }
-  // T31.2: slide-scoped findOne op node-id — vindt ook genestede CopyWraps.
+  // Slide-scoped findOne op node-id — vindt ook genestede CopyWraps.
   const copyWrapNode = slide.findOne(function (n: SceneNode) {
     return n.type === 'INSTANCE' && n.name === 'CopyWrap' && n.id === msg.copyWrapNodeId;
   });

@@ -27,13 +27,13 @@ import {
 } from './readers';
 
 /**
- * T31.2: Extraheert Card-instances (recursief via findAll) binnen een
+ * Extraheert Card-instances (recursief via findAll) binnen een
  * wrapper-scope (CardWrap of TimelineWrap). Bounded tot de wrapper-subtree
  * (FIG-TRAVERSE-01 — findAll op een wrapper-node, niet op de hele pagina).
  *
  * Corrupt-items zonder Heading-textnode worden silent overgeslagen.
  *
- * T32: `slide` parameter toegevoegd zodat readCardIcon de visibility van de
+ * `slide` parameter zodat readCardIcon de visibility van de
  * icon-instance kan beoordelen via isEffectivelyVisible.
  */
 function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
@@ -116,7 +116,7 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
 }
 
 /**
- * T31.2: Extraheert CopyWrap-instances (recursief via findAll) binnen een
+ * Extraheert CopyWrap-instances (recursief via findAll) binnen een
  * wrapper-scope (TimelineWrap). Bounded tot de wrapper-subtree (FIG-TRAVERSE-01).
  *
  * Skipt decoratieve `Stepper Item`-instances; pakt alleen CopyWrap-
@@ -190,7 +190,7 @@ async function extractInstructorCards(scope: InstanceNode): Promise<InstructorCa
 }
 
 /**
- * T31.2: Polymorphic scan van CardWrap en TimelineWrap.
+ * Polymorphic scan van CardWrap en TimelineWrap.
  *
  * TimelineWrap kan in productie bevatten:
  *   - directe Card-instances (worden in content.cards gerouted — icon-picker werkt)
@@ -199,7 +199,7 @@ async function extractInstructorCards(scope: InstanceNode): Promise<InstructorCa
  * Beide worden gevonden via findAll (recursieve descendant-walk, bounded tot wrapper-scope).
  */
 export async function scanContent(slide: InstanceNode): Promise<ContentItems | null> {
-  // T53.1 — ALLE CardWraps scannen (whitepapers dragen er meerdere).
+  // ALLE CardWraps scannen (whitepapers dragen er meerdere).
   const cardWraps = findAllCardWraps(slide);
   const cardWrap = cardWraps.length > 0 ? cardWraps[0] : findCardWrap(slide);
   const timelineWrap = findTimelineWrap(slide);
@@ -246,7 +246,7 @@ export async function scanContent(slide: InstanceNode): Promise<ContentItems | n
     });
   }
 
-  // T51.1 — losse Cards buiten een CardWrap/TimelineWrap: slide-breed
+  // Losse Cards buiten een CardWrap/TimelineWrap: slide-breed
   // bijzoeken, met uitsluiting van (a) cards die al via een wrap-scope
   // gevonden zijn en (b) cards die binnen een InstructorCard leven (die
   // zijn eigendom van de instructor-editor). Mutaties targeten toch al

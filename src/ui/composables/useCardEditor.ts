@@ -75,7 +75,7 @@ export function useCardEditor() {
     if (prev === undefined || prev.paragraph !== value.paragraph) {
       payload.paragraph = value.paragraph;
     }
-    // T32: icon may be null (icon-instance hidden) — omit when null.
+    // icon may be null (icon-instance hidden) — omit when null.
     const iconChanged =
       (prev === undefined || prev.icon !== value.icon) && value.icon !== null;
     const styleChanged =

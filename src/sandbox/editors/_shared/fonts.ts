@@ -4,7 +4,7 @@
 // Canonical font-loading helpers voor text-mutaties. Één plek,
 // één patroon — voorkomt de silent character-truncation bug die
 // ontstond toen drie editor-files ieder een eigen "laad alleen
-// char-0's font"-variant hadden (spec §13 T29).
+// char-0's font"-variant hadden.
 //
 // FIG-FONT-01: Figma Plugin API truncate-t `node.characters = value`
 // stil bij de eerste font-boundary wanneer niet álle fonts in de
@@ -21,7 +21,7 @@
  * zodat `node.characters = value` en `node.setRangeFills(...)` veilig
  * uitgevoerd kunnen worden. Mixed-font nodes die niet álle fonts laden
  * vóór een characters-write worden door Figma silent getruncate-t bij
- * de font-boundary (zie spec §13 T29 root-cause).
+ * de font-boundary (de root-cause).
  */
 export async function loadAllFontsForNode(node: TextNode): Promise<void> {
   const fontName = node.fontName;

@@ -1,5 +1,5 @@
 // ============================================================
-// Bridge-messages (spec §5)
+// Bridge-messages
 //
 // Discriminated unions per richting (FIG-MSG-01). Beide bundels
 // (main + UI) importeren deze types zodat send- en receive-kant altijd
@@ -33,12 +33,12 @@ export type UIToPluginMessage =
     }
   | {
       /**
-       * Muteert alleen fills op de heading via Text Dimmer-variable
-       * (spec §13 T30). Characters blijven ongemoeid; zie `update-general`
+       * Muteert alleen fills op de heading via Text Dimmer-variable.
+       * Characters blijven ongemoeid; zie `update-general`
        * voor tekst-mutaties.
        *
        * Heading-only — geen `field`-discriminator. Paragraph-accent is
-       * permanent out-of-scope (user-besluit bij T30-herstart).
+       * permanent out-of-scope.
        */
       type: 'update-accent';
       slideId: string;
@@ -87,7 +87,7 @@ export type UIToPluginMessage =
   | {
       /**
        * Muteert heading en/of paragraph van één timeline-item binnen de
-       * TimelineWrap (spec §13 T31). `copyWrapNodeId` identificeert de
+       * TimelineWrap. `copyWrapNodeId` identificeert de
        * target-CopyWrap-instance. Debounced 200ms in TimelineItemEditor.
        */
       type: 'update-timeline-item';
@@ -100,7 +100,7 @@ export type UIToPluginMessage =
     }
   | {
       /**
-       * Full-state PUT van een TableWrap (T34.2). `slotId` identificeert
+       * Full-state PUT van een TableWrap. `slotId` identificeert
        * de SlotNode binnen de TableWrap-INSTANCE; `desired` is het complete
        * gewenste model inclusief alle rows + cells.
        */
@@ -111,7 +111,7 @@ export type UIToPluginMessage =
     }
   | {
       /**
-       * Full-state PUT van een ChartWrap (T47). `slotId` identificeert de
+       * Full-state PUT van een ChartWrap. `slotId` identificeert de
        * SlotNode binnen de ChartWrap-INSTANCE; `desired` is het complete
        * gewenste chart-model (type, categories, series, weergave-opties).
        */
@@ -122,7 +122,7 @@ export type UIToPluginMessage =
     }
   | {
       /**
-       * CSV-import voor een ChartWrap (T50). Main-thread parseert de CSV
+       * CSV-import voor een ChartWrap. Main-thread parseert de CSV
        * (rij 0 = koprij met serienamen, kolom 0 = categorie-labels) en
        * roept applyChart aan.
        */
@@ -133,8 +133,8 @@ export type UIToPluginMessage =
     }
   | {
       /**
-       * CSV-import voor een TableWrap (T34.2). Main-thread parseert de CSV-
-       * string, trunceert op TABLE_MAX_ROWS / TABLE_MAX_COLS (T44: flat max)
+       * CSV-import voor een TableWrap. Main-thread parseert de CSV-
+       * string, trunceert op TABLE_MAX_ROWS / TABLE_MAX_COLS (flat max)
        * en roept applyTable aan.
        */
       type: 'import-csv';

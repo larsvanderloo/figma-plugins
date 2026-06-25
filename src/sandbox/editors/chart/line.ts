@@ -1,14 +1,14 @@
 // ============================================================
 // editors/chart/line.ts
 //
-// Line-chart-builder (T47): per serie een VECTOR-polyline + punt-dots
+// Line-chart-builder: per serie een VECTOR-polyline + punt-dots
 // in een layout-NONE plotvlak, met subtiele horizontale gridlines en
 // categorie-labels op de x-as. Waarden schalen tegen de hoogste waarde
 // over alle series; punten verdelen de breedte gelijkmatig.
-// Delta-badges (T48, showDelta): boven elk serie-0-punt de verandering
+// Delta-badges (showDelta): boven elk serie-0-punt de verandering
 // t.o.v. de vorige categorie, gestapeld onder het waarde-label.
 //
-// T52 — hard overflow-budget: de top-headroom (padTop) reserveert de
+// Hard overflow-budget: de top-headroom (padTop) reserveert de
 // GEMETEN stapel boven het hoogste punt (waarde-label + delta-badge,
 // de oude reservering vergat de badge), de legenda wrapt binnen
 // contentW en telt met zijn echte hoogte mee. Past het niet, dan
@@ -32,10 +32,10 @@ import { trackPaint } from './palette';
 
 const DOT_SIZE = 12;
 const STROKE_W = 4;
-/** T52 — minimaal leesbare lijn-zone; daaronder degraderen i.p.v. clippen. */
+/** Minimaal leesbare lijn-zone; daaronder degraderen i.p.v. clippen. */
 const MIN_INNER_H = 24;
 
-/** T52 — single-line teksthoogte voor font/korps via een wegwerp-probe
+/** Single-line teksthoogte voor font/korps via een wegwerp-probe
  * (fonts zijn al geladen door applyChart vóór de builders draaien). */
 function probeTextHeight(family: string, style: string, fontSize: number): number {
   const probe = figma.createText();
@@ -70,7 +70,7 @@ export function buildLine(
   root.resize(contentW, contentH);
   const rootGap = root.itemSpacing;
 
-  // ---- T52: meten — legenda (gewrapt), tekst-probes, echte delta-nodes.
+  // ---- Meten: legenda (gewrapt), tekst-probes, echte delta-nodes.
   let legend: FrameNode | null = null;
   if (model.showLegend && model.series.length > 1) {
     const entries: LegendEntry[] = [];
@@ -80,7 +80,7 @@ export function buildLine(
         color: ramp[s % ramp.length],
       });
     }
-    // T52 — gewrapte horizontale rij met hoogte-budget: buildLegend
+    // Gewrapte horizontale rij met hoogte-budget: buildLegend
     // degradeert zelf (korps → delta's → '+N meer') tot het past.
     legend = buildLegend(
       entries,
@@ -112,7 +112,7 @@ export function buildLine(
   const slotStep = pointCount > 1 ? innerW / (pointCount - 1) : contentW;
   const deltaMaxW = pointCount > 1 ? Math.max(8, Math.floor(slotStep)) : contentW;
 
-  // T52 — delta-nodes vooraf bouwen mét punt-step-cap: het verticale
+  // Delta-nodes vooraf bouwen mét punt-step-cap: het verticale
   // budget rekent met de ECHTE node-hoogte (badge-clone vs. tekst-
   // fallback) i.p.v. een aanname, en de engine degradeert te brede
   // badges zelf naar een afgekapte tekst-variant.
@@ -127,7 +127,7 @@ export function buildLine(
     deltaH = Math.ceil(deltaH);
   }
 
-  // T52 — fit-voorcheck via één herbruikbare probe: past er ÜBERHAUPT
+  // Fit-voorcheck via één herbruikbare probe: past er ÜBERHAUPT
   // een waarde-label/badge, anders vervalt de verticale reservering.
   let anyValueFits = false;
   if (model.showValues) {
@@ -150,7 +150,7 @@ export function buildLine(
     if (n !== null && n.width <= slotStep) anyDeltaFits = true;
   }
 
-  // ---- T52: verticaal budget — plot = contentH minus gemeten legenda,
+  // ---- Verticaal budget: plot = contentH minus gemeten legenda,
   // x-as-rij en gaps; padTop = dot-marge + GEMETEN waarde/delta-stapel.
   let valuesOn = model.showValues && valueH > 0 && anyValueFits;
   let deltaOn = model.showDelta === true && deltaH > 0 && anyDeltaFits;
@@ -226,7 +226,7 @@ export function buildLine(
     if (pointCount <= 1) return pad + innerW / 2;
     return pad + (innerW * i) / (pointCount - 1);
   };
-  // T52.1 — 6% top-headroom binnen het plotvlak zodat de hoogste lijn/dot
+  // 6% top-headroom binnen het plotvlak zodat de hoogste lijn/dot
   // niet de bovenrand raakt; de waarde-labels zitten in padTop daarboven.
   const plotTop = padTop + Math.round(innerH * 0.06);
   const plotSpan = innerH - Math.round(innerH * 0.06);
@@ -234,7 +234,7 @@ export function buildLine(
     return plotTop + plotSpan - (value / max) * plotSpan;
   };
   // Een punt onderin (waarde ≈ 0) krijgt z'n waarde-label ONDER de dot,
-  // anders botst het met de x-as-labels (T52.1).
+  // anders botst het met de x-as-labels.
   const labelBelow = function (value: number): boolean {
     return value / max < 0.12;
   };
@@ -260,7 +260,7 @@ export function buildLine(
     vector.strokeJoin = 'ROUND';
     vector.fills = [];
     plot.appendChild(vector);
-    // T52.2 — MCP-geverifieerd: na het zetten van vectorPaths her-origint
+    // MCP-geverifieerd: na het zetten van vectorPaths her-origint
     // Figma de vector naar de bounding-box van het pad (vector.x/y → 0).
     // Het pad is in absolute plot-coördinaten gerekend, dus plaats de
     // vector op de minX/minY van het pad zodat de lijn op de dots valt
@@ -278,7 +278,7 @@ export function buildLine(
       plot.appendChild(dot);
 
       // Label-stapel boven het punt: waarde bovenaan, delta-badge
-      // (T48, alleen serie 0) eronder, dichtst bij de dot. padTop
+      // (alleen serie 0) eronder, dichtst bij de dot. padTop
       // reserveert exact DOT_SIZE + valueH + deltaH, dus de stapel
       // van het hoogste punt blijft binnen het plot-frame.
       const lowPoint = labelBelow(model.series[s].values[i]);
@@ -287,7 +287,7 @@ export function buildLine(
         const deltaNode = deltaNodes[i];
         if (deltaNode !== null) {
           if (deltaNode.width > contentW || (pointCount > 1 && deltaNode.width > slotStep)) {
-            // T52 — breder dan de punt-step: vervalt per stuk.
+            // Breder dan de punt-step: vervalt per stuk.
             try {
               deltaNode.remove();
             } catch (_e) {
@@ -315,7 +315,7 @@ export function buildLine(
         valueText.textAutoResize = 'WIDTH_AND_HEIGHT';
         valueText.fills = [{ type: 'SOLID', color: color }];
         if (valueText.width > contentW || (pointCount > 1 && valueText.width > slotStep)) {
-          // T52 — breder dan de punt-step: vervalt per stuk.
+          // Breder dan de punt-step: vervalt per stuk.
           valueText.remove();
         } else {
           plot.appendChild(valueText);
@@ -338,7 +338,7 @@ export function buildLine(
   root.appendChild(plot);
 
   // X-as-labels: zelfde x-posities als de datapunten (layout NONE).
-  // T52 — labels breder dan hun punt-step worden getruncate (ECharts
+  // Labels breder dan hun punt-step worden getruncate (ECharts
   // axisLabel.overflow 'truncate'); x is geclampt binnen contentW.
   const maxXLabelW = pointCount > 1 ? Math.max(24, Math.floor(contentW / pointCount)) : contentW;
   const labels = figma.createFrame();
@@ -360,7 +360,7 @@ export function buildLine(
         theme.textVar,
       ),
     ];
-    // T52 — single-line ellipsen (maxLines 1): zonder maxLines zou een
+    // Single-line ellipsen (maxLines 1): zonder maxLines zou een
     // lang label wikkelen en de vaste labelRowH-rij uitlopen.
     if (t.width > maxXLabelW) {
       truncateToWidth(t, maxXLabelW);

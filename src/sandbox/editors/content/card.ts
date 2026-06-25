@@ -1,7 +1,7 @@
 // ============================================================
 // editors/content/card.ts
 //
-// Main-thread mutator voor de Content → Cards-sectie (spec §9-T11).
+// Main-thread mutator voor de Content → Cards-sectie.
 // Zoekt binnen de slide de CardWrap-instance en vervolgens de specifieke
 // card (identificeerd op node-id), en muteert:
 //   1. Heading  — descendant text-node met name 'Heading' binnen de card.
@@ -23,7 +23,7 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-// T31.2: findCardWrap no longer needed — applyCard/applyCardVisual use slide.findOne(id).
+// findCardWrap no longer needed — applyCard/applyCardVisual use slide.findOne(id).
 import {
   normalizeIconKey,
   trySwapViaInstanceProperty,
@@ -116,7 +116,7 @@ async function applyCardIconSwap(card: InstanceNode, iconName: string): Promise<
  * afbeelding. Best-effort — faalt stil wanneer geen slot gevonden wordt.
  * Retourneert de nieuwe ImagePaint-hash bij succes, of null bij skip.
  *
- * T31.2: zoekt Card via slide.findOne(id) zodat Cards binnen TimelineWrap
+ * Zoekt Card via slide.findOne(id) zodat Cards binnen TimelineWrap
  * (genest in tussenliggende Frames) ook bereikbaar zijn — wrapper-agnostisch.
  */
 export async function applyCardVisual(
@@ -124,7 +124,7 @@ export async function applyCardVisual(
   cardNodeId: string,
   bytes: Uint8Array,
 ): Promise<string | null> {
-  // T31.2: slide-scoped findOne op node-id — vindt Cards in CardWrap én TimelineWrap.
+  // Slide-scoped findOne op node-id — vindt Cards in CardWrap én TimelineWrap.
   const cardNode = slide.findOne(function (n: SceneNode) {
     return n.type === 'INSTANCE' && n.name === 'Card' && n.id === cardNodeId;
   });
@@ -149,11 +149,11 @@ export async function applyCardVisual(
  * Past een CardPayload toe op de aangewezen card.
  * Resolveert zonder error wanneer de target-card ontbreekt (silent skip, FIG-GUARD-01).
  *
- * T31.2: zoekt Card via slide.findOne(id) zodat Cards binnen TimelineWrap
+ * Zoekt Card via slide.findOne(id) zodat Cards binnen TimelineWrap
  * (genest in tussenliggende Frames) ook muteerbaar zijn — wrapper-agnostisch.
  */
 export async function applyCard(slide: InstanceNode, payload: CardPayload): Promise<void> {
-  // T31.2: slide-scoped findOne op node-id — vindt Cards in CardWrap én TimelineWrap.
+  // Slide-scoped findOne op node-id — vindt Cards in CardWrap én TimelineWrap.
   const cardNode = slide.findOne(function (n: SceneNode) {
     return n.type === 'INSTANCE' && n.name === 'Card' && n.id === payload.cardNodeId;
   });

@@ -2,8 +2,8 @@
 // editors/_shared/accent-vars.ts
 //
 // Gedeelde helpers voor library-variable-resolution (Text + Text Dimmer).
-// Extractie uit code.ts (T34.2) zodat zowel de accent-range-writer (heading
-// dim ranges, T28.2) als de Slot-based table-renderer (T34.2) dezelfde
+// Extractie uit code.ts zodat zowel de accent-range-writer (heading
+// dim ranges) als de Slot-based table-renderer dezelfde
 // single-source-of-truth gebruiken.
 //
 // Variable-keys komen uit de "Templates Welder / Theme"-library; de
@@ -60,7 +60,7 @@ export function loadAccentVars(): Promise<AccentVars> {
 }
 
 /**
- * Pre-resolve een Variable tegen de node's effectieve variable-modes (T28.2).
+ * Pre-resolve een Variable tegen de node's effectieve variable-modes.
  * Figma's glyph-renderer cached de fallback-RGB die we aan
  * `setBoundVariableForPaint` meegeven; wanneer die niet matcht met de
  * current-mode-waarde zien we stale kleuren tot een mode-switch de cache
@@ -83,7 +83,7 @@ export function resolveColor(v: Variable, node: SceneNode, fallback: RGB): RGB {
 }
 
 /**
- * Mode-getrouwe variable-resolutie (T47.1): resolveForConsumer blijkt op
+ * Mode-getrouwe variable-resolutie: resolveForConsumer blijkt op
  * Slot/Frame/Instance-consumers de DEFAULT-mode van de collectie terug te
  * geven i.p.v. de slide-mode (MCP-geverifieerd 2026-06-12: blue-mode slide
  * resolvede Text als orange). Deze helper leest de mode van de node zelf

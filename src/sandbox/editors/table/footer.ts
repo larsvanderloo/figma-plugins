@@ -1,9 +1,9 @@
 // ============================================================
 // editors/table/footer.ts
 //
-// Footer-rij-builders (T46): toont per-kolom calculation-summaries
+// Footer-rij-builders: toont per-kolom calculation-summaries
 // (som) onder de body-rijen. Styling volgt de body-cells; sum-kolommen
-// zijn rechts uitgelijnd (Notion number-column-stijl, T46.1).
+// zijn rechts uitgelijnd (Notion number-column-stijl).
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
@@ -40,12 +40,12 @@ function buildFooterCell(
   cellFrame.fills = [];
   cellFrame.setPluginData('emphasis', '');
 
-  // T46 — footer-cell styling volgt de body-cells (Inter Regular, body-fontSize,
+  // Footer-cell styling volgt de body-cells (Inter Regular, body-fontSize,
   // volledige Text-kleur, geen eigen padding — die zit op de row).
   // Per-column emphasis bold't alleen de footer-waarde, identiek aan de
   // per-cell `emphasis`-stijl in buildCell().
-  // T46.1 — sum-kolommen zijn numeriek; waarde rechts uitgelijnd (Notion-stijl).
-  // T46.4 — kolommen ZONDER som tonen een vrije label-tekst (bv. "Totaal"),
+  // Sum-kolommen zijn numeriek; waarde rechts uitgelijnd (Notion-stijl).
+  // Kolommen ZONDER som tonen een vrije label-tekst (bv. "Totaal"),
   // links uitgelijnd zoals normale body-cells.
   const emphasized = summary !== null && summary.emphasis === true;
   const t = figma.createText();
@@ -102,7 +102,7 @@ export function buildFooterRow(
   rowFrame.primaryAxisAlignItems = 'MIN';
   rowFrame.counterAxisAlignItems = 'CENTER';
   rowFrame.itemSpacing = metrics.rowGap;
-  // T46.1 — footer-row padding volgt dezelfde body-rij-padding zodat de
+  // Footer-row padding volgt dezelfde body-rij-padding zodat de
   // footer-rij visueel niet afwijkt van de data-rijen.
   rowFrame.paddingTop = rowPadding;
   rowFrame.paddingBottom = rowPadding;

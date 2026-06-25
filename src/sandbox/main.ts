@@ -7,12 +7,12 @@
 //      direct kunnen doorzetten zonder per-call loadFontAsync.
 //   3. Command-dispatch op `figma.command` (manifest menu "open").
 //   4. Bridge-message-loop: vertaalt UI-events naar figma-node-scans
-//      en response-messages (spec §5, FIG-MSG-01).
+//      en response-messages (FIG-MSG-01).
 //   5. Page-change listener: hercomputet de slidelist bij page-nav.
 //
-// This file is still the sandbox entry point. Keep new feature logic in
-// domain modules under editors/** where possible; code.ts should only wire
-// Figma lifecycle, scanning, message dispatch, and UI responses.
+// Keep new feature logic in domain modules under editors/** where
+// possible; this entry point should only wire Figma lifecycle,
+// scanning, message dispatch, and UI responses.
 // Message-handlers leven in sandbox/handlers/** (registry in
 // sandbox/handlers/index.ts); sessie-state + emit-helpers in
 // sandbox/session.ts.
@@ -216,15 +216,15 @@ if (!isDevModeRuntime()) {
 
 /**
  * Parallel preload van alle fonts die we in text-mutaties gebruiken.
- * Faalt hard bij een missing font zodat we niet later in T8/T9/T11
- * stille crashes krijgen. FIG-FONT-01.
+ * Faalt hard bij een missing font zodat we niet later stille crashes
+ * krijgen. FIG-FONT-01.
  */
 async function loadFonts(): Promise<void> {
   await Promise.all(REQUIRED_FONTS.map((font) => figma.loadFontAsync(font)));
 }
 
 // ============================================================
-// Bridge-message-loop (spec §5)
+// Bridge-message-loop
 // ============================================================
 
 function isMutatingMessage(msg: UIToPluginMessage): boolean {
@@ -268,7 +268,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
 // ============================================================
 
 async function main(): Promise<void> {
-  // Command-dispatch: v0.1.0 heeft alleen 'open' (manifest menu +
+  // Command-dispatch: er is alleen 'open' (manifest menu +
   // relaunch-buttons vuren met diezelfde command). Geen command-match
   // betekent dat de plugin via een ander event is gestart; we tonen
   // dan alsnog de UI (defensief).

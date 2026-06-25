@@ -79,7 +79,7 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
     series.push({ name: '', values: values, emphasis: emphasis, percent: false });
   }
 
-  // T50 — delta-overrides rechthoekig op categorie-lengte; progressMax
+  // Delta-overrides rechthoekig op categorie-lengte; progressMax
   // alleen geldig wanneer een eindig getal > 0.
   const deltaOverrides: string[] = [];
   const sourceOverrides = Array.isArray(model.deltaOverrides) ? model.deltaOverrides : [];
@@ -188,10 +188,9 @@ export function formatChartValue(value: number): string {
 }
 
 /**
- * Delta-badge-tekst voor categorie `index` t.o.v. de vorige categorie
- * (T48): ▲ +12% / ▼ −5%, afgerond op hele procenten. Conventies (zie
- * docs/architecture/chart-delta-badge.md): eerste categorie heeft geen
- * vorige → null; vorige waarde 0 → absolute verandering i.p.v. een
+ * Delta-badge-tekst voor categorie `index` t.o.v. de vorige categorie:
+ * ▲ +12% / ▼ −5%, afgerond op hele procenten. Conventies: eerste categorie
+ * heeft geen vorige → null; vorige waarde 0 → absolute verandering i.p.v. een
  * oneindig percentage (Geckoboard-conventie); beide 0 → null.
  */
 export function chartDeltaLabel(values: number[], index: number): string | null {
@@ -223,7 +222,7 @@ export function emptyChartModel(slotId: string): ChartWrapModel {
 }
 
 /**
- * T50 — effectieve delta-tekst voor categorie i (serie 0): een niet-lege
+ * Effectieve delta-tekst voor categorie i (serie 0): een niet-lege
  * override wint van de auto-berekening. Single source of truth voor de
  * sandbox-renderers én de UI-grid-placeholder.
  */
@@ -237,19 +236,19 @@ export function chartDeltaDisplay(model: ChartWrapModel, i: number): string | nu
   return chartDeltaLabel(model.series[0].values, i);
 }
 
-/** T50 — referentieschaal voor progress: progressMax of auto. */
+/** Referentieschaal voor progress: progressMax of auto. */
 export function chartProgressReference(model: ChartWrapModel): number {
   const max = model.progressMax;
   if (typeof max === 'number' && isFinite(max) && max > 0) return max;
   return Math.max(100, chartMaxValue(model));
 }
 
-/** T50 — chart-types die alleen serie 0 renderen. */
+/** Chart-types die alleen serie 0 renderen. */
 export function isSingleSeriesChartType(t: ChartType): boolean {
   return t === 'donut' || t === 'pie' || t === 'progress';
 }
 
-/** T50.2 — waarde-label met optioneel procentteken (per serie). */
+/** Waarde-label met optioneel procentteken (per serie). */
 export function chartValueLabel(series: ChartSeriesModel, value: number): string {
   const formatted = formatTableNumber(value);
   return series.percent === true ? formatted + '%' : formatted;

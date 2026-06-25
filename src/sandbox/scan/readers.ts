@@ -17,9 +17,9 @@ import { debugLog } from '../../shared/debug';
 
 /**
  * Leest een descendant text-node op naam en geeft zijn characters terug.
- * Bounded scope (findOne binnen de wrapper) en naam-gebaseerd — zie
- * spec §7. Text-lookup is read-only zodat we geen font hoeven te
- * laden alvorens `characters` te lezen.
+ * Bounded scope (findOne binnen de wrapper) en naam-gebaseerd. Text-lookup
+ * is read-only zodat we geen font hoeven te laden alvorens `characters` te
+ * lezen.
  */
 export function readTextByName(scope: SceneNode, name: string): string | null {
   if (!('findOne' in scope)) return null;
@@ -104,8 +104,8 @@ export function readBadgeIcon(badge: InstanceNode): string {
  * Retourneert null wanneer geen passend kind gevonden wordt of wanneer de
  * gevonden icon-instance niet zichtbaar is (visible === false via ancestor-chain).
  *
- * T32: signatuur uitgebreid met `slide` zodat isEffectivelyVisible aangeroepen
- * kan worden. Zelfde visibility-pattern als findVisibleTextNodeByName (T19).
+ * Signatuur uitgebreid met `slide` zodat isEffectivelyVisible aangeroepen
+ * kan worden. Zelfde visibility-pattern als findVisibleTextNodeByName.
  */
 export function readCardIcon(card: SceneNode, slide: InstanceNode): string | null {
   // Both INSTANCE (legacy library icon) and FRAME (post-SVG-replace) are

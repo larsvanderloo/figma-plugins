@@ -98,7 +98,7 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
       showParagraphProp: readBooleanProperty(copyWrap, 'showParagraph'),
     });
 
-    // Dim-range scan (spec §13 T30) — heading-only, silent-fail naar null
+    // Dim-range scan — heading-only, silent-fail naar null
     // wanneer de library onbereikbaar is of het heading-node ontbreekt.
     // Paragraph-accent is permanent out-of-scope (geen paragraphDim).
     let headingDim: Array<[number, number]> | null = null;

@@ -5,7 +5,7 @@
 // resolutie (slot-truth met surface-fallback), het cell-budget voor
 // content-weighted autofit, de CellSpec-matrix voor `column-autofit`,
 // het toepassen van de berekende kolom-breedtes en de post-FILL
-// body-truncation pass (T42.18).
+// body-truncation pass.
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
@@ -120,8 +120,8 @@ export function applyColumnSizing(rowFrame: FrameNode, colWidths: number[]): voi
 }
 
 /**
- * T42.18 — direct cell+text FILL-vertical + textTruncation. Vervangt
- * de maxLines-berekening (T42.16/T42.17) die niet betrouwbaar werkte.
+ * Direct cell+text FILL-vertical + textTruncation. Vervangt
+ * de maxLines-berekening die niet betrouwbaar werkte.
  *
  * Aanpak:
  * 1. Cell layoutSizingVertical = 'FILL' → cell.height = row's FILL-share.
