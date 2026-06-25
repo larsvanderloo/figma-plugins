@@ -29,23 +29,12 @@ import {
 import { buildLegend, ChartTheme, LegendEntry, truncateToWidth } from './legend';
 import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
 import { trackPaint } from './palette';
+import { probeTextHeight } from '../_shared/fonts';
 
 const DOT_SIZE = 12;
 const STROKE_W = 4;
 /** Minimaal leesbare lijn-zone; daaronder degraderen i.p.v. clippen. */
 const MIN_INNER_H = 24;
-
-/** Single-line teksthoogte voor font/korps via een wegwerp-probe
- * (fonts zijn al geladen door applyChart vóór de builders draaien). */
-function probeTextHeight(family: string, style: string, fontSize: number): number {
-  const probe = figma.createText();
-  probe.fontName = { family: family, style: style };
-  probe.fontSize = fontSize;
-  probe.characters = 'Ag';
-  const h = probe.height;
-  probe.remove();
-  return h;
-}
 
 export function buildLine(
   model: ChartWrapModel,

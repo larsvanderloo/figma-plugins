@@ -56,9 +56,3 @@ export function cellTint(light: RGB, accent: RGB, t: number): RGB {
   const near = { r: 0.99, g: 0.97, b: 0.95 };
   return blend(near, accent, clamped * 0.92);
 }
-
-/** Zwart of wit tekst op een cel-tint o.b.v. luminantie. */
-export function readableTextOn(bg: RGB): RGB {
-  const lum = 0.299 * bg.r + 0.587 * bg.g + 0.114 * bg.b;
-  return lum > 0.6 ? { r: 0.15, g: 0.12, b: 0.1 } : { r: 1, g: 1, b: 1 };
-}

@@ -77,7 +77,7 @@ export interface TitleDescriptionSection {
 export interface BadgeSection {
   badgeNodeId: string;
   label: string;
-  /** Lucide-icon-key, zie constants.BADGE_ICON_OPTIONS. */
+  /** Lucide-icon-key (genormaliseerde slug uit de Lucide-set). */
   icon: string;
   /**
    * Persisted-via-plugin-data Lucide slug of the icon the user last

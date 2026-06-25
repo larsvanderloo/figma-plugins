@@ -19,7 +19,7 @@ export const CHART_MAX_SERIES = 4;
 
 export const CHART_TYPES: ChartType[] = ['donut', 'pie', 'bar', 'progress', 'line', 'matrix'];
 
-export function isChartType(value: string): value is ChartType {
+function isChartType(value: string): value is ChartType {
   for (let i = 0; i < CHART_TYPES.length; i++) {
     if (CHART_TYPES[i] === value) return true;
   }

@@ -17,6 +17,21 @@
 // ============================================================
 
 /**
+ * Single-line teksthoogte voor font/korps via een wegwerp-probe. Caller
+ * moet het font al geladen hebben (chart-builders draaien ná applyChart's
+ * font-preload). Synchroon: geen loadFontAsync hier.
+ */
+export function probeTextHeight(family: string, style: string, fontSize: number): number {
+  const probe = figma.createText();
+  probe.fontName = { family: family, style: style };
+  probe.fontSize = fontSize;
+  probe.characters = 'Ag';
+  const h = probe.height;
+  probe.remove();
+  return h;
+}
+
+/**
  * FIG-FONT-01 canonical pattern — laadt elk uniek font in een TextNode
  * zodat `node.characters = value` en `node.setRangeFills(...)` veilig
  * uitgevoerd kunnen worden. Mixed-font nodes die niet álle fonts laden

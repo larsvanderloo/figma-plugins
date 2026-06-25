@@ -29,6 +29,7 @@ import {
 } from '../../../shared/chart-calculations';
 import { buildLegend, ChartTheme, LegendEntry, truncateToWidth } from './legend';
 import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
+import { probeTextHeight } from '../_shared/fonts';
 
 /** Verticale ruimte tussen waarde-label / delta-badge / bar in een kolom. */
 const COL_GAP = 6;
@@ -38,18 +39,6 @@ const MIN_PLOT_H = 48;
 const MIN_BAR_W = 2;
 /** Platte baseline-markering voor exacte 0 (Highcharts minPointLength). */
 const ZERO_BAR_H = 3;
-
-/** Single-line teksthoogte voor font/korps via een wegwerp-probe
- * (fonts zijn al geladen door applyChart vóór de builders draaien). */
-function probeTextHeight(family: string, style: string, fontSize: number): number {
-  const probe = figma.createText();
-  probe.fontName = { family: family, style: style };
-  probe.fontSize = fontSize;
-  probe.characters = 'Ag';
-  const h = probe.height;
-  probe.remove();
-  return h;
-}
 
 /** Best-effort batch-opruimen (degradatie-paden). */
 function removeNodes(nodes: SceneNode[]): void {

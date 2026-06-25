@@ -30,11 +30,7 @@ import {
   readColumnCalculationPercent,
   readColumnCalculationLabel,
 } from './renderer';
-
-function readHasColumnHeader(slot: SlotNode): boolean {
-  // '1' = true, alles anders (incl. afwezig) = false (default).
-  return slot.getPluginData('hasColumnHeader') === '1';
-}
+import { readHasColumnHeader } from './plugin-data';
 
 export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
   const hasColumnHeader = readHasColumnHeader(slot);

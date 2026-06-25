@@ -318,39 +318,7 @@ export function findAllCardWraps(slide: InstanceNode): InstanceNode[] {
  * ES2017-compat: indexOf i.p.v. startsWith/includes.
  */
 export function findTableWrap(slide: InstanceNode): InstanceNode | null {
-  return findFirstInstance(slide, (n) => {
-    if (n.name === 'TableWrap') return true;
-    if (n.name.indexOf('Tabel=') === 0 && n.name.indexOf('Timeline') < 0) return true;
-    if (n.name.indexOf('Table=') === 0 && n.name.indexOf('Timeline') < 0) return true;
-    if (
-      n.name.indexOf('Property 1=') === 0 &&
-      n.name.indexOf('Timeline') < 0 &&
-      n.name.indexOf('Chart') < 0
-    ) {
-      return true;
-    }
-    return false;
-  });
-}
-
-/**
- * Locate the SlotNode binnen de TableWrap-INSTANCE van een slide.
- *
- * De Slot-based TableWrap-rewrite plaatst rows/cellen direct
- * binnen de Slot (mutable zelfs binnen instance-context). Deze helper
- * wandelt: slide → TableWrap-INSTANCE → Slot. Retourneert null wanneer
- * geen TableWrap of geen Slot binnen de TableWrap gevonden wordt.
- *
- * Naam-matching identiek aan findTableWrap (exact 'TableWrap' of
- * variant-namen met 'Table'/'Tabel' maar zonder 'Timeline'/'Chart').
- */
-export function findTableSlot(slide: InstanceNode): SlotNode | null {
-  const tableWrap = findTableWrap(slide);
-  if (tableWrap === null) return null;
-  const slot = tableWrap.findOne((n: SceneNode) => n.type === 'SLOT');
-  if (slot === null) return null;
-  if (slot.type !== 'SLOT') return null;
-  return slot as SlotNode;
+  return findFirstInstance(slide, isTableWrapName);
 }
 
 /**
@@ -363,31 +331,7 @@ export function findTableSlot(slide: InstanceNode): SlotNode | null {
  * ES2017-compat: indexOf i.p.v. startsWith/includes.
  */
 export function findChartWrap(slide: InstanceNode): InstanceNode | null {
-  return findFirstInstance(slide, (n) => {
-    if (n.name === 'ChartWrap') return true;
-    if (n.name.indexOf('Chart=') === 0 && n.name.indexOf('Timeline') < 0) return true;
-    if (
-      n.name.indexOf('Property 1=') === 0 &&
-      n.name.indexOf('Chart') >= 0 &&
-      n.name.indexOf('Timeline') < 0
-    ) {
-      return true;
-    }
-    return false;
-  });
-}
-
-/**
- * Locate de SlotNode binnen de ChartWrap-INSTANCE van een slide —
- * zelfde wandeling als findTableSlot: slide → ChartWrap → Slot.
- */
-export function findChartSlot(slide: InstanceNode): SlotNode | null {
-  const chartWrap = findChartWrap(slide);
-  if (chartWrap === null) return null;
-  const slot = chartWrap.findOne((n: SceneNode) => n.type === 'SLOT');
-  if (slot === null) return null;
-  if (slot.type !== 'SLOT') return null;
-  return slot as SlotNode;
+  return findFirstInstance(slide, isChartWrapName);
 }
 
 /**

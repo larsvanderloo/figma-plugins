@@ -84,7 +84,7 @@ export function buildDeltaBadgeNode(opts: DeltaBadgeOptions): SceneNode {
  * Clone-route: elke stap guarded; elke fout ruimt de partiële clone op en
  * retourneert null zodat de caller naar tekst degradeert.
  */
-export function buildDeltaBadgeClone(
+function buildDeltaBadgeClone(
   template: InstanceNode,
   label: string,
   i: number,
@@ -239,7 +239,7 @@ export function buildDeltaBadgeClone(
 }
 
 /** Tekst-variant: Inter Medium ~70% labelSize in Text Dimmer-binding. */
-export function buildDeltaBadgeText(
+function buildDeltaBadgeText(
   label: string,
   labelSize: number,
   dimmerVar: Variable,

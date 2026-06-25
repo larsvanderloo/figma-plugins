@@ -48,17 +48,18 @@ PageNode
         ├── CardWrap   INSTANCE (×N)          ← findAllCardWraps()
         │   └── Card   INSTANCE (×N)
         ├── ChartWrap  INSTANCE (×N)          ← findAllChartWraps()
-        │   └── SLOT                          ← findChartSlot() → plugin-built content
+        │   └── SLOT                          ← findSlotInWrap() → plugin-built content
         ├── TableWrap  INSTANCE (×N)          ← findAllTableWraps()
-        │   └── SLOT                          ← findTableSlot() → plugin-built content
+        │   └── SLOT                          ← findSlotInWrap() → plugin-built content
         └── TimelineWrap INSTANCE             ← findTimelineWrap()  (legacy, Content tab)
             └── CopyWrap INSTANCE (×N)
 ```
 
 The exported finders are exactly: `findCopyWrap`, `findBadge`, `findImageWrap`,
-`findCardWrap` / `findAllCardWraps`, `findChartWrap` / `findAllChartWraps` /
-`findChartSlot`, `findTableWrap` / `findAllTableWraps` / `findTableSlot`,
-`findTimelineWrap`, plus the surface helpers `findEnclosingSurface` /
+`findCardWrap` / `findAllCardWraps`, `findChartWrap` / `findAllChartWraps`,
+`findTableWrap` / `findAllTableWraps`, `findTimelineWrap`, the slot helper
+`findSlotInWrap` (locates the SLOT inside any wrap), plus the surface helpers
+`findEnclosingSurface` /
 `findEnclosingSurfaceName` and the generic `findEnclosingInstanceByName` /
 `findSlotInWrap`.
 
@@ -127,7 +128,7 @@ Each wrapper: how it's detected, what's read, what's written, where the code is.
 ### ChartWrap (slot-based)
 
 - **Detect:** `findChartWrap` / `findAllChartWraps`; content lives in a `SLOT`
-  (`findChartSlot`), fully plugin-generated and replaced each render.
+  (`findSlotInWrap`), fully plugin-generated and replaced each render.
 - **Apply:** `renderChart` dispatcher in `editors/chart/renderer.ts`.
 - **All six chart types are fully rendered** (no stubs): `donut`, `pie`, `bar`,
   `progress`, `line`, `matrix` (`CHART_TYPES` in `shared/chart-calculations.ts`;
@@ -149,7 +150,7 @@ Each wrapper: how it's detected, what's read, what's written, where the code is.
   matcher also accepts the variant-name prefixes `Tabel=` / `Table=` /
   `Property 1=` (excluding names containing `Timeline` or `Chart`) — defensive
   cover for variant-named instances, which the current library does not produce.
-  Content is in a `SLOT` (`findTableSlot`).
+  Content is in a `SLOT` (`findSlotInWrap`).
 - **Apply:** `applyTable` in `editors/table/renderer.ts` — full-state PUT (clear
   + rebuild inside the Slot).
 - **Limits:** `TABLE_MAX_ROWS = 15`, flat `TABLE_MAX_COLS = 6` (one column limit,
