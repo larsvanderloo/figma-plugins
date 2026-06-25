@@ -72,8 +72,7 @@ The debug setup keeps that split intact:
 
 - `package.json`
   - Added:
-    - `build:version`: writes the iframe version badge module from `package.json`.
-    - `version:assert`: verifies generated bundles contain the current package version and no stale `0.5.x` tag.
+    - `version:assert`: verifies the built bundles contain the current package version and no stale `0.5.x` tag. (The iframe version badge is injected at build time from `package.json` via Vite's `define`, `__APP_VERSION__`.)
     - `debug:build`: runs the normal build with `PLUGIN_DEBUG=1` and injects the local log endpoint.
     - `debug:watch`: runs the normal watch pipeline with `PLUGIN_DEBUG=1`, injects the local log endpoint, and keeps generated manifest bundle copies synced.
     - `debug:manifests`: writes Figma-importable `manifest-cache/*/manifest.json` files from the debug templates and copies the current bundle.
@@ -238,11 +237,11 @@ The new local collector solves the practical logging problem by sending structur
 
 ## Important Build Gotcha
 
-`dist/` is tracked in this repo so Figma can load the plugin from a fresh checkout.
+`dist/` is build output (gitignored) that Figma loads directly from the local working tree via `manifest.json`.
 
 When `npm run debug:session` or `npm run debug:watch` is running, it continuously rewrites `dist/code.js` and `dist/ui.html` in debug mode and syncs copies into `manifest-cache/*/dist/`. Debug output is much larger because inline sourcemaps are embedded.
 
-Before committing or testing a production handoff:
+Before testing a production build (or loading the prod `manifest.json` in Figma):
 
 1. Stop `npm run debug:session`, `npm run debug:watch`, or the VS Code debug task.
 2. Run:

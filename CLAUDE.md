@@ -26,16 +26,15 @@ src/
   ui/                            iframe Vue app (Vue 3 + Nuxt UI v4); plugin-message handling in composables/usePluginMessages.ts
 scripts/                         build/release/debug tooling (shared helpers in scripts/lib.mjs)
 docs/
-  architecture/                  architecture notes
-  perf/                          perf investigations
-  product/specs/spec.md          full product spec (Dutch, ~2300 lines)
+  architecture/slide-machine.md  detection + wrapper-finder reference (verified against code; the why lives in git)
+  debugging/                     local debug-session setup
 vite.config.ts                   builds the iframe UI to dist/ui.html
 esbuild.config.mjs               builds the plugin sandbox to dist/code.js
 generate-lucide-aliases.mjs      build-time codegen for icon-alias map
 generate-lucide-svgs.mjs         build-time codegen for lucide-svgs.ts + lucide-icon-names.ts
 ```
 
-Generated files (committed, never hand-edited): `src/sandbox/lucide-aliases.ts`, `src/ui/lucide-svgs.ts`, `src/ui/lucide-icon-names.ts`, `src/ui/generated/app-version.ts`, `dist/` (tracked so a fresh clone loads in Figma without building).
+Generated files (committed, never hand-edited): `src/sandbox/lucide-aliases.ts`, `src/ui/lucide-svgs.ts`, `src/ui/lucide-icon-names.ts`. The app version is injected into the UI bundle at build time from `package.json` via Vite's `define` (`__APP_VERSION__`) — no generated file. `dist/` is build output and is **not** tracked (gitignored); Figma loads it from the local working tree, so run `npm run build` once after a fresh clone.
 
 ## Build commands
 
@@ -90,15 +89,39 @@ Before tagging a release:
 - `npm run build` produces `dist/code.js` and `dist/ui.html`.
 - Manual smoke in Figma design and Slides on desktop (primary), then web.
 - Accessibility scan on the iframe should be axe-clean at WCAG 2.1 AA. No axe wiring in CI yet — run manually via DevTools axe extension when touching UI.
-- Bundle-size sanity check: `dist/ui.html` should stay under the per-build target documented in `docs/perf/`.
+- Bundle-size sanity check: keep an eye on `dist/ui.html` size; large unexplained jumps warrant a look before shipping.
+
+## Commits — the source of truth
+
+There is no spec or backlog doc; **the git history is the single source of truth** for what changed and why. That only holds if commit messages carry the rationale, so the format is enforced by a `commit-msg` hook (commitlint + husky, installed via the `prepare` script on `npm install`):
+
+- **Subject:** `type(scope): imperative summary` — type ∈ `feat | fix | refactor | perf | chore | docs | test | ci | bump | ui`. Max 90 chars. (`bump` = version bumps, `ui` = iframe-only changes — both repo-specific, not in stock conventional-commits.)
+- **Body:** explain the **why** — the decision, the rejected alternative, the constraint that forced it. This is the part that replaces the old docs. A missing body warns (doesn't block) so trivial `bump`/`chore` commits still pass, but every substantive change should have one.
+- **Trailer:** `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` on agent-authored commits.
+
+The hook lives in `.husky/commit-msg`; rules in `commitlint.config.js`. A bad subject is rejected at commit time. Bypass only in genuine emergencies with `git commit --no-verify`.
+
+### Comments
+
+Same principle, one level down. A comment must justify itself by its own reasoning, never by citing an external doc, task-ID, or version:
+
+- Explain the **why** / the non-obvious gotcha / the Figma-API constraint — not what the next line plainly does.
+- **No dead citations.** Don't write `T39.1.1:` or `(v0.2.2)` — the spec is gone and version history lives in git. `npm run lint:comments` ([scripts/assert-no-spec-citations.mjs](scripts/assert-no-spec-citations.mjs)) fails the release gate on any new `T<n>` / `v0.x` citation in a comment.
+- **`FIG-XXX-01` codes are allowed** — they're a living invariant taxonomy (e.g. `FIG-GUARD-01` = type-check before property-access, `FIG-FONT-01` = preload fonts before live events), not dead refs.
+
+### The one architecture doc
+
+`docs/architecture/slide-machine.md` is a **timeless structural map** of what the plugin looks for in Figma (surfaces, wrapper finders, slots, variables) — not a changelog. It must never carry dates, commit references, or fix/status notes ("deferred", "Phase-N", "was a bug"); the *when* and *why* live in commit messages. `npm run lint:doc` ([scripts/assert-doc-fresh.mjs](scripts/assert-doc-fresh.mjs)) enforces this: it rejects time-bound tokens and checks that every `find<Name>` finder and variable key the doc names still exists in `src/`, so the doc can't silently describe code that's gone.
+
+Both guards run on **every commit** via the `pre-commit` hook (`npm run lint`) and again in `release:check`. To edit the doc: change the structural description to match the new code shape; put the rationale in the commit body.
 
 ## Releases
 
-No CI. To cut a release:
+No CI, no zip/handoff step — Figma loads the plugin directly from `manifest.json` (→ `dist/code.js` + `dist/ui.html`) in the local working tree. "Releasing" a version is just building and committing the source:
 
 1. Bump `version` in `package.json`.
-2. `npm run release:check` (guards against debug builds and stale bundle versions).
-3. The loadable bundle is `manifest.json` + `dist/code.js` + `dist/ui.html` — zip those three (preserving the `dist/` path) and hand it off.
+2. `npm run release:check` (guards against debug builds, typechecks, builds `dist/`, and asserts the bundle version matches `package.json`).
+3. Commit the source (`dist/` is gitignored — it's rebuilt locally, not committed).
 4. Optionally tag the commit (`git tag welder-editor@v<version>`) for history.
 
 ## Where things live
@@ -106,3 +129,7 @@ No CI. To cut a release:
 - Figma Plugin API references: https://www.figma.com/plugin-docs/
 - Nuxt UI v4 component docs: see the `nuxt-ui` skill / Nuxt UI MCP.
 - Figma MCP — primary source of truth for design-system shape.
+
+### Retired design docs
+
+A larger `docs/` tree (product spec, several architecture notes, perf/release docs) was removed in favour of git history; only `docs/debugging/figma-plugin-debug-setup.md` and a rewritten, code-verified `docs/architecture/slide-machine.md` are kept. The full content of any removed doc is recoverable from the commit immediately preceding its deletion, e.g. `git show <deletion-commit>~1:docs/product/specs/spec.md`. The load-bearing rationale that lived in them is in commit bodies and code-file headers; the docs were the long-form companions, not the only record.
