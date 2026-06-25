@@ -5,11 +5,16 @@
 // slot-hoogte + rowCount, responsive row-padding en de dense-table
 // layout-metrics (paddings/gaps) die rows, header en footer delen.
 //
+// Waarom een formule i.p.v. een discrete lookup-matrix (sm/md/lg × rowCount):
+// de matrix vereiste een textSize-picker en sprong zichtbaar tussen tiers bij
+// row-toevoeging; de continue formule schaalt vloeiend met de werkelijke
+// slot-hoogte en maakte de picker overbodig (zie getFontSizes hieronder).
+//
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
 /**
- * Tekst-fontSize afgeleid van actual rowHeight (T39.1.1, v0.2.2).
+ * Tekst-fontSize afgeleid van actual rowHeight.
  *
  * `rowHeight` is hier de OUTER row-height (= row's eigen FILL-share van de
  * container). Inner content-area per rij is rowHeight - 40 (rowFrame
@@ -18,14 +23,13 @@
  * inner-area passen met line-height ~1.2.
  *
  * Formule:
- *   rowHeight = (slotHeight - 48) / rowCount        // T41.9: container.padding 24+24
+ *   rowHeight = (slotHeight - 48) / rowCount        // container.padding 24+24
  *   heading/body ratios and max-clamps become smaller once the table has
  *   several body rows, so dense tables read as information tables rather
  *   than oversized presentation cards.
  *
- * T44: de textSize-multiplier (T42.9, sm/lg-branches) is weer verwijderd —
- * fontSize is volledig automatisch; de clamps zijn de eerdere 'md'-waardes
- * (T42.21-kalibratie).
+ * De textSize-multiplier (sm/lg-branches) is weer verwijderd —
+ * fontSize is volledig automatisch; de clamps zijn de eerdere 'md'-waardes.
  */
 export function getFontSizes(
   slotHeight: number,
@@ -63,7 +67,7 @@ export function getFontSizes(
 }
 
 /**
- * T43.4 — responsive row-padding op basis van bodyRowCount.
+ * Responsive row-padding op basis van bodyRowCount.
  * Bij weinig rijen: ruime padding voor breathing room. Bij veel rijen:
  * compactere padding zodat text-area per rij voldoende blijft.
  */

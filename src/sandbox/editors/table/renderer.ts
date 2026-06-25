@@ -1,12 +1,12 @@
 // ============================================================
 // editors/table/renderer.ts
 //
-// Slot-based table-renderer voor TableWrap-instances (T34.2, v0.2.0).
+// Slot-based table-renderer voor TableWrap-instances.
 //
 // TableWrap is een library-INSTANCE met een `<Slot>` erin; binnen die
 // Slot bouwt de plugin zelf FRAMEs + TEXT-nodes. SlotNodes accepteren
 // `appendChild` / `remove` zonder de "inside an instance"-constraint
-// (T34-research §3.2, MCP-bevestigd 2026-04-24).
+// (MCP-bevestigd 2026-04-24).
 //
 // Public API:
 //   - scanTableSlot(slot)       → TableWrapModel (rij/kolom-structuur)
@@ -90,20 +90,20 @@ function buildTableContainer(dimmerVar: Variable, dimmerRGB: RGB): FrameNode {
   const container = figma.createFrame();
   container.name = 'WelderTableContent';
   container.layoutMode = 'VERTICAL';
-  container.primaryAxisSizingMode = 'FIXED'; // T39: slot-FILL
+  container.primaryAxisSizingMode = 'FIXED'; // slot-FILL
   container.counterAxisSizingMode = 'FIXED';
   container.itemSpacing = 0;
-  // T41.10: paddings synchroon met user-canvas-design.
-  // - paddingLeft/Right = 32 (was 0 in T41.6) — dividers krijgen weer
-  //   32px gap voor de container-borders. Caller MOET paddingTop
-  //   conditioneel zetten op hasHeader (24 zonder, 17 met) om symmetrie
-  //   met body's eigen padding te bewaren.
+  // Paddings synchroon met user-canvas-design.
+  // - paddingLeft/Right = 32 — dividers krijgen 32px gap voor de
+  //   container-borders. Caller MOET paddingTop conditioneel zetten op
+  //   hasHeader (24 zonder, 17 met) om symmetrie met body's eigen
+  //   padding te bewaren.
   container.paddingTop = 24; // default; caller overschrijft naar 17 als hasHeader
   container.paddingBottom = 24;
   container.paddingLeft = 32;
   container.paddingRight = 32;
   container.cornerRadius = 55;
-  // T42.5: clip body-cell-overflow zodat te lange wrappende text niet
+  // Clip body-cell-overflow zodat te lange wrappende text niet
   // visueel uitloopt naar andere rijen of de header-area.
   container.clipsContent = true;
   container.fills = [];
@@ -121,9 +121,9 @@ function buildTableContainer(dimmerVar: Variable, dimmerRGB: RGB): FrameNode {
 
 /**
  * Full-state PUT: clear alle Slot-children en bouw opnieuw uit `desired`.
- * Persisteer `hasColumnHeader` + migration-marker op pluginData. (T44:
- * width/textSize-keys worden actief gewist — tabelbreedte volgt de actuele
- * Slot-breedte, fontSize wordt rendertime afgeleid uit slot.height + rowCount.)
+ * Persisteer `hasColumnHeader` + migration-marker op pluginData.
+ * Width/textSize-keys worden actief gewist — tabelbreedte volgt de actuele
+ * Slot-breedte, fontSize wordt rendertime afgeleid uit slot.height + rowCount.
  *
  * Width-strategie:
  * - Container rendert full-width binnen de actuele Slot-breedte.
@@ -181,7 +181,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     desired.columnCalculationLabel,
     columnCount,
   );
-  // T46.1/T46.3 — getallen-kolommen worden volledig rechts uitgelijnd
+  // Getallen-kolommen worden volledig rechts uitgelijnd
   // (Notion/Excel number-column-stijl): header, body én footer. De
   // detectie is content-driven via computeNumericColumns — '45' telt,
   // '45 mensen' niet — onafhankelijk van een som-toggle.
@@ -207,7 +207,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     const container = buildTableContainer(vars.dimmer, dimmerRGB);
     slot.appendChild(container);
 
-    // T39.1.1: SlotNode host geen auto-layout-FILL-children — `layoutSizingVertical='FILL'`
+    // SlotNode host geen auto-layout-FILL-children — `layoutSizingVertical='FILL'`
     // faalt silent voor slot-kinderen. Gebruik EXPLICIETE resize naar slot.height,
     // en naar de gemeten slot.width zodat content met toekomstige
     // smallere slot-varianten meebeweegt.
@@ -221,7 +221,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     container.counterAxisSizingMode = 'FIXED';
     container.primaryAxisSizingMode = 'FIXED';
 
-    // T41.2 — filter body-rijen die volledig leeg zijn (alle cells === '').
+    // Filter body-rijen die volledig leeg zijn (alle cells === '').
     // Header rij (rij 0 wanneer hasHeader) blijft altijd staan ongeacht inhoud.
     // Lege rijen blijven in de UI/data, alleen de canvas-rendering skipt ze.
     // De round-trip (scan → iframe-watch) wordt afgevangen door TableEditor's
@@ -245,7 +245,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
       if (hasContent) effectiveRows.push(desired.rows[i]);
     }
 
-    // T40 — body-fontSize-formule: alleen body-rijen krijgen FILL;
+    // Body-fontSize-formule: alleen body-rijen krijgen FILL;
     // header reserveert ~50px van de slot-hoogte (text-area + 16+16 padding).
     const HEADER_HEIGHT_ESTIMATE = 50;
     const FOOTER_HEIGHT_ESTIMATE = 40;
@@ -268,7 +268,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     container.paddingTop = hasHeader ? metrics.headerPadTop + 3 : metrics.headerPadBottom;
     container.paddingBottom = metrics.headerPadBottom;
 
-    // T44: fontSize volledig automatisch uit hoogte + rowCount.
+    // fontSize volledig automatisch uit hoogte + rowCount.
     const sizes = getFontSizes(adjustedSlotHeight, bodyRowCount > 0 ? bodyRowCount : 1);
 
     const cellBudget = tableCellBudget(targetWidth, columnCount, metrics);
@@ -306,7 +306,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
       containerPadX: metrics.containerPadX,
     });
 
-    // T42.16: collect body-rows voor post-FILL truncation pass.
+    // Collect body-rows voor post-FILL truncation pass.
     const bodyRows: FrameNode[] = [];
 
     for (let i = 0; i < effectiveRows.length; i++) {
@@ -328,7 +328,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
         } catch (_e) {
           /* silent */
         }
-        // T40: header is HUG-vertical (compact, niet mee-rekken).
+        // Header is HUG-vertical (compact, niet mee-rekken).
         try {
           rowFrame.layoutSizingVertical = 'HUG';
         } catch (_e) {
@@ -359,7 +359,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
         } catch (_e) {
           /* silent */
         }
-        // T39: rows FILL vertical (was HUG) — verdelen container-hoogte gelijk.
+        // Rows FILL vertical — verdelen container-hoogte gelijk.
         try {
           rowFrame.layoutSizingVertical = 'FILL';
         } catch (_e) {
@@ -395,7 +395,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
       }
     }
 
-    // T42.18: cell + text beide FILL-vertical → text fills exact cell-bounds,
+    // Cell + text beide FILL-vertical → text fills exact cell-bounds,
     // textTruncation='ENDING' truncate't visueel. Geen analytische berekening
     // meer nodig; Figma doet de math native.
     applyBodyTruncation(bodyRows);
@@ -403,7 +403,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     console.log('[welder-slide-editor] applyTable: library-vars missing, skipping rebuild');
   }
 
-  // T44: stale width/textSize-keys actief wissen (lege string = delete).
+  // Stale width/textSize-keys actief wissen (lege string = delete).
   slot.setPluginData('width', '');
   slot.setPluginData('textSize', '');
   slot.setPluginData('hasColumnHeader', desired.hasColumnHeader ? '1' : '0');

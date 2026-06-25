@@ -1,8 +1,8 @@
 // ============================================================
 // editors/table/plugin-data.ts
 //
-// PluginData read/write voor de TableWrap-Slot: header-flag (T40) en
-// de per-kolom calculation-settings (som, emphasis, currency — T46).
+// PluginData read/write voor de TableWrap-Slot: header-flag en
+// de per-kolom calculation-settings (som, emphasis, currency).
 // Lege string = key-delete; normalisatie loopt via de gedeelde
 // helpers in `shared/table-calculations`.
 //
@@ -18,7 +18,7 @@ import {
   normalizeColumnLabels,
 } from '../../../shared/table-calculations';
 
-/** T40 — leest of de tabel een header-rij heeft. Default false. */
+/** Leest of de tabel een header-rij heeft. Default false. */
 export function readHasColumnHeader(slot: SlotNode): boolean {
   return slot.getPluginData('hasColumnHeader') === '1';
 }

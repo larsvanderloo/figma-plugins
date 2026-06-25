@@ -3,7 +3,7 @@
 test
 Figma plugin for editing existing Welder-branded slides in Figma Design and Figma Slides. The user selects a slide on the canvas, then edits its content via sub-editors for title/description, badge, image, cards, timeline items, and tables.
 
-The current repository structure is documented in [`docs/architecture/current-structure.md`](./docs/architecture/current-structure.md). The older product/backlog specification lives in [`docs/product/specs/spec.md`](./docs/product/specs/spec.md) and can contain historical paths or queued ideas.
+The repository structure and plugin-thread rules are documented in [`CLAUDE.md`](./CLAUDE.md). The git history is the source of truth for past decisions and feature work — there is no separate spec or backlog doc.
 
 ## Build
 
@@ -43,9 +43,9 @@ Before tagging or handing off a VS Code release, stop any active `npm run watch`
 npm run release:check
 ```
 
-In VS Code, run the `Figma: release check` task. This gate type-checks, builds a production `dist/`, and fails if sourcemaps or the localhost debug endpoint are present. See [`docs/release/figma-plugin-release.md`](./docs/release/figma-plugin-release.md) for the full release checklist.
+In VS Code, run the `Figma: release check` task (or `npm run release:check`). This gate type-checks, builds a production `dist/`, and fails if sourcemaps or the localhost debug endpoint are present. See the Releases section of [`CLAUDE.md`](./CLAUDE.md) for the full checklist.
 
-The UI version badge is generated from `package.json` by `npm run build:version`, which is called automatically by `npm run build`, `npm run build:ui`, and `npm run watch`. `npm run version:assert`, `npm run debug:manifests`, and `npm run release:assert` fail if `dist/` or generated debug bundles contain a stale `0.5.x` tag.
+The UI version badge comes from `package.json`, injected into the bundle at build time via Vite's `define` (`__APP_VERSION__`) — no generated file. `npm run version:assert`, `npm run debug:manifests`, and `npm run release:assert` fail if the built `dist/` or generated debug bundles contain a stale `0.5.x` tag.
 
 ## Architecture
 
@@ -56,9 +56,7 @@ The UI version badge is generated from `package.json` by `npm run build:version`
 - `src/sandbox/editors/` — per-editor logic.
 - `src/shared/csv/` — CSV tokenizer (used by the Table editor).
 
-The two threads are isolated; everything they share crosses the message bus. See `CLAUDE.md` for the non-negotiable thread rules.
-
-See [`docs/architecture/current-structure.md`](./docs/architecture/current-structure.md) for the current placement rules for Nuxt UI primitives, Figma API code, generated files, and known refactor targets.
+The two threads are isolated; everything they share crosses the message bus. See [`CLAUDE.md`](./CLAUDE.md) for the non-negotiable thread rules and the current file-placement layout.
 
 ## Editor types
 

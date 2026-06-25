@@ -1,7 +1,7 @@
 // ============================================================
 // editors/chart/matrix.ts
 //
-// Grid-box / 9-box performance-matrix (T53): rijen = categorieën,
+// Grid-box / 9-box performance-matrix: rijen = categorieën,
 // kolommen = series; elke cel toont de waarde op dat snijpunt en wordt
 // getint van licht → accent o.b.v. de relatieve waarde (9-box talent-
 // grid, veralgemeniseerd naar elke N×M). Auto-layout, dus responsief
@@ -154,7 +154,7 @@ export function buildMatrix(
       cell.resize(cellW, cellH);
 
       if (model.showValues) {
-        // T53.3 — tekst in-theme: donkere accent-tekst op lichte cellen,
+        // Tekst in-theme: donkere accent-tekst op lichte cellen,
         // wit op verzadigde cellen. Kies o.b.v. luminantie-AFSTAND zodat
         // mid-tone cellen niet de verkeerde (te bleke = grijs ogende)
         // kleur krijgen.

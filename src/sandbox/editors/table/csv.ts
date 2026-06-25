@@ -1,7 +1,7 @@
 // ============================================================
 // editors/table/csv.ts
 //
-// CSV-import → applyTable-adapter (T34.2).
+// CSV-import → applyTable-adapter.
 //
 // Parsing leunt op de gedeelde RFC 4180-achtige tokenizer in
 // `csv/`. Die module ondersteunt:
@@ -13,8 +13,8 @@
 // formats — bv. een cel "Acme, Inc.,100" werd in 3 cellen geknipt en
 // liet de quotes letterlijk op de waarde staan.
 //
-// Truncate naar TABLE_MAX_ROWS rijen en TABLE_MAX_COLS kolommen (T44:
-// flat max — de Slot-breedte rendert altijd full-width per surface).
+// Truncate naar TABLE_MAX_ROWS rijen en TABLE_MAX_COLS kolommen (flat
+// max — de Slot-breedte rendert altijd full-width per surface).
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
@@ -30,11 +30,7 @@ import {
   readColumnCalculationPercent,
   readColumnCalculationLabel,
 } from './renderer';
-
-function readHasColumnHeader(slot: SlotNode): boolean {
-  // T40: '1' = true, alles anders (incl. afwezig) = false (default).
-  return slot.getPluginData('hasColumnHeader') === '1';
-}
+import { readHasColumnHeader } from './plugin-data';
 
 export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
   const hasColumnHeader = readHasColumnHeader(slot);
@@ -57,7 +53,7 @@ export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
 
     const cells: TableCellModel[] = [];
     for (let j = 0; j < row.length && cells.length < TABLE_MAX_COLS; j++) {
-      // T42.16: input-cap verwijderd; truncation gebeurt rendertime via
+      // Input-cap verwijderd; truncation gebeurt rendertime via
       // maxLines+textTruncation in renderer.ts.
       cells.push({ cellNodeId: '', value: row[j].trim() });
     }

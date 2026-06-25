@@ -42,8 +42,8 @@ export async function handleUpdateGeneral(
     // to extend the window past completion.
     markSelfWrite();
     await applyTitleDescription(slide, payload);
-    await refreshTablesOnSlide(slide); // T39.3: re-render tables na CopyWrap-edit
-    await refreshChartsOnSlide(slide); // T47: idem voor charts
+    await refreshTablesOnSlide(slide); // Re-render tables na CopyWrap-edit
+    await refreshChartsOnSlide(slide); // Idem voor charts
     markSelfWrite();
     postToUI({
       type: 'target-updated',
@@ -74,7 +74,7 @@ export async function handleUpdateGeneral(
 export async function handleUpdateAccent(
   msg: Extract<UIToPluginMessage, { type: 'update-accent' }>,
 ): Promise<void> {
-  // Spec §13 T30 — heading-only. Paragraph-accent permanent out-of-scope.
+  // Heading-only. Paragraph-accent permanent out-of-scope.
   const slide = await findSlideById(msg.slideId);
   if (slide === null) {
     postToUI({

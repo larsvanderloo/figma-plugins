@@ -1,15 +1,13 @@
 // ============================================================
 // editors/general/image.ts
 //
-// Main-thread mutator voor de General → Image-sectie (spec §9-T10).
-// Zoekt binnen de slide de ImageWrap-instance (spec §7.2) en vervangt
-// de fill met een verse ImagePaint op basis van de geüploade bytes.
+// Main-thread mutator voor de General → Image-sectie. Zoekt binnen de
+// slide de ImageWrap-instance en vervangt de fill met een verse
+// ImagePaint op basis van de geüploade bytes.
 //
-// v0.1.0:
-//   - Replace-fill only. Geen crop — scaleMode blijft 'FILL' (spec §11
-//     Known issues).
-//   - Bytes komen via structured-cloning binnen als Uint8Array; we
-//     geven ze rechtstreeks door aan `figma.createImage`.
+// Replace-fill only — geen crop, scaleMode blijft 'FILL'. Bytes komen
+// via structured-cloning binnen als Uint8Array; we geven ze rechtstreeks
+// door aan `figma.createImage`.
 //
 // FIG-GUARD-01: `'fills' in imageWrap` check voordat we de property
 // aanraken (ImageWrap is een INSTANCE en ondersteunt fills, maar we
@@ -53,7 +51,7 @@ export async function applyImage(
 
   // Build een verse ImagePaint. scaleMode 'FILL' is de default voor
   // placeholder-ImageWraps in Slide Machine en past het beeld zo dat
-  // de hele wrapper bedekt is. Crop blijft v0.2.0 (spec §11).
+  // de hele wrapper bedekt is. Crop is nog niet geïmplementeerd.
   const paint: ImagePaint = {
     type: 'IMAGE',
     imageHash: imageHash,

@@ -72,8 +72,7 @@ The debug setup keeps that split intact:
 
 - `package.json`
   - Added:
-    - `build:version`: writes the iframe version badge module from `package.json`.
-    - `version:assert`: verifies generated bundles contain the current package version and no stale `0.5.x` tag.
+    - `version:assert`: verifies the built bundles contain the current package version and no stale `0.5.x` tag. (The iframe version badge is injected at build time from `package.json` via Vite's `define`, `__APP_VERSION__`.)
     - `debug:build`: runs the normal build with `PLUGIN_DEBUG=1` and injects the local log endpoint.
     - `debug:watch`: runs the normal watch pipeline with `PLUGIN_DEBUG=1`, injects the local log endpoint, and keeps generated manifest bundle copies synced.
     - `debug:manifests`: writes Figma-importable `manifest-cache/*/manifest.json` files from the debug templates and copies the current bundle.
@@ -82,6 +81,9 @@ The debug setup keeps that split intact:
     - `debug:stop`: stops repo-local debug/watch processes.
     - `debug:restart`: runs `debug:stop`, then starts `debug:session`.
   - Production scripts also run version sync/assertions so release builds cannot ship with a stale UI tag.
+
+- `scripts/clear-stale-manifest-cache.sh`
+  - After a debug session, `manifest-cache/*/dist/` holds debug bundle copies at the version they were built. Bump + `npm run build` prod afterwards and `version:assert` will flag those stale copies (they are gitignored and never ship, but the assert scans them). Run `bash scripts/clear-stale-manifest-cache.sh --force` to drop a stale cache when no debug session is live (it refuses while the log server on :4789 is up). Optionally wire it as a personal Claude Code `PreToolUse(Bash)` hook in `.claude/settings.json` (gitignored) so it runs automatically before release/build commands.
 
 - `vite.config.ts`
   - Reads `process.env.PLUGIN_DEBUG === "1"`.
@@ -238,11 +240,11 @@ The new local collector solves the practical logging problem by sending structur
 
 ## Important Build Gotcha
 
-`dist/` is tracked in this repo so Figma can load the plugin from a fresh checkout.
+`dist/` is build output (gitignored) that Figma loads directly from the local working tree via `manifest.json`.
 
 When `npm run debug:session` or `npm run debug:watch` is running, it continuously rewrites `dist/code.js` and `dist/ui.html` in debug mode and syncs copies into `manifest-cache/*/dist/`. Debug output is much larger because inline sourcemaps are embedded.
 
-Before committing or testing a production handoff:
+Before testing a production build (or loading the prod `manifest.json` in Figma):
 
 1. Stop `npm run debug:session`, `npm run debug:watch`, or the VS Code debug task.
 2. Run:

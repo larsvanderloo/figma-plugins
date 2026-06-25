@@ -86,7 +86,7 @@ export async function handleSetSlideTheme(
     });
     return;
   }
-  // T47.2: gebonden paints volgen de nieuwe mode vanzelf, maar de chart-
+  // Gebonden paints volgen de nieuwe mode vanzelf, maar de chart-
   // ramp (segment/lijn-tinten) is rendertime-resolved RGB — re-render de
   // ChartWrap zodat de tinten de nieuwe theme-mode pakken.
   await refreshChartsOnSlide(themeSlide, true);

@@ -79,7 +79,7 @@ export function useTableEditor() {
   const bridge = usePluginBridge();
   const tracker = useBridgePending(bridge);
 
-  // T47: graphs.instances bevat nu ook chart-instances — filter op tables.
+  // graphs.instances bevat nu ook chart-instances — filter op tables.
   const instances = computed<GraphInstance[]>(
     () => (view.state.graphs?.instances ?? []).filter((i) => i.tableModel !== null),
   );

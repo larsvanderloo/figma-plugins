@@ -1,6 +1,6 @@
 // useChartEditor — binds the Graphs → Chart instance(s) to the store + bridge.
 //
-// T51.3 — geen selectie-state meer: de Graphs-tab toont ALLE chart-
+// Geen selectie-state meer: de Graphs-tab toont ALLE chart-
 // instances als eigen editor-cards; updates routeren op het slotId in
 // het ge-emitte model.
 

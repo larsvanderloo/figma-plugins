@@ -18,7 +18,7 @@ import { applyTable, scanTableSlot } from '../editors/table/renderer';
 import { applyChart, scanChartSlot } from '../editors/chart/renderer';
 
 export function scanGraphs(slide: InstanceNode): GraphItems | null {
-  // T51 — slides/whitepapers kunnen MEERDERE wrappers dragen; elke
+  // Slides/whitepapers kunnen MEERDERE wrappers dragen; elke
   // TableWrap/ChartWrap wordt een eigen instance in de Graphs-tab
   // (instance-selector verschijnt vanaf 2).
   const instances: GraphItems['instances'] = [];
@@ -55,7 +55,7 @@ export function scanGraphs(slide: InstanceNode): GraphItems | null {
 }
 
 /**
- * T39.3 — Re-render TableWraps op een slide na een mutatie die de slide-
+ * Re-render TableWraps op een slide na een mutatie die de slide-
  * layout heeft kunnen veranderen (bv. CopyWrap-tekst korter/langer).
  *
  * Container.resize bevriest slot.height op het moment van applyTable.
@@ -86,7 +86,7 @@ async function refreshTableSlot(wrap: InstanceNode): Promise<void> {
 }
 
 /**
- * T47 — Re-render de ChartWrap-slot op een slide na layout-verstorende
+ * Re-render de ChartWrap-slot op een slide na layout-verstorende
  * mutaties (zelfde reden als refreshTablesOnSlide: de kaart bevriest de
  * slot-afmetingen op applyChart-moment).
  */
@@ -104,9 +104,9 @@ async function refreshChartSlot(wrap: InstanceNode, force: boolean): Promise<voi
   const slot = findSlotInWrap(wrap);
   if (slot === null) return;
   if (slot.getPluginData('chartModel') === '') return;
-  // T50.7 — alleen re-renderen wanneer de slot-afmetingen écht zijn
+  // Alleen re-renderen wanneer de slot-afmetingen écht zijn
   // veranderd: deze refresh draait op elke CopyWrap-keystroke en een
-  // full clear+rebuild flitst zichtbaar. T51.4: theme-switch forceert
+  // full clear+rebuild flitst zichtbaar. Theme-switch forceert
   // (force=true) een re-render — de ramp-kleuren zijn rendertime-RGB en
   // volgen de mode niet vanzelf, ondanks gelijke afmetingen.
   if (!force) {
@@ -126,7 +126,7 @@ async function refreshChartSlot(wrap: InstanceNode, force: boolean): Promise<voi
    }
   }
   try {
-    // T50.6 — suppressie vóór de rebuild (zie handlers/chart.ts).
+    // Suppressie vóór de rebuild (zie handlers/chart.ts).
     markSelfWrite();
     const model = scanChartSlot(slot);
     await applyChart(slot, model);

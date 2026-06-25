@@ -1,9 +1,9 @@
 // ============================================================
 // Graphs-tab — table-instance selector
 //
-// Per §12-Q1 (2026-04-23): één Graphs-tab met instance-selector die alle
-// TableWrap-instances op de slide kan tonen. `selectedGraphId` verwijst
-// naar het geselecteerde wrapper-id wanneer er meerdere tables zijn.
+// Eén Graphs-tab met instance-selector die alle TableWrap-instances op de
+// slide kan tonen. `selectedGraphId` verwijst naar het geselecteerde
+// wrapper-id wanneer er meerdere tables zijn.
 // ============================================================
 
 import type { TableWrapModel } from './table';
@@ -26,7 +26,7 @@ export interface GraphInstance {
    */
   tableModel: TableWrapModel | null;
   /**
-   * Slot-based chart-model (T47). `null` voor table-instances of wanneer
+   * Slot-based chart-model. `null` voor table-instances of wanneer
    * de ChartWrap geen Slot bevat. Verse charts krijgen een default-model
    * van de scan zodat de editor direct kan bewerken.
    */

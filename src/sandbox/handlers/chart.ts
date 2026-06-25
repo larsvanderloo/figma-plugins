@@ -1,7 +1,7 @@
 // ============================================================
 // sandbox/handlers/chart.ts
 //
-// Chart-messages (T47): full-state PUT (update-chart) op een
+// Chart-messages: full-state PUT (update-chart) op een
 // ChartWrap-SlotNode. Zelfde patroon als handlers/table.ts.
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
@@ -36,7 +36,7 @@ export async function handleUpdateChart(
     return;
   }
   figma.commitUndo();
-  // T50.6 — óók vóór de apply: applyChart heeft awaits na het clearen
+  // Óók vóór de apply: applyChart heeft awaits na het clearen
   // van de slot; een eerder-gedebouncede scan mag niet interleaven met
   // half-verwijderde clone-sublayers.
   markSelfWrite();

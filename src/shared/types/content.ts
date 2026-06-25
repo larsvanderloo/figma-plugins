@@ -1,5 +1,5 @@
 // ============================================================
-// Content-tab — card-list (spec §3.4)
+// Content-tab — card-list
 // ============================================================
 
 export interface CardItem {
@@ -12,7 +12,7 @@ export interface CardItem {
    *
    * - `string` — icon-instance aanwezig en zichtbaar; slug is de huidige icon-keuze.
    * - `null`   — icon-instance afwezig of visible === false; icon-picker wordt
-   *              verborgen in de UI (zelfde pattern als paragraph-hide T19).
+   *              verborgen in de UI (zelfde pattern als paragraph-hide).
    */
   icon: string | null;
   /**
@@ -40,7 +40,7 @@ export interface CardItem {
 }
 
 /**
- * Eén bewerkbaar timeline-item binnen een TimelineWrap (spec §13 T31).
+ * Eén bewerkbaar timeline-item binnen een TimelineWrap.
  *
  * TimelineWrap's children zijn CopyWrap-instances (niet Card-instances);
  * elk item heeft alleen Heading + Paragraph — geen icon-swap, geen
@@ -91,7 +91,7 @@ export interface ContentItems {
    */
   instructorCards: InstructorCardItem[];
   /**
-   * Timeline-items (spec §13 T31). Lege array wanneer de slide geen
+   * Timeline-items. Lege array wanneer de slide geen
    * TimelineWrap heeft. Slides met alleen TimelineWrap hebben een lege
    * `cards`-array en een niet-lege `timelineItems`-array.
    */

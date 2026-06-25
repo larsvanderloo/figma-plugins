@@ -1,9 +1,9 @@
 // ============================================================
-// Table-editor types — v0.2.0 Slot-based (T34.1)
+// Table-editor types — Slot-based
 //
-// Nieuwe types voor de Slot-gebaseerde TableWrap-rewrite (T34). De
-// plugin bouwt zelf FRAMEs + TEXT-nodes binnen de SlotNode, in plaats
-// van library-components of vaste varianten.
+// Types voor de Slot-gebaseerde TableWrap. De plugin bouwt zelf
+// FRAMEs + TEXT-nodes binnen de SlotNode, in plaats van
+// library-components of vaste varianten.
 // ============================================================
 
 /**
@@ -14,7 +14,7 @@ export interface TableWrapModel {
   /** Figma SlotNode ID binnen de TableWrap-INSTANCE. */
   slotId: string;
   /**
-   * T40 — wanneer true krijgt rij 0 een header-treatment: HUG-vertical,
+   * Wanneer true krijgt rij 0 een header-treatment: HUG-vertical,
    * header-typografie, divider eronder. Body-rijen (1+)
    * delen het restant van de container-hoogte via FILL.
    * Default: false (bestaande tabellen blijven onveranderd).
@@ -53,7 +53,7 @@ export interface TableWrapModel {
   rows: TableRowModel[];
 }
 
-// T44: `width`-preset (sm/md/lg) en `textSize`-multiplier (T42.9) verwijderd.
+// `width`-preset (sm/md/lg) en `textSize`-multiplier verwijderd.
 // De tabel rendert full-width binnen de actuele Slot-breedte; kolommen verdelen die breedte via
 // autofit. FontSize komt uit de hoogte-formule in renderer.ts.
 

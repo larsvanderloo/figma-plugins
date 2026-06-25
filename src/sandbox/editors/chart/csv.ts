@@ -1,7 +1,7 @@
 // ============================================================
 // editors/chart/csv.ts
 //
-// CSV-import voor een ChartWrap-Slot (T50).
+// CSV-import voor een ChartWrap-Slot.
 //
 // Mapping-regels:
 //   - Rij 0 = header: cells[1..] zijn serie-namen (getrimmed;

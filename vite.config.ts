@@ -7,6 +7,7 @@
 
 import { defineConfig, type Plugin } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import vue from '@vitejs/plugin-vue';
 import ui from '@nuxt/ui/vite';
@@ -15,6 +16,12 @@ import { viteSingleFile } from 'vite-plugin-singlefile';
 const isDebug = process.env.PLUGIN_DEBUG === '1';
 const debugLogEndpoint = isDebug ? (process.env.PLUGIN_DEBUG_LOG_ENDPOINT ?? '') : '';
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
+
+// Single source of truth: package.json version, injected at bundle-time
+// via `define` (same mechanism as __PLUGIN_DEBUG__). No generated file.
+const appVersion = JSON.parse(
+  readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
+).version as string;
 const uiIndexHtml = fileURLToPath(new URL('./src/ui/index.html', import.meta.url));
 const uiAutoImportsDts = fileURLToPath(new URL('./src/ui/auto-imports.d.ts', import.meta.url));
 const uiComponentsDts = fileURLToPath(new URL('./src/ui/components.d.ts', import.meta.url));
@@ -80,6 +87,7 @@ export default defineConfig({
     __PLUGIN_DEBUG__: JSON.stringify(isDebug),
     __PLUGIN_DEBUG_SOURCE__: JSON.stringify('ui'),
     __PLUGIN_DEBUG_LOG_ENDPOINT__: JSON.stringify(debugLogEndpoint),
+    __APP_VERSION__: JSON.stringify(appVersion),
   },
   plugins: [
     serveUiIndexAtRoot(),

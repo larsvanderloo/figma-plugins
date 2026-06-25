@@ -112,8 +112,6 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
           onSelect: () =>
             setColumnCalculation(col, normalizedColumnCalculations.value[col] === 'sum' ? null : 'sum'),
         },
-        { label: 'Gemiddelde', icon: 'i-lucide-divide', disabled: true },
-        { label: 'Aantal', icon: 'i-lucide-hash', disabled: true },
       ],
       [
         {

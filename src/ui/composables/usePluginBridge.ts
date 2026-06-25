@@ -2,7 +2,7 @@
 // usePluginBridge — UI-iframe <-> plugin-main postMessage-bridge.
 //
 // Generieke, type-safe wrapper rond het Figma plugin <-> iframe
-// postMessage-protocol (spec §5, FIG-MSG-01):
+// postMessage-protocol (FIG-MSG-01):
 //
 //   UI → plugin:   parent.postMessage({ pluginMessage: msg }, '*')
 //   Plugin → UI:   window message event, payload in event.data.pluginMessage
@@ -10,7 +10,7 @@
 // In tegenstelling tot de per-handler-API van welder-table's
 // usePluginBridge biedt deze compose-laag een bewust smalle, uniforme
 // `post(msg)` + `onMessage(handler)` API — handlers worden in de
-// store-laag (T6, usePluginView) gedispatcht op msg.type. Dit past
+// store-laag (usePluginView) gedispatcht op msg.type. Dit past
 // beter bij de grotere discriminated-union (4 inbound / 7 outbound
 // types) zonder N callback-slots te hoeven bijhouden.
 //

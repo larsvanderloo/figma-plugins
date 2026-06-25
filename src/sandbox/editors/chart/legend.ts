@@ -5,7 +5,7 @@
 // gebruikt door donut/pie (categorie-legenda) en bar/line
 // (serie-legenda). Swatches volgen de accent-ramp-tinten.
 //
-// T52 — fit-discipline (harde invariant: nooit buiten de content-frame):
+// Fit-discipline (harde invariant: nooit buiten de content-frame):
 //   * breedte-budget per rij: label single-line ellipsen (maxLines 1,
 //     geen wrap-groei), daarna delta-suffix laten vallen, daarna hard
 //     clampen — Highcharts' allowOverlap=false-gedachte: wat niet past
@@ -25,9 +25,9 @@
 export interface LegendEntry {
   label: string;
   color: RGB;
-  /** T47.3 — benadrukt datapunt: label in Instrument Sans SemiBold. */
+  /** Benadrukt datapunt: label in Instrument Sans SemiBold. */
   emphasis?: boolean;
-  /** T50 — optionele delta-badge-node, ge-append na het label. */
+  /** Optionele delta-badge-node, ge-append na het label. */
   deltaNode?: SceneNode | null;
 }
 
@@ -37,15 +37,15 @@ export interface ChartTheme {
   dimmerVar: Variable;
   textRGB: RGB;
   dimmerRGB: RGB;
-  /** T50.5 — slide-level resolved accent (zelfde bron als de ramp). */
+  /** Slide-level resolved accent (zelfde bron als de ramp). */
   accentRGB: RGB;
-  /** T50.8 — contrast-kleur op de kaart: accent of light, wat het verst
+  /** Contrast-kleur op de kaart: accent of light, wat het verst
    * van de werkelijke kaart-kleur af ligt (mode-flip-proof). */
   onCardRGB: RGB;
 }
 
 /**
- * T52 — single-line ellipsis op vaste breedte. maxLines=1 +
+ * Single-line ellipsis op vaste breedte. maxLines=1 +
  * textAutoResize HEIGHT: de hoogte blijft het korps volgen (geen
  * wrap-groei zoals bij de oude HEIGHT-zonder-maxLines-route, die liet
  * lange labels naar meerdere regels wikkelen en blies zo het
@@ -60,7 +60,7 @@ export function truncateToWidth(t: TextNode, width: number): void {
 }
 
 /**
- * T52 — breedte-budget per legenda-rij, in drie degradatie-stappen:
+ * Breedte-budget per legenda-rij, in drie degradatie-stappen:
  * label ellipsen → delta-suffix droppen → harde clamp. Garandeert
  * row.width ≤ budget zolang budget > swatch + spacing + 8px.
  */
@@ -72,7 +72,7 @@ function fitRowToWidth(
   fontSize: number,
 ): void {
   if (!(budget > 0) || row.width <= budget) return;
-  // Stap 1 — label single-line ellipsen binnen het rest-budget (T51.2).
+  // Stap 1 — label single-line ellipsen binnen het rest-budget.
   const minLabelW = Math.round(fontSize * 3);
   let target = budget - (row.width - label.width);
   if (target < minLabelW) target = minLabelW;
@@ -88,7 +88,7 @@ function fitRowToWidth(
   truncateToWidth(label, target);
 }
 
-/** T52 — korps + afgeleide maten (swatch, spacings) in één keer zetten,
+/** Korps + afgeleide maten (swatch, spacings) in één keer zetten,
  * zodat de hoogte-ladder per stap consistent meet. */
 function applyLegendFont(
   legend: FrameNode,
@@ -121,7 +121,7 @@ export function buildLegend(
   maxHeight?: number,
   wrap?: boolean,
 ): FrameNode {
-  // T52 — WRAP-modus alleen met een geldig breedte-budget (de wikkel
+  // WRAP-modus alleen met een geldig breedte-budget (de wikkel
   // heeft een FIXED primary-as nodig).
   const wrapWidth = wrap === true && typeof maxWidth === 'number' && maxWidth > 0 ? maxWidth : 0;
   const isWrap = wrapWidth > 0;
@@ -189,7 +189,7 @@ export function buildLegend(
       deltas.push(deltaNode);
     }
 
-    // T51.2/T52 — width-budget: lange labels (incl. waarde/delta-suffix)
+    // Width-budget: lange labels (incl. waarde/delta-suffix)
     // truncaten i.p.v. de kaart uitlopen.
     if (typeof maxWidth === 'number' && maxWidth > 0) {
       fitRowToWidth(row, t, deltaNode, maxWidth, fontSize);
@@ -206,7 +206,7 @@ export function buildLegend(
     legend.resize(wrapWidth, Math.max(1, legend.height));
   }
 
-  // T52 — hoogte-budget met degradatie-ladder (meet-dan-reserveer:
+  // Hoogte-budget met degradatie-ladder (meet-dan-reserveer:
   // de caller geeft de plot de rest, dus de legenda MOET ≤ maxHeight).
   if (typeof maxHeight === 'number' && maxHeight > 0 && legend.height > maxHeight) {
     // Stap 1 — korps verkleinen tot de 12px-vloer (ONS: 12px is de

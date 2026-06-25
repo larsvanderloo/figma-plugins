@@ -1,7 +1,7 @@
 // ============================================================
 // components/editors/chart/useChartCsvImport.ts
 //
-// CSV file-upload flow voor de chart-editor (T50): lees het bestand,
+// CSV file-upload flow voor de chart-editor: lees het bestand,
 // valideer chart-vormig (koprij + max 12 datarijen × 4 waarde-
 // kolommen) via de gedeelde tokenizer, emit dan `import-csv` — de
 // sandbox doet de echte parse + applyChart. Spiegel van

@@ -14,7 +14,6 @@ const DEBUG_PATTERNS = [
   /\besbuild\.config\.mjs --watch\b/,
   /\bdebug-log-server\.mjs\b/,
   /\bwrite-debug-manifests\.mjs --watch\b/,
-  /\bwrite-app-version\.mjs --watch\b/,
   /\bnormalize-ui-bundle\.mjs --watch\b/,
 ];
 

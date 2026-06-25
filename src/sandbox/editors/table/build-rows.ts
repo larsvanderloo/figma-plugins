@@ -70,15 +70,15 @@ function buildCell(
   t.fontSize = isEmphasis ? sizes.heading : sizes.body;
   t.characters = cell.value;
   t.textAutoResize = 'HEIGHT';
-  // T41.8/T45: body-cells standaard LEFT-aligned voor consistente scanbaarheid.
-  // T46.1: kolommen met een som-berekening zijn numeriek → RIGHT-aligned
+  // Body-cells standaard LEFT-aligned voor consistente scanbaarheid.
+  // Kolommen met een som-berekening zijn numeriek → RIGHT-aligned
   // (Notion number-column-stijl). Horizontale ruimte komt uit content-weighted
   // autofit; row.itemSpacing wordt compacter bij informatierijke tabellen.
   t.textAlignHorizontal = rightAlign ? 'RIGHT' : 'LEFT';
-  // T42.10: maxLines + textTruncation verwijderd — body-text mag vrij
-  // wrappen zolang er ruimte is. Truncation eerder (T42.5) zorgde voor
+  // maxLines + textTruncation verwijderd — body-text mag vrij
+  // wrappen zolang er ruimte is. Truncation eerder zorgde voor
   // ge-trunceerde 1-regel wanneer wrapping juist beter was. Container
-  // clipsContent=true (T42.5) blijft visuele overflow voorkomen.
+  // clipsContent=true blijft visuele overflow voorkomen.
   t.fills = [
     figma.variables.setBoundVariableForPaint({ type: 'SOLID', color: textRGB }, 'color', textVar),
   ];
@@ -145,7 +145,7 @@ export function buildRow(
   rowFrame.itemSpacing = metrics.rowGap;
   rowFrame.paddingTop = rowPadding;
   rowFrame.paddingBottom = rowPadding;
-  // T41.6: horizontal padding verhuisd vanaf container — top-dividers (i > 0)
+  // Horizontal padding verhuisd vanaf container — top-dividers (i > 0)
   // spannen nu de volle container.width en raken de container-borders.
   rowFrame.paddingLeft = metrics.rowPadX;
   rowFrame.paddingRight = metrics.rowPadX;
@@ -198,7 +198,7 @@ export function buildRow(
 }
 
 /**
- * T40 / T41.8 — bouwt een header-cell met left-aligned text in Text-color.
+ * Bouwt een header-cell met left-aligned text in Text-color.
  * Header padding volgt dezelfde dense-table metrics als de body rows.
  */
 function buildHeaderCell(
@@ -212,7 +212,7 @@ function buildHeaderCell(
   const cellFrame = figma.createFrame();
   cellFrame.name = 'TableHeaderItem-c' + String(j);
   cellFrame.layoutMode = 'HORIZONTAL';
-  // T41.5: cell-padding zodat row-edges (bottom-divider) blijven werken
+  // Cell-padding zodat row-edges (bottom-divider) blijven werken
   // ook bij FILL-vertical cells.
   cellFrame.counterAxisSizingMode = 'FIXED';
   cellFrame.primaryAxisSizingMode = 'FIXED';
@@ -224,18 +224,18 @@ function buildHeaderCell(
   cellFrame.fills = [];
   cellFrame.setPluginData('emphasis', '');
 
-  // T41.8: verticale cell-separators verwijderd — minimalistische look.
+  // Verticale cell-separators verwijderd — minimalistische look.
 
   const t = figma.createText();
-  // T46.5: koprij → Instrument Sans SemiBold, iets groter, in Text-color
-  // (full contrast). Was Inter Medium 18 (T41.10).
+  // Koprij → Instrument Sans SemiBold, iets groter, in Text-color
+  // (full contrast). Was Inter Medium 18.
   t.fontName = { family: 'Instrument Sans', style: 'SemiBold' };
   t.fontSize = 20;
   t.characters = cell.value;
   t.textAutoResize = 'HEIGHT';
-  // T46.1: header van een som-kolom volgt de body/footer-uitlijning (RIGHT).
+  // Header van een som-kolom volgt de body/footer-uitlijning (RIGHT).
   t.textAlignHorizontal = rightAlign ? 'RIGHT' : 'LEFT';
-  // T42.4: lange header-text wrapt anders naar meerdere regels en duwt
+  // Lange header-text wrapt anders naar meerdere regels en duwt
   // row HUG-vertical enorm op. Single-line + ellipsis = clean grid look.
   try {
     t.maxLines = 1;
@@ -266,7 +266,7 @@ function buildHeaderCell(
 }
 
 /**
- * T40 / T41.8 — bouwt de header-rij. HUG-vertical (compact), 2px bottom-
+ * Bouwt de header-rij. HUG-vertical (compact), 2px bottom-
  * border in Text Dimmer. Cells zijn left-aligned, 18px Inter Medium,
  * geen verticale separators.
  */
@@ -286,12 +286,12 @@ export function buildHeaderRow(
   rowFrame.primaryAxisAlignItems = 'MIN';
   rowFrame.counterAxisAlignItems = 'CENTER';
   rowFrame.itemSpacing = metrics.rowGap;
-  // T41.5: padding verhuisd naar cell-niveau (24+24 op elke cell) zodat
+  // Padding verhuisd naar cell-niveau (24+24 op elke cell) zodat
   // cells FILL-vertical kunnen en verticale strokes tot row-edges reiken
   // (raken bottom-divider). Row zelf heeft nu 0 vertical padding.
   rowFrame.paddingTop = 0;
   rowFrame.paddingBottom = 0;
-  // T41.6: horizontal padding 32 (was 0) — verhuisd vanaf container zodat
+  // Horizontal padding 32 (was 0) — verhuisd vanaf container zodat
   // de bottom-divider full container.width spant en de container-borders
   // raakt op beide hoeken.
   rowFrame.paddingLeft = metrics.rowPadX;
@@ -321,7 +321,7 @@ export function buildHeaderRow(
     } catch (_e) {
       /* silent */
     }
-    // T41.5: cells FILL vertical zodat strokes de volle row-hoogte beslaan.
+    // Cells FILL vertical zodat strokes de volle row-hoogte beslaan.
     try {
       cellFrame.layoutSizingVertical = 'FILL';
     } catch (_e) {

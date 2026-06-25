@@ -23,11 +23,11 @@ import {
  * Lees de huidige Slot-inhoud. Row-FRAMEs heten `TableRow-*`,
  * cell-FRAMEs `TableItem-*`; overige kinderen worden overgeslagen.
  *
- * T39.2: legacy `textSize`-pluginData wordt niet meer gelezen — fontSize
+ * Legacy `textSize`-pluginData wordt niet meer gelezen — fontSize
  * wordt door applyTable afgeleid uit slot.height + rows.length.
  */
 export function scanTableSlot(slot: SlotNode): TableWrapModel {
-  // Legacy-detection (T34.4): oude v0.1.x slides hadden pluginData op de
+  // Legacy-detection: oude v0.1.x slides hadden pluginData op de
   // TableWrap-INSTANCE met `kind='welder-table'` + `v='2'`; nu zit de
   // canonieke marker op de Slot zelf als `kind='welder-tablewrap'` + `v='3'`.
   // Als we een oude marker zien, log het en ga door met canvas-truth
@@ -56,7 +56,7 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
   for (let i = 0; i < rowParent.children.length; i++) {
     const rowNode = rowParent.children[i];
     if (rowNode.type !== 'FRAME') continue;
-    // T40: matcht óók TableHeaderRow zodat re-edit de header-rij niet verliest.
+    // Matcht óók TableHeaderRow zodat re-edit de header-rij niet verliest.
     if (rowNode.name.indexOf('TableRow') !== 0 && rowNode.name.indexOf('TableHeaderRow') !== 0)
       continue;
     const rowFrame = rowNode as FrameNode;
@@ -65,7 +65,7 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
     for (let j = 0; j < rowFrame.children.length; j++) {
       const cellNode = rowFrame.children[j];
       if (cellNode.type !== 'FRAME') continue;
-      // T40: matcht óók TableHeaderItem (header-cells).
+      // Matcht óók TableHeaderItem (header-cells).
       if (
         cellNode.name.indexOf('TableItem') !== 0 &&
         cellNode.name.indexOf('TableHeaderItem') !== 0

@@ -1,7 +1,7 @@
 // ============================================================
 // editors/chart/renderer.ts
 //
-// Slot-based chart-renderer voor ChartWrap-instances (T47) — zelfde
+// Slot-based chart-renderer voor ChartWrap-instances — zelfde
 // architectuur als de tabel: full-state PUT binnen de SlotNode, witte
 // kaart-container die de actuele Slot-afmetingen volgt, theming via
 // de library-variables (accent-ramp afgeleid van `Text`).
@@ -151,7 +151,7 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
       b: 0,
     });
     // Kaart-paint één keer bouwen: hergebruikt voor de kaart-fill én als
-    // segment-separator-stroke in de donut/pie (T50/R3).
+    // segment-separator-stroke in de donut/pie.
     const cardPaint = figma.variables.setBoundVariableForPaint(
       { type: 'SOLID', color: accentRGB },
       'color',
@@ -181,7 +181,7 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
         ? await resolveColorInNodeMode(backgroundVar, modeContext, { r: 1, g: 0.957, b: 0.918 })
         : { r: 1, g: 0.957, b: 0.918 };
     const labelVar = backgroundVar !== null ? backgroundVar : vars.dimmer;
-    // T50.8 — de wrap kan een geflipte theme-mode voeren: de kaart-fill
+    // De wrap kan een geflipte theme-mode voeren: de kaart-fill
     // (Text-binding) rendert dan in een ANDERE kleur dan accentRGB op
     // slide-niveau. Resolve Text in de kaart-mode (de kaart hangt nu in
     // de tree) en kies als on-card-tekstkleur de variant met het meeste
@@ -204,7 +204,7 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
       accentRGB: accentRGB,
       onCardRGB: onCardRGB,
     };
-    // T39.1.1 (zelfde als de tabel): SlotNode host geen FILL-children —
+    // Zelfde als de tabel: SlotNode host geen FILL-children —
     // expliciete resize naar de actuele slot-afmetingen, zodat de kaart
     // toekomstige smallere/kortere slot-varianten automatisch volgt.
     // Surface-preset is alleen fallback voor legacy/invalid slots.

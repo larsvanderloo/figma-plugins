@@ -1,10 +1,10 @@
 <script setup lang="ts">
 // ============================================================
-// ChartEditor — bewerkt één ChartWrap-instance (T47).
+// ChartEditor — bewerkt één ChartWrap-instance.
 //
 // Zelfde state-patroon als TableEditor: lokale mirror van het model,
 // prop-sync achter een echo-guard, debounced update:modelValue-emit.
-// Het datagrid (T47.3) leeft in chart/ChartGrid.vue en spiegelt de
+// Het datagrid leeft in chart/ChartGrid.vue en spiegelt de
 // TableGrid-interactie: rij/serie-menu's, cel-menu met
 // "Cel benadrukken", Enter-navigatie. Geen som — tabel-specifiek.
 // ============================================================
@@ -132,19 +132,19 @@ function setShowValues(v: boolean): void {
   scheduleEmit('values-toggle');
 }
 
-// Delta-badges (T48): verandering vs vorige categorie in serie 0.
+// Delta-badges: verandering vs vorige categorie in serie 0.
 function setShowDelta(v: boolean): void {
   local.value.showDelta = v;
   scheduleEmit('delta-toggle');
 }
 
-// T50.2 — procentteken per serie (kolom), zoals de tabel.
+// Procentteken per serie (kolom), zoals de tabel.
 function setSeriesPercent(s: number, v: boolean): void {
   local.value.series[s].percent = v;
   scheduleEmit('series-percent');
 }
 
-// T50.4 — donut center-totaal: override, onderschrift en nadruk.
+// Donut center-totaal: override, onderschrift en nadruk.
 const donutTotalPlaceholder = computed<string>(() => {
   if (local.value.series.length === 0) return '';
   const serie = local.value.series[0];
@@ -193,7 +193,7 @@ function donutLabelMenuItems(): DropdownMenuItem[][] {
   ];
 }
 
-// T50 — per-cel delta-override; lege string = auto.
+// Per-cel delta-override; lege string = auto.
 function ensureDeltaOverrides(): string[] {
   if (local.value.deltaOverrides === undefined) {
     local.value.deltaOverrides = local.value.categories.map(() => '');
@@ -206,7 +206,7 @@ function setDeltaOverride(i: number, value: string): void {
   scheduleEmit('delta-override');
 }
 
-// T50 — vaste progress-referentie; leeg/ongeldig = auto (null).
+// Vaste progress-referentie; leeg/ongeldig = auto (null).
 function setProgressMax(raw: string | number): void {
   const parsed = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.'));
   const next = isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -215,7 +215,7 @@ function setProgressMax(raw: string | number): void {
   scheduleEmit('progress-max');
 }
 
-// T50 — transponeren (Datawrapper/Flourish-conventie: expliciete actie,
+// Transponeren (Datawrapper/Flourish-conventie: expliciete actie,
 // nooit stille auto-rotatie): categorieën ↔ series wisselen. Reset
 // nadruk/overrides — rij-identiteit verandert.
 const canTranspose = computed<boolean>(

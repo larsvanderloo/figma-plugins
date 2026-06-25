@@ -1,7 +1,5 @@
-// Shared helpers for the scripts/ watchers. Extracted from
-// write-app-version.mjs and write-debug-manifests.mjs, which previously
-// each carried their own copy of the version-reader and the
-// coalescing watch-sync pattern.
+// Shared helpers for the scripts/ watchers, used by write-debug-manifests.mjs
+// (the version-reader + the coalescing watch-sync pattern).
 
 import { watchFile } from 'node:fs';
 import { readFile } from 'node:fs/promises';

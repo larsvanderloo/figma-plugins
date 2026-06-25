@@ -1,8 +1,8 @@
 // ============================================================
 // editors/general/badge.ts
 //
-// Main-thread mutator voor de General → Badge-sectie (spec §9-T9).
-// Zoekt binnen de slide de Badge-instance (spec §7.2) en muteert:
+// Main-thread mutator voor de General → Badge-sectie.
+// Zoekt binnen de slide de Badge-instance en muteert:
 //   1. Het label — descendant text-node met name 'Label'
 //      (fallback: eerste text-node binnen de badge).
 //   2. Het icon — drie strategieën in prioriteitsvolgorde:
