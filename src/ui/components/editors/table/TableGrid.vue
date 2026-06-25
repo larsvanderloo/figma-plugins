@@ -35,6 +35,7 @@ const props = defineProps<Props>();
 const emit = defineEmits<{
   'cell-edit': [row: number, col: number, value: string];
   'cell-style': [row: number, col: number, emphasis: boolean];
+  'cell-delta': [row: number, col: number, value: string];
   'column-calculation': [col: number, calculation: TableColumnCalculationSetting];
   'column-calculation-emphasis': [col: number, emphasis: boolean];
   'column-calculation-currency': [col: number, currency: boolean];
@@ -177,6 +178,19 @@ function cellTextareaUi(row: number, col: number): { root: string; base: string 
 
 function updateCellValue(value: unknown, row: number, col: number): void {
   emit('cell-edit', row, col, String(value ?? ''));
+}
+
+// Delta-badge: body-cellen alleen (koprij draagt geen delta). De editor
+// typt een vrije waarde; een ▲/▼-prefix (via het cel-menu) bepaalt de richting.
+function isBodyCell(row: number): boolean {
+  return !(props.hasColumnHeader && row === 0);
+}
+function cellDeltaValue(row: number, col: number): string {
+  const cell = props.rows[row]?.cells[col];
+  return cell !== undefined && typeof cell.delta === 'string' ? cell.delta : '';
+}
+function updateCellDelta(value: unknown, row: number, col: number): void {
+  emit('cell-delta', row, col, String(value ?? ''));
 }
 
 function setColumnLabel(col: number, label: string): void {
@@ -328,6 +342,21 @@ const footerLabelUi = {
                   :title="'Menu voor ' + cellLabel(rowIdx, colIdx)"
                 />
               </UDropdownMenu>
+            </div>
+            <div
+              v-if="isBodyCell(rowIdx) && cellDeltaValue(rowIdx, colIdx) !== ''"
+              class="border-t border-dashed border-muted/60 px-2 py-1"
+            >
+              <UInput
+                :model-value="cellDeltaValue(rowIdx, colIdx)"
+                placeholder="Δ verschil"
+                size="xs"
+                variant="none"
+                color="neutral"
+                :ui="{ base: 'w-full bg-transparent px-0 py-0 text-xs leading-4 text-dimmed placeholder:text-dimmed/60 focus:ring-0' + (isRightAlignedColumn(colIdx) ? ' text-right' : '') }"
+                :aria-label="'Delta voor ' + cellLabel(rowIdx, colIdx)"
+                @update:model-value="(value: string | number) => updateCellDelta(value, rowIdx, colIdx)"
+              />
             </div>
           </td>
         </tr>

@@ -140,6 +140,13 @@ export function applyBodyTruncation(bodyRows: FrameNode[]): void {
       if (cell.type !== 'FRAME') continue;
       var cellFrame = cell as FrameNode;
 
+      // Delta-cellen zijn een verticale waarde+badge-stack (VERTICAL layout):
+      // de FILL-vertical truncation hieronder zou de waarde-TEXT de hele
+      // cel laten vullen en de delta-badge wegdrukken. Laat zulke cellen
+      // HUG-vertical (de row centreert ze) en sla de truncation over;
+      // container.clipsContent vangt eventuele overflow.
+      if (cellFrame.getPluginData('delta') !== '') continue;
+
       // Cell vertical FILL → cell.height = row.FILL-share. Vereist
       // counterAxisSizingMode='FIXED' (was 'AUTO' = HUG).
       try {

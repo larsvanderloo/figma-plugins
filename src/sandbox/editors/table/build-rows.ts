@@ -10,12 +10,24 @@
 // ============================================================
 
 import type { TableRowModel, TableCellModel } from '../../../shared/types';
+import { tableDeltaDisplay } from '../../../shared/table-delta';
+import { buildDeltaBadgeNode } from '../_shared/delta-badge-node';
 import type { TableLayoutMetrics } from './metrics';
+
+/** Naam van de waarde-TEXT binnen een cell-FRAME (scan + truncation pakken deze). */
+export const CELL_VALUE_NAME = 'CellValue';
 
 /**
  * Bouwt één cell-FRAME met TEXT-kind. Emphasis is per cell opt-in;
  * columns never get automatic visual treatment.
  * TEXT-fill is bound aan de `Text`-library-variable.
+ *
+ * Bij een niet-lege `cell.delta` wordt de cel een VERTICALE stack: waarde
+ * boven, delta-badge eronder. De badge is een CLONE van het slide-Badge-
+ * component (zelfde styling als de chart delta-badge); zonder template valt
+ * hij terug op losse Text Dimmer-tekst. De rauwe delta-string gaat naar
+ * cell-pluginData zodat de scan hem exact terugleest (net als emphasis).
+ *
  * Caller zet `layoutSizingHorizontal='FILL'` + `layoutSizingVertical='HUG'`
  * NA appendChild aan de row (Figma-API-quirk).
  */
@@ -25,15 +37,27 @@ function buildCell(
   sizes: { heading: number; body: number },
   textVar: Variable,
   textRGB: RGB,
+  dimmerVar: Variable,
+  dimmerRGB: RGB,
   rightAlign: boolean,
+  badgeTemplate: InstanceNode | null,
 ): FrameNode {
+  const deltaLabel = tableDeltaDisplay(cell.delta);
+
   const cellFrame = figma.createFrame();
   cellFrame.name = 'TableItem-c' + String(j);
-  cellFrame.layoutMode = 'HORIZONTAL';
-  cellFrame.counterAxisSizingMode = 'AUTO';
-  cellFrame.primaryAxisSizingMode = 'FIXED';
+  // Delta-cellen stapelen waarde + badge verticaal; gewone cellen blijven
+  // horizontaal (één TEXT die de breedte FILLt).
+  cellFrame.layoutMode = deltaLabel !== null ? 'VERTICAL' : 'HORIZONTAL';
+  cellFrame.counterAxisSizingMode = deltaLabel !== null ? 'FIXED' : 'AUTO';
+  cellFrame.primaryAxisSizingMode = deltaLabel !== null ? 'AUTO' : 'FIXED';
+  if (deltaLabel !== null) {
+    cellFrame.itemSpacing = 2;
+    cellFrame.counterAxisAlignItems = rightAlign ? 'MAX' : 'MIN';
+  }
   cellFrame.fills = [];
   cellFrame.setPluginData('emphasis', cell.emphasis === true ? '1' : '');
+  cellFrame.setPluginData('delta', deltaLabel !== null ? deltaLabel : '');
 
   const isEmphasis = cell.emphasis === true;
   const fontName: FontName = isEmphasis
@@ -41,6 +65,7 @@ function buildCell(
     : { family: 'Inter', style: 'Regular' };
 
   const t = figma.createText();
+  t.name = CELL_VALUE_NAME;
   t.fontName = fontName;
   t.fontSize = isEmphasis ? sizes.heading : sizes.body;
   t.characters = cell.value;
@@ -69,6 +94,28 @@ function buildCell(
   } catch (_e) {
     /* silent */
   }
+
+  if (deltaLabel !== null) {
+    // Styled Badge-clone (zelfde component als de chart delta-badge), met
+    // tekst-fallback wanneer de slide geen Badge-template heeft. De node
+    // meet zichzelf (HUG); de cel-counterAxisAlignItems verzorgt links/rechts.
+    const d = buildDeltaBadgeNode({
+      template: badgeTemplate,
+      label: deltaLabel,
+      index: j,
+      labelSize: sizes.body,
+      dimmerVar: dimmerVar,
+      dimmerRGB: dimmerRGB,
+    });
+    cellFrame.appendChild(d);
+    if ('layoutSizingVertical' in d) {
+      try {
+        (d as InstanceNode | TextNode).layoutSizingVertical = 'HUG';
+      } catch (_e) {
+        /* silent */
+      }
+    }
+  }
   return cellFrame;
 }
 
@@ -87,6 +134,7 @@ export function buildRow(
   rowPadding: number,
   rightAlignColumns: readonly boolean[],
   metrics: TableLayoutMetrics,
+  badgeTemplate: InstanceNode | null,
 ): FrameNode {
   const rowFrame = figma.createFrame();
   rowFrame.name = 'TableRow-' + String(i);
@@ -122,7 +170,17 @@ export function buildRow(
 
   for (let j = 0; j < row.cells.length; j++) {
     const rightAlign = j < rightAlignColumns.length && rightAlignColumns[j] === true;
-    const cellFrame = buildCell(row.cells[j], j, sizes, textVar, textRGB, rightAlign);
+    const cellFrame = buildCell(
+      row.cells[j],
+      j,
+      sizes,
+      textVar,
+      textRGB,
+      dimmerVar,
+      dimmerRGB,
+      rightAlign,
+      badgeTemplate,
+    );
     rowFrame.appendChild(cellFrame);
     // Modern sizing-API (vervangt legacy `layoutGrow=1`); MOET na appendChild.
     try {

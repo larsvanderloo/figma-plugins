@@ -35,6 +35,7 @@ const {
   setHasColumnHeader,
   updateCell,
   setCellEmphasis,
+  setCellDelta,
   setColumnCalculation,
   setColumnCalculationEmphasis,
   setColumnCalculationCurrency,
@@ -85,6 +86,7 @@ const { csvUploadFile, csvError, lastImport, onCsvFileChange } = useCsvImport(pr
       :max-cols="TABLE_MAX_COLS"
       @cell-edit="updateCell"
       @cell-style="setCellEmphasis"
+      @cell-delta="setCellDelta"
       @column-calculation="setColumnCalculation"
       @column-calculation-emphasis="setColumnCalculationEmphasis"
       @column-calculation-currency="setColumnCalculationCurrency"

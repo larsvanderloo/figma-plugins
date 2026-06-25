@@ -70,12 +70,21 @@ export function matchSurfaceSignature(node: SceneNode): SurfaceSignature | null 
  * (Slide 1920 vs Whitepaper 1240 hebben verschillende Slot-breedtes).
  */
 export function findEnclosingSurfaceName(node: BaseNode): string | null {
+  const surface = findEnclosingSurface(node);
+  return surface !== null ? surface.name : null;
+}
+
+/**
+ * Als `findEnclosingSurfaceName`, maar retourneert de surface-INSTANCE zelf
+ * (Slide/Whitepaper) i.p.v. enkel de naam. Gebruikt door de table-renderer
+ * om het Badge-template van de slide te vinden voor delta-badges.
+ */
+export function findEnclosingSurface(node: BaseNode): InstanceNode | null {
   let cur: BaseNode | null = node;
   for (let i = 0; i < 20; i++) {
     if (cur === null) return null;
-    if (cur.type === 'INSTANCE') {
-      const sig = matchSurfaceSignature(cur as InstanceNode);
-      if (sig !== null) return sig.name;
+    if (cur.type === 'INSTANCE' && matchSurfaceSignature(cur as InstanceNode) !== null) {
+      return cur as InstanceNode;
     }
     cur = 'parent' in cur ? (cur as SceneNode).parent : null;
   }

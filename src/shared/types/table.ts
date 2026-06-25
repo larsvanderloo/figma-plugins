@@ -71,6 +71,13 @@ export interface TableCellModel {
   value: string;
   /** Per-cell visual emphasis. Default false; set through the table UI. */
   emphasis?: boolean;
+  /**
+   * Per-cell delta badge — vrije tekst die de editor typt (bv. `+12%`),
+   * onder de waarde gerenderd in Text Dimmer-kleur met een ▲/▼-prefix.
+   * Een ▲/▼ vooraan bepaalt de richting (zelfde conventie als de
+   * chart-delta-badge); leeg/undefined → geen badge. Body-cellen alleen.
+   */
+  delta?: string;
 }
 
 export type TableColumnCalculation = 'sum';

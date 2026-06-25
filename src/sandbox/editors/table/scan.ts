@@ -9,6 +9,7 @@
 // ============================================================
 
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
+import { CELL_VALUE_NAME } from './build-rows';
 import {
   readHasColumnHeader,
   readColumnCalculations,
@@ -72,11 +73,21 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
         continue;
       const cellFrame = cellNode as FrameNode;
 
-      const textNode = cellFrame.findOne((n: SceneNode) => n.type === 'TEXT');
+      // Waarde-TEXT bij naam (delta-cellen dragen een tweede 'CellDelta'-TEXT);
+      // fallback op de eerste TEXT voor cellen die vóór de naamgeving zijn gebouwd.
+      let textNode = cellFrame.findOne(
+        (n: SceneNode) => n.type === 'TEXT' && n.name === CELL_VALUE_NAME,
+      );
+      if (textNode === null) {
+        textNode = cellFrame.findOne((n: SceneNode) => n.type === 'TEXT');
+      }
       const value =
         textNode !== null && textNode.type === 'TEXT' ? (textNode as TextNode).characters : '';
       const emphasis = cellFrame.getPluginData('emphasis') === '1';
-      cells.push({ cellNodeId: cellFrame.id, value: value, emphasis: emphasis });
+      const delta = cellFrame.getPluginData('delta');
+      const cellModel: TableCellModel = { cellNodeId: cellFrame.id, value: value, emphasis: emphasis };
+      if (delta !== '') cellModel.delta = delta;
+      cells.push(cellModel);
     }
     rows.push({ rowNodeId: rowFrame.id, cells: cells });
   }

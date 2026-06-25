@@ -45,6 +45,8 @@ function cloneRows(rows: TableRowModel[]): TableRowModel[] {
         value: rows[i].cells[j].value,
       };
       if (rows[i].cells[j].emphasis === true) cell.emphasis = true;
+      const delta = rows[i].cells[j].delta;
+      if (typeof delta === 'string' && delta.trim() !== '') cell.delta = delta;
       cells.push(cell);
     }
     while (cells.length < maxLen) cells.push({ cellNodeId: '', value: '' });
@@ -65,6 +67,9 @@ function rowsDiffer(a: TableRowModel[], b: TableRowModel[]): boolean {
     for (let j = 0; j < a[i].cells.length; j++) {
       if (a[i].cells[j].value !== b[i].cells[j].value) return true;
       if ((a[i].cells[j].emphasis === true) !== (b[i].cells[j].emphasis === true)) return true;
+      const aDelta = typeof a[i].cells[j].delta === 'string' ? a[i].cells[j].delta : '';
+      const bDelta = typeof b[i].cells[j].delta === 'string' ? b[i].cells[j].delta : '';
+      if (aDelta !== bDelta) return true;
     }
   }
   return false;
@@ -222,7 +227,11 @@ export function useTableEditorState(
       });
       const rows = cloneRows(localRows.value);
       if (localHasColumnHeader.value && rows.length > 0) {
-        for (let j = 0; j < rows[0].cells.length; j++) delete rows[0].cells[j].emphasis;
+        // Koprij draagt geen per-cell emphasis of delta-badge.
+        for (let j = 0; j < rows[0].cells.length; j++) {
+          delete rows[0].cells[j].emphasis;
+          delete rows[0].cells[j].delta;
+        }
       }
       const columnCalculations = normalizeColumnCalculations(
         localColumnCalculations.value,

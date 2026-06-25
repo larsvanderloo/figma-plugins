@@ -3,6 +3,7 @@
 import type { ComputedRef } from 'vue';
 import type { DropdownMenuItem } from '@nuxt/ui';
 import type { TableColumnCalculationSetting, TableRowModel } from '../../../../shared/types';
+import { DELTA_ARROW_UP, DELTA_ARROW_DOWN, setDeltaArrow } from '../../../../shared/table-delta';
 
 interface GridMenusProps {
   rows: TableRowModel[];
@@ -14,6 +15,7 @@ interface GridMenusProps {
 type GridMenusEmit = {
   (event: 'cell-edit', row: number, col: number, value: string): void;
   (event: 'cell-style', row: number, col: number, emphasis: boolean): void;
+  (event: 'cell-delta', row: number, col: number, value: string): void;
   (event: 'column-calculation', col: number, calculation: TableColumnCalculationSetting): void;
   (event: 'column-calculation-emphasis', col: number, emphasis: boolean): void;
   (event: 'column-calculation-currency', col: number, currency: boolean): void;
@@ -152,6 +154,27 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
           icon: 'i-lucide-bold',
           onSelect: () => setCellEmphasis(row, col, !isCellEmphasized(row, col)),
         },
+        {
+          label: 'Delta',
+          icon: 'i-lucide-trending-up',
+          children: [
+            {
+              label: 'Pijl omhoog',
+              icon: 'i-lucide-arrow-up',
+              onSelect: () => setCellDeltaArrow(row, col, DELTA_ARROW_UP),
+            },
+            {
+              label: 'Pijl omlaag',
+              icon: 'i-lucide-arrow-down',
+              onSelect: () => setCellDeltaArrow(row, col, DELTA_ARROW_DOWN),
+            },
+            {
+              label: 'Pijl verwijderen',
+              icon: 'i-lucide-eraser',
+              onSelect: () => setCellDeltaArrow(row, col, null),
+            },
+          ],
+        },
       ]);
     }
     items.push(
@@ -209,6 +232,17 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
   function setCellEmphasis(row: number, col: number, emphasis: boolean): void {
     if (!canStyleCell(row)) return;
     emit('cell-style', row, col, emphasis);
+    focusCell(row, col);
+  }
+
+  function cellDelta(row: number, col: number): string {
+    const cell = props.rows[row]?.cells[col];
+    return cell !== undefined && typeof cell.delta === 'string' ? cell.delta : '';
+  }
+
+  function setCellDeltaArrow(row: number, col: number, arrow: string | null): void {
+    if (!canStyleCell(row)) return;
+    emit('cell-delta', row, col, setDeltaArrow(cellDelta(row, col), arrow));
     focusCell(row, col);
   }
 

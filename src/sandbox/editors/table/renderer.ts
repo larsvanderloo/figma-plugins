@@ -41,8 +41,9 @@ import {
   normalizeColumnEmphasis,
   normalizeColumnLabels,
 } from '../../../shared/table-calculations';
-import { findEnclosingSurfaceName } from '../../slide-machine';
+import { findEnclosingSurface } from '../../slide-machine';
 import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from '../_shared/accent-vars';
+import { findDeltaBadgeTemplate } from '../_shared/delta-badge-node';
 import { computeColumnWidths } from './column-autofit';
 import { createTextMeasurer } from './measure';
 import { getFontSizes, computeRowPadding, computeTableLayoutMetrics } from './metrics';
@@ -190,8 +191,12 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     columnCount,
   );
 
-  const surfaceName = findEnclosingSurfaceName(slot);
+  const surface = findEnclosingSurface(slot);
+  const surfaceName = surface !== null ? surface.name : null;
   const targetWidth = resolveTableRenderWidth(slot, surfaceName, columnCount);
+  // Badge-template één keer per apply zoeken (zelfde bron als de chart
+  // delta-badge); cellen met een delta clonen dit voor de styled pill.
+  const badgeTemplate = surface !== null ? findDeltaBadgeTemplate(surface) : null;
 
   if (vars.text !== null && vars.dimmer !== null) {
     const textRGB = resolveColor(vars.text, slot, { r: 1, g: 0.957, b: 0.918 });
@@ -345,6 +350,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
           rowPadding,
           rightAlignColumns,
           metrics,
+          badgeTemplate,
         );
         applyColumnSizing(rowFrame, colWidths);
         container.appendChild(rowFrame);

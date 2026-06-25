@@ -296,6 +296,26 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     scheduleEmit('cell-style');
   }
 
+  function setCellDelta(i: number, j: number, value: string): void {
+    if (i < 0 || i >= localRows.value.length) return;
+    if (j >= currentCols.value) return;
+    // Koprij draagt geen delta-badge (alleen body-cellen).
+    if (localHasColumnHeader.value && i === 0) return;
+    const cell = localRows.value[i]?.cells[j];
+    if (cell === undefined) return;
+    const trimmed = value.trim();
+    const current = typeof cell.delta === 'string' ? cell.delta : '';
+    if (current === trimmed) return;
+    if (trimmed === '') {
+      delete cell.delta;
+      announce('Delta verwijderd');
+    } else {
+      cell.delta = trimmed;
+      announce('Delta ingesteld');
+    }
+    scheduleEmit('cell-delta');
+  }
+
   function pasteMatrix(i: number, j: number, matrix: string[][]): void {
     if (matrix.length === 0) return;
     const matrixCols = matrixColumnCount(matrix);
@@ -359,6 +379,7 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     setHasColumnHeader,
     updateCell,
     setCellEmphasis,
+    setCellDelta,
     setColumnCalculation,
     setColumnCalculationEmphasis,
     setColumnCalculationCurrency,
