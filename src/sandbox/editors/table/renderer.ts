@@ -46,7 +46,13 @@ import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from '../_shared/accent
 import { findDeltaBadgeTemplate } from '../_shared/delta-badge-node';
 import { computeColumnWidths } from './column-autofit';
 import { createTextMeasurer } from './measure';
+import { fitBodyFontSize } from './fit';
 import { getFontSizes, computeRowPadding, computeTableLayoutMetrics } from './metrics';
+
+// Upper bound for the fit-to-slot body fontSize. Larger than getFontSizes'
+// own caps: on a sparse slide the table should grow text to fill the slot,
+// bounded only by what actually fits (fit.ts) and this ceiling.
+const TABLE_BODY_FONT_MAX = 40;
 import {
   writeColumnCalculations,
   writeColumnCalculationEmphasis,
@@ -120,6 +126,37 @@ function buildTableContainer(dimmerVar: Variable, dimmerRGB: RGB): FrameNode {
 }
 
 /**
+ * Scale the body-cell text down when the fit overshot and content overflows.
+ * Multiplies each cell TEXT's fontSize by next/prev (so emphasis cells, which
+ * were larger, scale proportionally too). Operates on the already-built rows —
+ * no rebuild. Fonts are already loaded by the caller.
+ */
+function rescaleBodyFont(bodyRows: FrameNode[], prevBody: number, nextBody: number): void {
+  if (prevBody <= 0 || nextBody >= prevBody) return;
+  const factor = nextBody / prevBody;
+  for (var r = 0; r < bodyRows.length; r++) {
+    var row = bodyRows[r];
+    for (var c = 0; c < row.children.length; c++) {
+      var cell = row.children[c];
+      if (cell.type !== 'FRAME') continue;
+      var t = (cell as FrameNode).findOne(function (n: SceneNode): boolean {
+        return n.type === 'TEXT';
+      });
+      if (t === null || t.type !== 'TEXT') continue;
+      var textNode = t as TextNode;
+      if (textNode.fontSize === figma.mixed) continue;
+      var scaled = Math.round((textNode.fontSize as number) * factor);
+      if (scaled < 1) scaled = 1;
+      try {
+        textNode.fontSize = scaled;
+      } catch (_e) {
+        /* silent */
+      }
+    }
+  }
+}
+
+/**
  * Full-state PUT: clear alle Slot-children en bouw opnieuw uit `desired`.
  * Persisteer `hasColumnHeader` + migration-marker op pluginData.
  * Width/textSize-keys worden actief gewist — tabelbreedte volgt de actuele
@@ -135,7 +172,11 @@ function buildTableContainer(dimmerVar: Variable, dimmerRGB: RGB): FrameNode {
  * pluginData wordt nog steeds geschreven, alleen de content-rebuild
  * skipt (user ziet lege Slot + log-melding).
  */
-export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promise<void> {
+export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promise<boolean> {
+  // Returns true when the content overflows the slot (clipped at the bottom)
+  // even after the fit shrank to the minimum font — the caller surfaces a
+  // warning in the editor.
+  let overflowed = false;
   await Promise.all([
     figma.loadFontAsync({ family: 'Inter', style: 'Regular' }),
     figma.loadFontAsync({ family: 'Inter', style: 'Medium' }),
@@ -268,7 +309,9 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     container.paddingTop = hasHeader ? metrics.headerPadTop + 3 : metrics.headerPadBottom;
     container.paddingBottom = metrics.headerPadBottom;
 
-    // fontSize volledig automatisch uit hoogte + rowCount.
+    // Eerste fontSize-schatting uit hoogte + rowCount; daarna fit-to-slot
+    // (zie hieronder) zodat wrappende cellen niet overflowen maar de tabel de
+    // slot-hoogte wél vult.
     const sizes = getFontSizes(adjustedSlotHeight, bodyRowCount > 0 ? bodyRowCount : 1);
 
     const cellBudget = tableCellBudget(targetWidth, columnCount, metrics);
@@ -282,6 +325,10 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     const measurer = createTextMeasurer();
     const measured = measurer !== null;
     let colWidths: number[] = [];
+    const bodyRowPadding = computeRowPadding(bodyRowCount);
+    // Extra top/bottom padding added to each body row to distribute leftover
+    // vertical space so the table fills the slot (set by the fit-to-slot pass).
+    let extraRowPad = 0;
     try {
       colWidths = computeColumnWidths(
         columnSpecs,
@@ -292,6 +339,44 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
         },
         measurer !== null ? measurer.measure : null,
       );
+      // Fit-to-slot: grow the body fontSize to the largest value whose measured
+      // (wrapped) content height still fits the slot. headingScale mirrors the
+      // ratio between getFontSizes' heading/body so emphasis text scales along.
+      if (measurer !== null && colWidths.length > 0) {
+        const headingScale = sizes.body > 0 ? sizes.heading / sizes.body : 1.2;
+        const fitted = fitBodyFontSize({
+          rows: effectiveRows,
+          hasHeader: hasHeader,
+          columnCount: columnCount,
+          colWidths: colWidths,
+          availableHeight: adjustedSlotHeight,
+          rowPadding: bodyRowPadding,
+          rowGap: metrics.rowGap,
+          minBody: sizes.body,
+          maxBody: TABLE_BODY_FONT_MAX,
+          headingScale: headingScale,
+          measureHeight: measurer.measureHeight,
+        });
+        // Apply the fitted size whether it grows (fill the slot) or shrinks
+        // below the getFontSizes floor (dense content that would otherwise
+        // overflow). Keep heading proportional.
+        if (fitted.body !== sizes.body) {
+          sizes.body = fitted.body;
+          sizes.heading = Math.round(fitted.body * headingScale);
+        }
+        // Distribute leftover vertical space across the body rows as extra
+        // padding so the table fills the slot exactly (no gap at the bottom).
+        // Font granularity means the largest fitting size usually still leaves
+        // slack; spreading it as padding keeps row-dividers even.
+        if (fitted.bodyRowCount > 0 && fitted.contentHeight > 0) {
+          const slack = adjustedSlotHeight - fitted.contentHeight;
+          if (slack > 0) {
+            // Split per row, then halve again (padding is applied top AND
+            // bottom, so each side gets half the per-row share).
+            extraRowPad = Math.floor(slack / fitted.bodyRowCount / 2);
+          }
+        }
+      }
     } finally {
       if (measurer !== null) measurer.dispose();
     }
@@ -301,6 +386,8 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
       targetWidth: targetWidth,
       slotWidth: slot.width,
       measured: measured,
+      bodyFont: sizes.body,
+      headingFont: sizes.heading,
       gap: metrics.rowGap,
       rowPadX: metrics.rowPadX,
       containerPadX: metrics.containerPadX,
@@ -314,6 +401,7 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
       if (hasHeader && i === 0) {
         rowFrame = buildHeaderRow(
           effectiveRows[i],
+          sizes,
           vars.text,
           vars.dimmer,
           textRGB,
@@ -338,7 +426,8 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
         // Body row — bodyIndex zorgt dat eerste body-rij geen top-divider krijgt
         // (anders dubbel met de header's bottom-divider).
         const bodyIndex = hasHeader ? i - 1 : i;
-        const rowPadding = computeRowPadding(bodyRowCount);
+        // Base padding + the fit-to-slot slack share so the rows fill the slot.
+        const rowPadding = computeRowPadding(bodyRowCount) + extraRowPad;
         rowFrame = buildRow(
           effectiveRows[i],
           bodyIndex,
@@ -359,9 +448,12 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
         } catch (_e) {
           /* silent */
         }
-        // Rows FILL vertical — verdelen container-hoogte gelijk.
+        // Rows HUG vertical — groeien mee met de hoogste (wrappende) cel
+        // i.p.v. de container-hoogte gelijk te verdelen. Voorkomt dat lange
+        // gewrapte cellen mid-regel clippen. Container vult de slot-hoogte
+        // alsnog via SPACE_BETWEEN wanneer de rijen samen korter zijn.
         try {
-          rowFrame.layoutSizingVertical = 'FILL';
+          rowFrame.layoutSizingVertical = 'HUG';
         } catch (_e) {
           /* silent */
         }
@@ -399,6 +491,54 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
     // textTruncation='ENDING' truncate't visueel. Geen analytische berekening
     // meer nodig; Figma doet de math native.
     applyBodyTruncation(bodyRows);
+
+    // Post-build slack top-up. The fit/extraRowPad estimate uses measured text
+    // heights, which drift from the real render — leaving a gap at the bottom.
+    // Now that auto-layout has reflowed with REAL heights, measure the actual
+    // content height and distribute any remaining slack as extra padding on the
+    // body rows. Measurement-free: no estimate, so no drift.
+    if (bodyRows.length > 0) {
+      let actualContent = container.paddingTop + container.paddingBottom;
+      for (let i = 0; i < container.children.length; i++) {
+        actualContent += container.children[i].height;
+        if (i > 0) actualContent += container.itemSpacing;
+      }
+      const remaining = slot.height - actualContent;
+      if (remaining > 2) {
+        const addPerSide = Math.floor(remaining / bodyRows.length / 2);
+        if (addPerSide > 0) {
+          for (let i = 0; i < bodyRows.length; i++) {
+            bodyRows[i].paddingTop += addPerSide;
+            bodyRows[i].paddingBottom += addPerSide;
+          }
+        }
+      } else if (remaining < -2) {
+        // Content overflows at the chosen font. The fit's estimate undershot
+        // the real wrapped height, so it picked a font a notch too large.
+        // Correct using REAL heights: scale the body font down by the overflow
+        // ratio and re-apply to the existing cell TEXTs (cheap — no rebuild),
+        // then re-measure. Only flag a true overflow if even the 14px floor
+        // can't fit. One corrective pass converges; the floor bounds it.
+        const HARD_MIN = 14;
+        if (sizes.body > HARD_MIN) {
+          const ratio = (slot.height - container.paddingTop - container.paddingBottom) / actualContent;
+          let next = Math.floor(sizes.body * (ratio > 0 ? ratio : 1));
+          if (next >= sizes.body) next = sizes.body - 1;
+          if (next < HARD_MIN) next = HARD_MIN;
+          rescaleBodyFont(bodyRows, sizes.body, next);
+          sizes.body = next;
+          // Re-measure after the rescale.
+          let after = container.paddingTop + container.paddingBottom;
+          for (let i = 0; i < container.children.length; i++) {
+            after += container.children[i].height;
+            if (i > 0) after += container.itemSpacing;
+          }
+          overflowed = after - slot.height > 2;
+        } else {
+          overflowed = true;
+        }
+      }
+    }
   } else {
     console.log('[welder-slide-editor] applyTable: library-vars missing, skipping rebuild');
   }
@@ -414,4 +554,5 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
   writeColumnCalculationLabel(slot, columnCalculationLabel, columnCount);
   slot.setPluginData('kind', 'welder-tablewrap');
   slot.setPluginData('v', '4');
+  return overflowed;
 }

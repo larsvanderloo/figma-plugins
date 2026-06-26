@@ -11,6 +11,7 @@ import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideById, summaryForSlide } from '../slides';
 import { scanSlide } from '../scan/slide-scan';
 import { applyTable } from '../editors/table/renderer';
+import { applyTableTextOnly } from '../editors/table/apply-text';
 import { importCSV } from '../editors/table/csv';
 import type { UIToPluginMessage } from '../../shared/types';
 
@@ -38,12 +39,33 @@ export async function handleUpdateTable(
     return;
   }
   figma.commitUndo();
-  await applyTable(slotNode as SlotNode, msg.desired);
+  // Fast-path: when only cell text changed (structure intact — the common case
+  // while typing), write text in place and skip the full clear+rebuild. Fonts
+  // must be loaded first because setting `.characters` on existing nodes needs
+  // their fonts available. Falls back to the full PUT on any structural change.
+  await Promise.all([
+    figma.loadFontAsync({ family: 'Inter', style: 'Regular' }),
+    figma.loadFontAsync({ family: 'Inter', style: 'Medium' }),
+    figma.loadFontAsync({ family: 'Instrument Sans', style: 'SemiBold' }),
+  ]);
+  let appliedInPlace = false;
+  try {
+    appliedInPlace = applyTableTextOnly(slotNode as SlotNode, msg.desired);
+  } catch (_e) {
+    appliedInPlace = false;
+  }
+  // Fast-path edits never overflow (they bail to full render on any row-height
+  // change); only the full applyTable() reports the overflow-at-min-font state.
+  let overflowed = false;
+  if (!appliedInPlace) {
+    overflowed = await applyTable(slotNode as SlotNode, msg.desired);
+  }
   markSelfWrite();
   postToUI({
     type: 'target-updated',
     ok: true,
     targetId: msg.slotId,
+    tableOverflow: overflowed,
   });
   return;
 }

@@ -9,6 +9,8 @@ import WCard from '../ui/WCard.vue';
 
 interface Props {
   modelValue: TableWrapModel;
+  /** True when the canvas table overflows the slot at min font (content clips). */
+  overflow?: boolean;
 }
 
 const props = defineProps<Props>();
@@ -73,6 +75,15 @@ const { csvUploadFile, csvError, lastImport, onCsvFileChange } = useCsvImport(pr
         />
       </div>
     </div>
+
+    <UAlert
+      v-if="props.overflow"
+      icon="i-lucide-triangle-alert"
+      color="warning"
+      variant="subtle"
+      title="Tabel past niet"
+      description="De inhoud is te groot voor het tabelvlak en wordt onderaan afgekapt. Kort tekst in of verwijder een rij."
+    />
 
     <TableGrid
       :rows="localRows"

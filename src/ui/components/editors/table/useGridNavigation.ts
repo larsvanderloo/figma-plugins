@@ -2,12 +2,16 @@
 
 import { nextTick, onBeforeUpdate, ref, type ComputedRef } from 'vue';
 import type { TableRowModel } from '../../../../shared/types';
+import { bulletEnter } from '../../../../shared/table-bullets';
 
 interface GridNavigationProps {
   rows: TableRowModel[];
 }
 
-type GridNavigationEmit = (event: 'add-row-after', row: number) => void;
+interface GridNavigationEmit {
+  (event: 'add-row-after', row: number): void;
+  (event: 'cell-edit', row: number, col: number, value: string): void;
+}
 
 export function useGridNavigation(
   props: GridNavigationProps,
@@ -126,13 +130,6 @@ export function useGridNavigation(
     focusCell(nextRow, clampColumn(col));
   }
 
-  function onEnter(row: number, col: number): void {
-    const nextRow = row + 1;
-    if (nextRow < props.rows.length) {
-      focusCell(nextRow, col);
-    }
-  }
-
   function moveFromCell(row: number, col: number, deltaRow: number, deltaCol: number): void {
     let nextRow = row + deltaRow;
     let nextCol = col + deltaCol;
@@ -168,14 +165,34 @@ export function useGridNavigation(
     }
 
     if (event.key === 'Enter') {
-      if (event.shiftKey || event.altKey) return;
-      event.preventDefault();
+      // Cmd/Ctrl+Enter adds a row after the current one and moves into it —
+      // the explicit "next row" gesture.
       if (event.metaKey || event.ctrlKey) {
+        event.preventDefault();
         emit('add-row-after', row);
         focusCell(row + 1, col);
         return;
       }
-      onEnter(row, col);
+      if (event.shiftKey || event.altKey) return;
+      // Apple-Notes bullet behavior: inside a bullet list, Enter continues the
+      // list (fresh `- `) or, on an empty bullet, exits it. Outside a bullet
+      // context bulletEnter() returns null and Enter is a normal newline.
+      const target = event.target;
+      if (target instanceof HTMLTextAreaElement) {
+        const result = bulletEnter(target.value, target.selectionStart);
+        if (result !== null) {
+          event.preventDefault();
+          emit('cell-edit', row, col, result.value);
+          // Restore the caret after Vue re-renders the controlled value.
+          void nextTick(() => {
+            const el = inputRefs.get(refKey(row, col));
+            if (el !== undefined) {
+              el.focus({ preventScroll: true });
+              el.setSelectionRange(result.caret, result.caret);
+            }
+          });
+        }
+      }
       return;
     }
 

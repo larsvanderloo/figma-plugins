@@ -25,6 +25,14 @@ export interface ColumnFitOptions {
 
 const MEASURED_CELL_PADDING = 24;
 
+// A single long-pasted value used to drive the whole column to its intrinsic
+// (single-line) width, ballooning it to maxColFraction and starving the other
+// columns. The autofit measurer reports the un-wrapped width, so we clamp each
+// cell's contribution: above this many characters the cell is assumed to wrap,
+// and its measured width is capped so the column lands at a wrap-friendly size
+// instead of one giant line. Body text wraps freely inside (no truncation).
+const WRAP_MEASURE_CHAR_CAP = 24;
+
 function equalWidths(count: number, totalWidth: number): number[] {
   const widths: number[] = [];
   if (count <= 0) return widths;
@@ -33,11 +41,25 @@ function equalWidths(count: number, totalWidth: number): number[] {
   return widths;
 }
 
+function normalizeForMeasure(text: string): string {
+  return text.replace(/[\r\n]+/g, ' ');
+}
+
+// Width a cell contributes to its column's intrinsic size. Long values are
+// measured only up to the wrap cap (proportionally scaled) so they request a
+// column wide enough to read comfortably, not wide enough to hold the whole
+// string on one line.
+function cellContribution(cell: CellSpec, measure: MeasureTextWidth): number {
+  const clean = normalizeForMeasure(cell.text);
+  if (clean.length <= WRAP_MEASURE_CHAR_CAP) return measure(clean, cell.font, cell.fontSize);
+  const capped = clean.slice(0, WRAP_MEASURE_CHAR_CAP);
+  return measure(capped, cell.font, cell.fontSize);
+}
+
 function intrinsicWidth(cells: CellSpec[], measure: MeasureTextWidth): number {
   let max = 0;
   for (let i = 0; i < cells.length; i++) {
-    const cell = cells[i];
-    const measured = measure(cell.text, cell.font, cell.fontSize);
+    const measured = cellContribution(cells[i], measure);
     const padded = measured > 0 ? measured + MEASURED_CELL_PADDING : measured;
     if (Number.isFinite(padded) && padded > max) max = padded;
   }

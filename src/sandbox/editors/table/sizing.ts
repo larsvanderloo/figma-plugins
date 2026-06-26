@@ -120,16 +120,14 @@ export function applyColumnSizing(rowFrame: FrameNode, colWidths: number[]): voi
 }
 
 /**
- * Direct cell+text FILL-vertical + textTruncation. Vervangt
- * de maxLines-berekening die niet betrouwbaar werkte.
+ * Cell-sizing pass voor body-rijen. Cell HUGt verticaal (volgt zijn tekst);
+ * de rij HUGt op de hoogste cel zodat lange gewrapte waarden niet mid-regel
+ * clippen. De waarde-TEXT FILLt horizontaal zodat hij op cell-breedte WRAPt
+ * i.p.v. de kolom open te duwen, en HEIGHT-autoresize laat zijn hoogte met het
+ * aantal wrap-regels meegroeien.
  *
- * Aanpak:
- * 1. Cell layoutSizingVertical = 'FILL' → cell.height = row's FILL-share.
- * 2. Text layoutSizingHorizontal/Vertical = 'FILL' → text exact cell-bounds.
- * 3. Text textTruncation = 'ENDING' + textAutoResize = 'NONE' → Figma
- *    truncate't visueel wanneer content niet past in cell-bounds.
- *
- * Geen maxLines-formule meer nodig — Figma doet de math native via FILL.
+ * Bewust GEEN FILL-vertical of textTruncation meer: rijen mogen verticaal
+ * groeien (HUG) en lange celwaarden wrappen over meerdere regels.
  */
 export function applyBodyTruncation(bodyRows: FrameNode[]): void {
   for (var r = 0; r < bodyRows.length; r++) {
@@ -140,25 +138,8 @@ export function applyBodyTruncation(bodyRows: FrameNode[]): void {
       if (cell.type !== 'FRAME') continue;
       var cellFrame = cell as FrameNode;
 
-      // Delta-cellen zijn een verticale waarde+badge-stack (VERTICAL layout):
-      // de FILL-vertical truncation hieronder zou de waarde-TEXT de hele
-      // cel laten vullen en de delta-badge wegdrukken. Laat zulke cellen
-      // HUG-vertical (de row centreert ze) en sla de truncation over;
-      // container.clipsContent vangt eventuele overflow.
+      // Delta-cellen (VERTICAL waarde+badge-stack) HUGen al; overslaan.
       if (cellFrame.getPluginData('delta') !== '') continue;
-
-      // Cell vertical FILL → cell.height = row.FILL-share. Vereist
-      // counterAxisSizingMode='FIXED' (was 'AUTO' = HUG).
-      try {
-        cellFrame.counterAxisSizingMode = 'FIXED';
-      } catch (_e) {
-        /* silent */
-      }
-      try {
-        cellFrame.layoutSizingVertical = 'FILL';
-      } catch (_e) {
-        /* silent */
-      }
 
       var t = cellFrame.findOne(function (n: SceneNode): boolean {
         return n.type === 'TEXT';
@@ -166,25 +147,15 @@ export function applyBodyTruncation(bodyRows: FrameNode[]): void {
       if (t === null || t.type !== 'TEXT') continue;
 
       var textNode = t as TextNode;
-      // Text fills cell-bounds exact. textAutoResize='NONE' = beide
-      // dimensies zijn extern bepaald (via FILL).
-      try {
-        textNode.textAutoResize = 'NONE';
-      } catch (_e) {
-        /* silent */
-      }
+      // Text wrapt op cell-breedte: HEIGHT-autoresize houdt de breedte
+      // extern (FILL) en laat de hoogte met het aantal regels meegroeien.
       try {
         textNode.layoutSizingHorizontal = 'FILL';
       } catch (_e) {
         /* silent */
       }
       try {
-        textNode.layoutSizingVertical = 'FILL';
-      } catch (_e) {
-        /* silent */
-      }
-      try {
-        textNode.textTruncation = 'ENDING';
+        textNode.textAutoResize = 'HEIGHT';
       } catch (_e) {
         /* silent */
       }

@@ -60,6 +60,19 @@ function columnCountForRows(rows: TableRowModel[]): number {
   return rows[0].cells.length > 0 ? rows[0].cells.length : 1;
 }
 
+// Guarantee the local grid always has at least one editable row. A scanned
+// TableWrap with no content scans to 0 rows, which would render an empty,
+// un-editable grid (no cells to focus/type into). Seed a single empty row of
+// `cols` columns so the editor is always usable; the canvas only renders
+// non-empty rows, so this seed costs nothing visually until the user types.
+function ensureNonEmpty(rows: TableRowModel[], cols: number): TableRowModel[] {
+  if (rows.length > 0) return rows;
+  const safeCols = cols > 0 ? cols : 1;
+  const cells: TableCellModel[] = [];
+  for (let j = 0; j < safeCols; j++) cells.push({ cellNodeId: '', value: '' });
+  return [{ rowNodeId: '', cells: cells }];
+}
+
 function rowsDiffer(a: TableRowModel[], b: TableRowModel[]): boolean {
   if (a.length !== b.length) return true;
   for (let i = 0; i < a.length; i++) {
@@ -80,7 +93,12 @@ export function useTableEditorState(
   emit: (event: 'update:modelValue', value: TableWrapModel) => void,
 ) {
   const localHasColumnHeader = ref<boolean>(props.modelValue.hasColumnHeader);
-  const localRows = ref<TableRowModel[]>(cloneRows(props.modelValue.rows));
+  const localRows = ref<TableRowModel[]>(
+    ensureNonEmpty(
+      cloneRows(props.modelValue.rows),
+      columnCountForRows(props.modelValue.rows),
+    ),
+  );
   const localColumnCalculations = ref<TableColumnCalculationSetting[]>(
     normalizeColumnCalculations(
       props.modelValue.columnCalculations,
@@ -156,7 +174,7 @@ export function useTableEditorState(
     (next) => {
       if (echoExpected) return;
       if (rowsDiffer(next, localRows.value)) {
-        localRows.value = cloneRows(next);
+        localRows.value = ensureNonEmpty(cloneRows(next), columnCountForRows(next));
         normalizeLocalColumnCalculations();
       }
     },

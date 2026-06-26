@@ -11,11 +11,50 @@
 
 import type { TableRowModel, TableCellModel } from '../../../shared/types';
 import { tableDeltaDisplay } from '../../../shared/table-delta';
+import { parseBullets } from '../../../shared/table-bullets';
 import { buildDeltaBadgeNode } from '../_shared/delta-badge-node';
 import type { TableLayoutMetrics } from './metrics';
 
 /** Naam van de waarde-TEXT binnen een cell-FRAME (scan + truncation pakken deze). */
 export const CELL_VALUE_NAME = 'CellValue';
+
+/**
+ * Zet de cel-waarde op een TEXT-node, inclusief per-regel bullet-styling.
+ * Single source of truth voor zowel de full build (buildCell) als de in-place
+ * fast-path update (apply-text). Wist bestaande list-styling vóór het opnieuw
+ * zetten zodat een bullet→plain wijziging geen oude bullets achterlaat.
+ */
+export function applyCellText(t: TextNode, value: string): void {
+  const parsed = parseBullets(value);
+  t.characters = parsed.text;
+  if (t.characters.length === 0) return;
+  // Clear any prior list-styling across the whole range (handles bullet→plain
+  // and shrinking lists), then (re)apply per bulleted-line range.
+  try {
+    t.setRangeListOptions(0, t.characters.length, { type: 'NONE' });
+  } catch (_e) {
+    /* silent */
+  }
+  if (parsed.ranges.length > 0) {
+    try {
+      t.paragraphSpacing = 0;
+    } catch (_e) {
+      /* silent */
+    }
+    for (let r = 0; r < parsed.ranges.length; r++) {
+      try {
+        t.setRangeListOptions(parsed.ranges[r].start, parsed.ranges[r].end, { type: 'UNORDERED' });
+      } catch (_e) {
+        /* silent — oudere Figma API zonder list-support */
+      }
+      try {
+        t.setRangeListSpacing(parsed.ranges[r].start, parsed.ranges[r].end, 0);
+      } catch (_e) {
+        /* silent */
+      }
+    }
+  }
+}
 
 /**
  * Bouwt één cell-FRAME met TEXT-kind. Emphasis is per cell opt-in;
@@ -68,7 +107,10 @@ function buildCell(
   t.name = CELL_VALUE_NAME;
   t.fontName = fontName;
   t.fontSize = isEmphasis ? sizes.heading : sizes.body;
-  t.characters = cell.value;
+  // Per-line bullets (Apple-Notes stijl): regels die met `- `/`• `/`* `
+  // beginnen worden een Figma UNORDERED-lijst, andere regels blijven platte
+  // prosa. Gedeelde helper met de in-place fast-path.
+  applyCellText(t, cell.value);
   t.textAutoResize = 'HEIGHT';
   // Body-cells standaard LEFT-aligned voor consistente scanbaarheid.
   // Kolommen met een som-berekening zijn numeriek → RIGHT-aligned
@@ -141,7 +183,9 @@ export function buildRow(
   rowFrame.layoutMode = 'HORIZONTAL';
   rowFrame.counterAxisSizingMode = 'AUTO';
   rowFrame.primaryAxisAlignItems = 'MIN';
-  rowFrame.counterAxisAlignItems = 'CENTER';
+  // Cellen top-aligned: in een rij met ongelijk-hoge (wrappende) cellen blijft
+  // de tekst aan de bovenkant uitgelijnd i.p.v. verticaal gecentreerd.
+  rowFrame.counterAxisAlignItems = 'MIN';
   rowFrame.itemSpacing = metrics.rowGap;
   rowFrame.paddingTop = rowPadding;
   rowFrame.paddingBottom = rowPadding;
@@ -204,6 +248,7 @@ export function buildRow(
 function buildHeaderCell(
   cell: TableCellModel,
   j: number,
+  sizes: { heading: number; body: number },
   textVar: Variable,
   textRGB: RGB,
   rightAlign: boolean,
@@ -230,23 +275,20 @@ function buildHeaderCell(
   // Koprij → Instrument Sans SemiBold, iets groter, in Text-color
   // (full contrast). Was Inter Medium 18.
   t.fontName = { family: 'Instrument Sans', style: 'SemiBold' };
-  t.fontSize = 20;
+  // Header-fontSize schaalt mee met de gefitte body — net iets groter voor
+  // hiërarchie, maar NIET zo groot als sizes.heading (de emphasis-maat), want
+  // dat duwde de koprij naar 2 regels en uit verhouding. body × 1.1, capped.
+  var headerSize = Math.round(sizes.body * 1.1);
+  if (headerSize > 24) headerSize = 24;
+  if (headerSize < 14) headerSize = 14;
+  t.fontSize = headerSize;
   t.characters = cell.value;
   t.textAutoResize = 'HEIGHT';
   // Header van een som-kolom volgt de body/footer-uitlijning (RIGHT).
   t.textAlignHorizontal = rightAlign ? 'RIGHT' : 'LEFT';
-  // Lange header-text wrapt anders naar meerdere regels en duwt
-  // row HUG-vertical enorm op. Single-line + ellipsis = clean grid look.
-  try {
-    t.maxLines = 1;
-  } catch (_e) {
-    /* silent — oudere Figma API */
-  }
-  try {
-    t.textTruncation = 'ENDING';
-  } catch (_e) {
-    /* silent */
-  }
+  // Header-tekst mag wrappen i.p.v. agressief naar "…" te truncaten: bij smalle
+  // kolommen (6 cols) kapte maxLines=1+ENDING de titel weg tot een ellipsis.
+  // De rij HUGt verticaal, dus een 2-regelige header verspringt netjes mee.
   t.fills = [
     figma.variables.setBoundVariableForPaint({ type: 'SOLID', color: textRGB }, 'color', textVar),
   ];
@@ -272,6 +314,7 @@ function buildHeaderCell(
  */
 export function buildHeaderRow(
   row: TableRowModel,
+  sizes: { heading: number; body: number },
   textVar: Variable,
   dimmerVar: Variable,
   textRGB: RGB,
@@ -314,7 +357,7 @@ export function buildHeaderRow(
 
   for (let j = 0; j < row.cells.length; j++) {
     const rightAlign = j < rightAlignColumns.length && rightAlignColumns[j] === true;
-    const cellFrame = buildHeaderCell(row.cells[j], j, textVar, textRGB, rightAlign, metrics);
+    const cellFrame = buildHeaderCell(row.cells[j], j, sizes, textVar, textRGB, rightAlign, metrics);
     rowFrame.appendChild(cellFrame);
     try {
       cellFrame.layoutSizingHorizontal = 'FILL';
