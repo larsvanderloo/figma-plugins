@@ -74,7 +74,7 @@ The debug setup keeps that split intact:
   - Added:
     - `version:assert`: verifies the built bundles contain the current package version and no stale `0.5.x` tag. (The iframe version badge is injected at build time from `package.json` via Vite's `define`, `__APP_VERSION__`.)
     - `debug:build`: runs the normal build with `PLUGIN_DEBUG=1` and injects the local log endpoint.
-    - `debug:watch`: runs the normal watch pipeline with `PLUGIN_DEBUG=1`, injects the local log endpoint, and keeps generated manifest bundle copies synced.
+    - `debug:watch`: runs `debug:build` once (so a clean checkout with no `dist/` produces one before the manifest copy — `dist/` is gitignored and absent on a fresh clone), then the watch pipeline with `PLUGIN_DEBUG=1`, injects the local log endpoint, and keeps generated manifest bundle copies synced.
     - `debug:manifests`: writes Figma-importable `manifest-cache/*/manifest.json` files from the debug templates and copies the current bundle.
     - `debug:logs`: starts the local log collector.
     - `debug:session`: runs `debug:logs` and `debug:watch` together.
