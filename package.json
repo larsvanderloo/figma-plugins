@@ -18,7 +18,7 @@
     "debug:restart": "npm run debug:stop && npm run debug:session",
     "debug:manifests": "npm run workspace:assert && node scripts/write-debug-manifests.mjs",
     "debug:build": "PLUGIN_DEBUG=1 PLUGIN_DEBUG_LOG_ENDPOINT=http://localhost:4789/log npm run build && npm run debug:manifests",
-    "debug:watch": "npm run debug:manifests && concurrently --kill-others-on-fail \"PLUGIN_DEBUG=1 PLUGIN_DEBUG_LOG_ENDPOINT=http://localhost:4789/log npm run watch\" \"node scripts/write-debug-manifests.mjs --watch\"",
+    "debug:watch": "npm run debug:build && concurrently --kill-others-on-fail \"PLUGIN_DEBUG=1 PLUGIN_DEBUG_LOG_ENDPOINT=http://localhost:4789/log npm run watch\" \"node scripts/write-debug-manifests.mjs --watch\"",
     "debug:logs": "node scripts/debug-log-server.mjs --clear",
     "debug:speed": "node scripts/debug-speed-report.mjs",
     "debug:session": "concurrently --kill-others-on-fail \"npm run debug:logs\" \"npm run debug:watch\"",
