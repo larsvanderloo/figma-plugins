@@ -48,6 +48,12 @@ export function createPasteHandler(
     const text = event.clipboardData !== null ? event.clipboardData.getData('text/plain') : '';
     if (text === '') return;
 
+    // Only spread a paste across cells when it carries TAB separators — i.e.
+    // real tabular data copied from a spreadsheet. A paste with only newlines
+    // (a pasted paragraph) stays in the one cell as multi-line content: fall
+    // through to the default textarea paste instead of building a matrix.
+    if (text.indexOf('\t') === -1) return;
+
     const matrix = trimTrailingEmptyRows(tokenize(text).rows);
     if (matrix.length === 0) return;
     const matrixCols = matrixColumnCount(matrix);
