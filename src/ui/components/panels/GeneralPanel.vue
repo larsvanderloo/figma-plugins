@@ -23,8 +23,12 @@ const showThemeSection = computed<boolean>(
 const showVisibilitySection = computed<boolean>(
   () => view.currentSummary !== null && view.currentSummary.isSkipped !== null,
 );
+const showConfidentialSection = computed<boolean>(
+  () =>
+    view.state.general?.confidential !== null && view.state.general?.confidential !== undefined,
+);
 const showSlideSettings = computed<boolean>(
-  () => showThemeSection.value || showVisibilitySection.value,
+  () => showThemeSection.value || showVisibilitySection.value || showConfidentialSection.value,
 );
 const showCopyWrap = computed<boolean>(
   () => titleDescriptionEditor.model !== null || badgeEditor.model !== null,
@@ -43,6 +47,12 @@ function onThemeChange(modeId: string | null): void {
   const id = view.state.currentSlideId;
   if (id === null) return;
   settings.setTheme(id, modeId);
+}
+
+function onConfidentialChange(show: boolean): void {
+  const id = view.state.currentSlideId;
+  if (id === null) return;
+  settings.setConfidential(id, show);
 }
 </script>
 
@@ -63,6 +73,16 @@ function onThemeChange(modeId: string | null): void {
           data-tour="presentatie-tonen"
           :ui="{ root: 'flex-row-reverse justify-between w-full', wrapper: 'ms-0' }"
           @update:model-value="toggleSkip"
+        />
+        <USeparator
+          v-if="(showThemeSection || showVisibilitySection) && showConfidentialSection"
+        />
+        <USwitch
+          v-if="showConfidentialSection"
+          :model-value="view.state.general!.confidential!.show"
+          label="Vertrouwelijk"
+          :ui="{ root: 'flex-row-reverse justify-between w-full', wrapper: 'ms-0' }"
+          @update:model-value="onConfidentialChange"
         />
       </WCard>
     </EditorWrapper>

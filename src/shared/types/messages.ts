@@ -173,6 +173,14 @@ export type UIToPluginMessage =
       skipped: boolean;
     }
   | {
+      type: 'set-slide-confidential';
+      slideId: string;
+      /** UI correlation id so rapid toggles can ignore stale acks. */
+      requestId?: string;
+      /** New value for the Slide's "Show Confidental" boolean property. */
+      show: boolean;
+    }
+  | {
       /**
        * Toggle visibility of the Heading or Paragraph subtree on the
        * slide's CopyWrap. Heading routes through the whole CopyWrap's
