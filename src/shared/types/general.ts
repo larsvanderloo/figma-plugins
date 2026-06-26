@@ -120,4 +120,11 @@ export interface GeneralSections {
    * options for the picker UI.
    */
   theme: ThemeSection | null;
+  /**
+   * Slide-level "Show Confidental" toggle — the Slide component's boolean
+   * component property that shows/hides the ConfidentalBadgeWrap. Null when
+   * the slide's component has no such property (older variants); the editor
+   * then hides the toggle. `show` is the current property value.
+   */
+  confidential: { show: boolean } | null;
 }

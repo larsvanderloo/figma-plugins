@@ -216,11 +216,24 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
 
   const themeSection = await scanTheme(slide);
 
+  // "Show Confidental" — BOOLEAN component property on the Slide instance
+  // itself (controls the ConfidentalBadgeWrap). null when the slide's
+  // component has no such property → the editor hides the toggle. The node
+  // is spelled "Confidental" in the library; fall back to the correct
+  // spelling in case a future master fixes it.
+  let confidentialProp = readBooleanProperty(slide, 'Show Confidental');
+  if (confidentialProp === null) {
+    confidentialProp = readBooleanProperty(slide, 'Show Confidential');
+  }
+  const confidentialSection: GeneralSections['confidential'] =
+    confidentialProp === null ? null : { show: confidentialProp };
+
   if (
     titleDescription === null &&
     badgeSection === null &&
     imageSection === null &&
-    themeSection === null
+    themeSection === null &&
+    confidentialSection === null
   ) {
     return null;
   }
@@ -229,5 +242,6 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
     badge: badgeSection,
     image: imageSection,
     theme: themeSection,
+    confidential: confidentialSection,
   };
 }

@@ -32,7 +32,12 @@ import {
 import { handleImportCsv, handleUpdateTable } from './table';
 import { handleUpdateChart, handleImportChartCsv } from './chart';
 import { handleUploadImage } from './image';
-import { handleSetSlideSkipped, handleSetSlideTheme, handleTriggerUndo } from './slide';
+import {
+  handleSetSlideSkipped,
+  handleSetSlideTheme,
+  handleSetSlideConfidential,
+  handleTriggerUndo,
+} from './slide';
 import { handleExportDocument } from './export';
 
 /** Handler voor één message-type, getypeerd op de genarrowde union-arm. */
@@ -67,6 +72,7 @@ export const messageHandlers: { [K in UIToPluginMessage['type']]: MessageHandler
   // slide-level
   'set-slide-theme': handleSetSlideTheme,
   'set-slide-skipped': handleSetSlideSkipped,
+  'set-slide-confidential': handleSetSlideConfidential,
   'trigger-undo': handleTriggerUndo,
   // export
   'export-document': handleExportDocument,

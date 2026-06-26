@@ -2,7 +2,8 @@
 // sandbox/handlers/slide.ts
 //
 // Slide-level messages: theme-mode pinnen (set-slide-theme), skip-
-// toggle (set-slide-skipped) en plugin-driven undo (trigger-undo).
+// toggle (set-slide-skipped), confidential-toggle (set-slide-confidential)
+// en plugin-driven undo (trigger-undo).
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
@@ -12,6 +13,7 @@ import { refreshChartsOnSlide } from '../scan/graphs';
 import { findSlideById, summaryForSlide } from '../slides';
 import { setLastSentSummarySignature } from '../session';
 import { findThemeCollectionsForSlide } from '../scan/theme';
+import { setInstanceProperty } from '../slide-machine';
 import { scanSlide } from '../scan/slide-scan';
 import type { UIToPluginMessage } from '../../shared/types';
 
@@ -148,6 +150,49 @@ export async function handleSetSlideSkipped(
     ok: true,
     requestId: msg.requestId,
     targetId: skipSlide.id,
+  });
+  return;
+}
+
+export async function handleSetSlideConfidential(
+  msg: Extract<UIToPluginMessage, { type: 'set-slide-confidential' }>,
+): Promise<void> {
+  const slide = await findSlideById(msg.slideId);
+  if (slide === null) {
+    postToUI({
+      type: 'target-updated',
+      ok: false,
+      requestId: msg.requestId,
+      error: 'Slide not found: ' + msg.slideId,
+    });
+    return;
+  }
+  figma.commitUndo();
+  markSelfWrite();
+  // "Show Confidental" BOOLEAN property on the Slide instance (controls the
+  // ConfidentalBadgeWrap). Try the library spelling first, then the corrected
+  // one. setInstanceProperty returns false when the property is absent.
+  let applied = setInstanceProperty(slide, 'Show Confidental', msg.show);
+  if (!applied) {
+    applied = setInstanceProperty(slide, 'Show Confidential', msg.show);
+  }
+  if (!applied) {
+    postToUI({
+      type: 'target-updated',
+      ok: false,
+      requestId: msg.requestId,
+      error: 'Slide has no "Show Confidental" property',
+    });
+    return;
+  }
+  // No re-scan: the iframe flips its switch optimistically before posting;
+  // markSelfWrite() suppresses the documentchange re-scan window. Same
+  // pattern as set-slide-skipped / set-slide-theme.
+  postToUI({
+    type: 'target-updated',
+    ok: true,
+    requestId: msg.requestId,
+    targetId: slide.id,
   });
   return;
 }
