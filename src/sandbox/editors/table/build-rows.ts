@@ -183,7 +183,9 @@ export function buildRow(
   rowFrame.layoutMode = 'HORIZONTAL';
   rowFrame.counterAxisSizingMode = 'AUTO';
   rowFrame.primaryAxisAlignItems = 'MIN';
-  rowFrame.counterAxisAlignItems = 'CENTER';
+  // Cellen top-aligned: in een rij met ongelijk-hoge (wrappende) cellen blijft
+  // de tekst aan de bovenkant uitgelijnd i.p.v. verticaal gecentreerd.
+  rowFrame.counterAxisAlignItems = 'MIN';
   rowFrame.itemSpacing = metrics.rowGap;
   rowFrame.paddingTop = rowPadding;
   rowFrame.paddingBottom = rowPadding;
@@ -246,6 +248,7 @@ export function buildRow(
 function buildHeaderCell(
   cell: TableCellModel,
   j: number,
+  sizes: { heading: number; body: number },
   textVar: Variable,
   textRGB: RGB,
   rightAlign: boolean,
@@ -272,23 +275,20 @@ function buildHeaderCell(
   // Koprij → Instrument Sans SemiBold, iets groter, in Text-color
   // (full contrast). Was Inter Medium 18.
   t.fontName = { family: 'Instrument Sans', style: 'SemiBold' };
-  t.fontSize = 20;
+  // Header-fontSize schaalt mee met de gefitte body — net iets groter voor
+  // hiërarchie, maar NIET zo groot als sizes.heading (de emphasis-maat), want
+  // dat duwde de koprij naar 2 regels en uit verhouding. body × 1.1, capped.
+  var headerSize = Math.round(sizes.body * 1.1);
+  if (headerSize > 24) headerSize = 24;
+  if (headerSize < 14) headerSize = 14;
+  t.fontSize = headerSize;
   t.characters = cell.value;
   t.textAutoResize = 'HEIGHT';
   // Header van een som-kolom volgt de body/footer-uitlijning (RIGHT).
   t.textAlignHorizontal = rightAlign ? 'RIGHT' : 'LEFT';
-  // Lange header-text wrapt anders naar meerdere regels en duwt
-  // row HUG-vertical enorm op. Single-line + ellipsis = clean grid look.
-  try {
-    t.maxLines = 1;
-  } catch (_e) {
-    /* silent — oudere Figma API */
-  }
-  try {
-    t.textTruncation = 'ENDING';
-  } catch (_e) {
-    /* silent */
-  }
+  // Header-tekst mag wrappen i.p.v. agressief naar "…" te truncaten: bij smalle
+  // kolommen (6 cols) kapte maxLines=1+ENDING de titel weg tot een ellipsis.
+  // De rij HUGt verticaal, dus een 2-regelige header verspringt netjes mee.
   t.fills = [
     figma.variables.setBoundVariableForPaint({ type: 'SOLID', color: textRGB }, 'color', textVar),
   ];
@@ -314,6 +314,7 @@ function buildHeaderCell(
  */
 export function buildHeaderRow(
   row: TableRowModel,
+  sizes: { heading: number; body: number },
   textVar: Variable,
   dimmerVar: Variable,
   textRGB: RGB,
@@ -356,7 +357,7 @@ export function buildHeaderRow(
 
   for (let j = 0; j < row.cells.length; j++) {
     const rightAlign = j < rightAlignColumns.length && rightAlignColumns[j] === true;
-    const cellFrame = buildHeaderCell(row.cells[j], j, textVar, textRGB, rightAlign, metrics);
+    const cellFrame = buildHeaderCell(row.cells[j], j, sizes, textVar, textRGB, rightAlign, metrics);
     rowFrame.appendChild(cellFrame);
     try {
       cellFrame.layoutSizingHorizontal = 'FILL';

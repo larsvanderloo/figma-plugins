@@ -39,6 +39,10 @@ export function getFontSizes(
   var rowHeight = (slotHeight - 48) / safeRowCount;
   if (rowHeight < 16) rowHeight = 16;
 
+  // Conservatieve initiële schatting (de floor). De renderer groeit hierna de
+  // body-fontSize via fit.ts naar de grootste maat die nog in de slot past, dus
+  // deze caps hoeven de slot niet zelf te vullen — alleen een veilige
+  // ondergrens te geven die nooit overflowt.
   var headingRatio = 0.36;
   var bodyRatio = 0.3;
   var headingMax = 32;
