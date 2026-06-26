@@ -11,11 +11,50 @@
 
 import type { TableRowModel, TableCellModel } from '../../../shared/types';
 import { tableDeltaDisplay } from '../../../shared/table-delta';
+import { parseBullets } from '../../../shared/table-bullets';
 import { buildDeltaBadgeNode } from '../_shared/delta-badge-node';
 import type { TableLayoutMetrics } from './metrics';
 
 /** Naam van de waarde-TEXT binnen een cell-FRAME (scan + truncation pakken deze). */
 export const CELL_VALUE_NAME = 'CellValue';
+
+/**
+ * Zet de cel-waarde op een TEXT-node, inclusief per-regel bullet-styling.
+ * Single source of truth voor zowel de full build (buildCell) als de in-place
+ * fast-path update (apply-text). Wist bestaande list-styling vóór het opnieuw
+ * zetten zodat een bullet→plain wijziging geen oude bullets achterlaat.
+ */
+export function applyCellText(t: TextNode, value: string): void {
+  const parsed = parseBullets(value);
+  t.characters = parsed.text;
+  if (t.characters.length === 0) return;
+  // Clear any prior list-styling across the whole range (handles bullet→plain
+  // and shrinking lists), then (re)apply per bulleted-line range.
+  try {
+    t.setRangeListOptions(0, t.characters.length, { type: 'NONE' });
+  } catch (_e) {
+    /* silent */
+  }
+  if (parsed.ranges.length > 0) {
+    try {
+      t.paragraphSpacing = 0;
+    } catch (_e) {
+      /* silent */
+    }
+    for (let r = 0; r < parsed.ranges.length; r++) {
+      try {
+        t.setRangeListOptions(parsed.ranges[r].start, parsed.ranges[r].end, { type: 'UNORDERED' });
+      } catch (_e) {
+        /* silent — oudere Figma API zonder list-support */
+      }
+      try {
+        t.setRangeListSpacing(parsed.ranges[r].start, parsed.ranges[r].end, 0);
+      } catch (_e) {
+        /* silent */
+      }
+    }
+  }
+}
 
 /**
  * Bouwt één cell-FRAME met TEXT-kind. Emphasis is per cell opt-in;
@@ -68,7 +107,10 @@ function buildCell(
   t.name = CELL_VALUE_NAME;
   t.fontName = fontName;
   t.fontSize = isEmphasis ? sizes.heading : sizes.body;
-  t.characters = cell.value;
+  // Per-line bullets (Apple-Notes stijl): regels die met `- `/`• `/`* `
+  // beginnen worden een Figma UNORDERED-lijst, andere regels blijven platte
+  // prosa. Gedeelde helper met de in-place fast-path.
+  applyCellText(t, cell.value);
   t.textAutoResize = 'HEIGHT';
   // Body-cells standaard LEFT-aligned voor consistente scanbaarheid.
   // Kolommen met een som-berekening zijn numeriek → RIGHT-aligned

@@ -26,6 +26,39 @@ import {
  * Legacy `textSize`-pluginData wordt niet meer gelezen — fontSize
  * wordt door applyTable afgeleid uit slot.height + rows.length.
  */
+// True wanneer de tekst-range [start,end) een UNORDERED-lijst is. Per regel
+// bevraagd zodat gemengde bullet/prosa-cellen kloppen. getRangeListOptions kan
+// figma.mixed teruggeven; dat telt niet als bullet. FIG-GUARD-01: type-check
+// vóór property-access.
+function rangeIsUnordered(text: TextNode, start: number, end: number): boolean {
+  if (end <= start) return false;
+  try {
+    const opts = text.getRangeListOptions(start, end);
+    if (opts === figma.mixed) return false;
+    return (opts as TextListOptions).type === 'UNORDERED';
+  } catch (_e) {
+    return false;
+  }
+}
+
+// Reconstrueer de markers-in-de-string representatie uit een TEXT-node: per
+// regel een `- ` prefix wanneer die regel een UNORDERED-lijstregel is. Zo
+// blijft de bullet-state (per regel) bewaard over de scan → iframe →
+// re-apply round-trip, inclusief gemengde bullet/prosa-cellen.
+function reconstructBulletMarkers(text: TextNode): string {
+  const chars = text.characters;
+  const lines = chars.split('\n');
+  const out: string[] = [];
+  let offset = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const bullet = line.length > 0 && rangeIsUnordered(text, offset, offset + line.length);
+    out.push(bullet ? '- ' + line : line);
+    offset += line.length + 1; // +1 voor de '\n'
+  }
+  return out.join('\n');
+}
+
 export function scanTableSlot(slot: SlotNode): TableWrapModel {
   // Legacy-detection: oude v0.1.x slides hadden pluginData op de
   // TableWrap-INSTANCE met `kind='welder-table'` + `v='2'`; nu zit de
@@ -81,8 +114,15 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
       if (textNode === null) {
         textNode = cellFrame.findOne((n: SceneNode) => n.type === 'TEXT');
       }
-      const value =
-        textNode !== null && textNode.type === 'TEXT' ? (textNode as TextNode).characters : '';
+      // Canvas stript de bullet-markers en zet UNORDERED list-styling per
+      // bullet-regel (zie build-rows). Het model is leading op de
+      // markers-in-de-string representatie, dus reconstrueren we de `- `
+      // prefixes per regel uit de list-options. Zo blijft de (per-regel)
+      // bullet-state bewaard over de scan → iframe → re-apply round-trip.
+      let value = '';
+      if (textNode !== null && textNode.type === 'TEXT') {
+        value = reconstructBulletMarkers(textNode as TextNode);
+      }
       const emphasis = cellFrame.getPluginData('emphasis') === '1';
       const delta = cellFrame.getPluginData('delta');
       const cellModel: TableCellModel = { cellNodeId: cellFrame.id, value: value, emphasis: emphasis };
