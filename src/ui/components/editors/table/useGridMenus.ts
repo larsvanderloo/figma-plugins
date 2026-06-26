@@ -4,6 +4,7 @@ import type { ComputedRef } from 'vue';
 import type { DropdownMenuItem } from '@nuxt/ui';
 import type { TableColumnCalculationSetting, TableRowModel } from '../../../../shared/types';
 import { DELTA_ARROW_UP, DELTA_ARROW_DOWN, setDeltaArrow } from '../../../../shared/table-delta';
+import { hasBulletLine, addBulletMarkers, stripBulletMarkers } from '../../../../shared/table-bullets';
 
 interface GridMenusProps {
   rows: TableRowModel[];
@@ -153,6 +154,11 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
           onSelect: () => setCellEmphasis(row, col, !isCellEmphasized(row, col)),
         },
         {
+          label: isCellBulleted(row, col) ? 'Opsomming verwijderen' : 'Opsommingstekens',
+          icon: 'i-lucide-list',
+          onSelect: () => toggleCellBullets(row, col),
+        },
+        {
           label: 'Delta',
           icon: 'i-lucide-trending-up',
           children: [
@@ -230,6 +236,27 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
   function setCellEmphasis(row: number, col: number, emphasis: boolean): void {
     if (!canStyleCell(row)) return;
     emit('cell-style', row, col, emphasis);
+    focusCell(row, col);
+  }
+
+  function cellValue(row: number, col: number): string {
+    const cell = props.rows[row]?.cells[col];
+    return cell !== undefined && typeof cell.value === 'string' ? cell.value : '';
+  }
+
+  function isCellBulleted(row: number, col: number): boolean {
+    return hasBulletLine(cellValue(row, col));
+  }
+
+  // Toggle the cell between bullets and plain lines. If any line is already a
+  // bullet, strip them all; otherwise add a `- ` to every non-empty line. The
+  // canvas renderer applies the Figma list-style per bulleted line; here we
+  // only edit the markers so the round trip and the toggle agree.
+  function toggleCellBullets(row: number, col: number): void {
+    if (!canStyleCell(row)) return;
+    const value = cellValue(row, col);
+    const next = hasBulletLine(value) ? stripBulletMarkers(value) : addBulletMarkers(value);
+    emit('cell-edit', row, col, next);
     focusCell(row, col);
   }
 

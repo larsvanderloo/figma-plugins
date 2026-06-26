@@ -50,6 +50,7 @@ const selectorItems = computed(() => {
           tableEditor.model !== null
         "
         :model-value="tableEditor.model"
+        :overflow="tableEditor.overflow"
         @update:model-value="tableEditor.update"
         @import-csv="tableEditor.importCsv"
       />
