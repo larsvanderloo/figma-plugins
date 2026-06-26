@@ -22,7 +22,7 @@ const BULLET_INDENT = 28;
 // Absolute smallest body fontSize. The fit may shrink below the getFontSizes
 // floor down to this when content genuinely can't fit the slot otherwise —
 // small text beats clipping content off the bottom.
-const HARD_MIN_BODY = 14;
+export const HARD_MIN_BODY = 14;
 
 export interface FitInput {
   rows: TableRowModel[];
