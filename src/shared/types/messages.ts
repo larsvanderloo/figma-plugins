@@ -312,6 +312,12 @@ export type PluginToUIMessage =
       requestId?: string;
       targetId?: string;
       error?: string;
+      /**
+       * Table-only: true when the table content can't fit the slot even at the
+       * minimum font size (it clips at the bottom). The editor surfaces a
+       * warning so the user knows to shorten content or resize the slot.
+       */
+      tableOverflow?: boolean;
     }
   | {
       type: 'icons-ready';

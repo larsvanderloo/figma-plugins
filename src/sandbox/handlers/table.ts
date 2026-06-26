@@ -54,14 +54,18 @@ export async function handleUpdateTable(
   } catch (_e) {
     appliedInPlace = false;
   }
+  // Fast-path edits never overflow (they bail to full render on any row-height
+  // change); only the full applyTable() reports the overflow-at-min-font state.
+  let overflowed = false;
   if (!appliedInPlace) {
-    await applyTable(slotNode as SlotNode, msg.desired);
+    overflowed = await applyTable(slotNode as SlotNode, msg.desired);
   }
   markSelfWrite();
   postToUI({
     type: 'target-updated',
     ok: true,
     targetId: msg.slotId,
+    tableOverflow: overflowed,
   });
   return;
 }

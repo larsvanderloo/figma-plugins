@@ -126,6 +126,37 @@ function buildTableContainer(dimmerVar: Variable, dimmerRGB: RGB): FrameNode {
 }
 
 /**
+ * Scale the body-cell text down when the fit overshot and content overflows.
+ * Multiplies each cell TEXT's fontSize by next/prev (so emphasis cells, which
+ * were larger, scale proportionally too). Operates on the already-built rows —
+ * no rebuild. Fonts are already loaded by the caller.
+ */
+function rescaleBodyFont(bodyRows: FrameNode[], prevBody: number, nextBody: number): void {
+  if (prevBody <= 0 || nextBody >= prevBody) return;
+  const factor = nextBody / prevBody;
+  for (var r = 0; r < bodyRows.length; r++) {
+    var row = bodyRows[r];
+    for (var c = 0; c < row.children.length; c++) {
+      var cell = row.children[c];
+      if (cell.type !== 'FRAME') continue;
+      var t = (cell as FrameNode).findOne(function (n: SceneNode): boolean {
+        return n.type === 'TEXT';
+      });
+      if (t === null || t.type !== 'TEXT') continue;
+      var textNode = t as TextNode;
+      if (textNode.fontSize === figma.mixed) continue;
+      var scaled = Math.round((textNode.fontSize as number) * factor);
+      if (scaled < 1) scaled = 1;
+      try {
+        textNode.fontSize = scaled;
+      } catch (_e) {
+        /* silent */
+      }
+    }
+  }
+}
+
+/**
  * Full-state PUT: clear alle Slot-children en bouw opnieuw uit `desired`.
  * Persisteer `hasColumnHeader` + migration-marker op pluginData.
  * Width/textSize-keys worden actief gewist — tabelbreedte volgt de actuele
@@ -141,7 +172,11 @@ function buildTableContainer(dimmerVar: Variable, dimmerRGB: RGB): FrameNode {
  * pluginData wordt nog steeds geschreven, alleen de content-rebuild
  * skipt (user ziet lege Slot + log-melding).
  */
-export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promise<void> {
+export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promise<boolean> {
+  // Returns true when the content overflows the slot (clipped at the bottom)
+  // even after the fit shrank to the minimum font — the caller surfaces a
+  // warning in the editor.
+  let overflowed = false;
   await Promise.all([
     figma.loadFontAsync({ family: 'Inter', style: 'Regular' }),
     figma.loadFontAsync({ family: 'Inter', style: 'Medium' }),
@@ -477,6 +512,31 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
             bodyRows[i].paddingBottom += addPerSide;
           }
         }
+      } else if (remaining < -2) {
+        // Content overflows at the chosen font. The fit's estimate undershot
+        // the real wrapped height, so it picked a font a notch too large.
+        // Correct using REAL heights: scale the body font down by the overflow
+        // ratio and re-apply to the existing cell TEXTs (cheap — no rebuild),
+        // then re-measure. Only flag a true overflow if even the 14px floor
+        // can't fit. One corrective pass converges; the floor bounds it.
+        const HARD_MIN = 14;
+        if (sizes.body > HARD_MIN) {
+          const ratio = (slot.height - container.paddingTop - container.paddingBottom) / actualContent;
+          let next = Math.floor(sizes.body * (ratio > 0 ? ratio : 1));
+          if (next >= sizes.body) next = sizes.body - 1;
+          if (next < HARD_MIN) next = HARD_MIN;
+          rescaleBodyFont(bodyRows, sizes.body, next);
+          sizes.body = next;
+          // Re-measure after the rescale.
+          let after = container.paddingTop + container.paddingBottom;
+          for (let i = 0; i < container.children.length; i++) {
+            after += container.children[i].height;
+            if (i > 0) after += container.itemSpacing;
+          }
+          overflowed = after - slot.height > 2;
+        } else {
+          overflowed = true;
+        }
       }
     }
   } else {
@@ -494,4 +554,5 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
   writeColumnCalculationLabel(slot, columnCalculationLabel, columnCount);
   slot.setPluginData('kind', 'welder-tablewrap');
   slot.setPluginData('v', '4');
+  return overflowed;
 }
