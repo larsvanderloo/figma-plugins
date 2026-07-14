@@ -13,6 +13,7 @@
 
 import type { TableRowModel } from '../../../shared/types';
 import { parseBullets } from '../../../shared/table-bullets';
+import { TABLE_ROW_PAD_EM } from './metrics';
 import type { MeasureTextHeight } from './measure';
 
 // Approximate hanging-indent a Figma UNORDERED list reserves for the bullet
@@ -32,7 +33,10 @@ export interface FitInput {
   // Inner content height available to the body rows (slot minus container
   // padding, header and footer reservations).
   availableHeight: number;
-  rowPadding: number; // top+bottom padding per body row is 2× this
+  // BASIS-padding per kant (computeRowPadding); bodyRowHeightAt telt daar per
+  // kandidaat-korps TABLE_ROW_PAD_EM × body bij op — zelfde formule als de
+  // renderer gebruikt bij het bouwen.
+  rowPadding: number;
   rowGap: number; // itemSpacing between cells (does not affect row height)
   // Preferred body fontSize floor (from getFontSizes) and ceiling. The fit
   // grows up to maxBody, but may shrink below minBody — down to HARD_MIN_BODY —
@@ -74,7 +78,11 @@ function bodyRowHeightAt(
     const h = measureHeight(text, font, size, width > 0 ? width : colWidth);
     if (h > tallest) tallest = h;
   }
-  return tallest + rowPadding * 2;
+  // Zelfde padding-formule als de renderer: basis + font-proportionele lucht.
+  // Doordat de lucht meegroeit met het kandidaat-korps kiest de zoek niet
+  // langer het maximale korps dat "past" maar het korps waarbij tekst én
+  // ademruimte samen passen.
+  return tallest + (rowPadding + Math.round(body * TABLE_ROW_PAD_EM)) * 2;
 }
 
 function headerRowHeightAt(

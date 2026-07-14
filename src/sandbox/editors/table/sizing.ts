@@ -71,7 +71,19 @@ export function buildColumnSpecs(
         font = { family: 'Inter', style: 'Regular' };
         fontSize = sizes.body;
       }
-      columns[j].push({ text: text, font: font, fontSize: fontSize });
+      const spec: CellSpec = { text: text, font: font, fontSize: fontSize };
+      // Vinkje/badge nemen ruimte op de waarderegel in — meet ze mee, in
+      // lockstep met buildCell (icoon = 1em + 0.35em gap; chip meet zijn
+      // label + padding in cellContribution).
+      if (!isHeader && cell !== null) {
+        if (cell.check === true || cell.check === false) {
+          spec.leadWidth = Math.round(fontSize) + Math.round(fontSize * 0.35);
+        }
+        if (typeof cell.badge === 'string' && cell.badge.trim() !== '') {
+          spec.badgeText = cell.badge.trim();
+        }
+      }
+      columns[j].push(spec);
     }
   }
 

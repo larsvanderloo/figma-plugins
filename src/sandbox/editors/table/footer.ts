@@ -38,6 +38,9 @@ function buildFooterCell(
   cellFrame.primaryAxisAlignItems = 'MIN';
   cellFrame.counterAxisAlignItems = 'CENTER';
   cellFrame.fills = [];
+  // Geen clip: leadingTrim-descenders hangen buiten het tekst-vak
+  // (zie build-rows.ts buildCell).
+  cellFrame.clipsContent = false;
   cellFrame.setPluginData('emphasis', '');
 
   // Footer-cell styling volgt de body-cells (Inter Regular, body-fontSize,
@@ -55,6 +58,12 @@ function buildFooterCell(
   t.fontSize = emphasized ? sizes.heading : sizes.body;
   t.characters = summary !== null ? footerCanvasText(summary) : label;
   t.textAutoResize = 'HEIGHT';
+  // Cap-height-trim voor optisch gecentreerde footer-tekst (zie buildCell).
+  try {
+    t.leadingTrim = 'CAP_HEIGHT';
+  } catch (_e) {
+    /* silent — oudere Figma API zonder leadingTrim */
+  }
   t.textAlignHorizontal = summary !== null ? 'RIGHT' : 'LEFT';
   try {
     t.maxLines = 1;
@@ -101,6 +110,8 @@ export function buildFooterRow(
   rowFrame.counterAxisSizingMode = 'AUTO';
   rowFrame.primaryAxisAlignItems = 'MIN';
   rowFrame.counterAxisAlignItems = 'CENTER';
+  // Geen clip: leadingTrim-descenders hangen buiten het tekst-vak.
+  rowFrame.clipsContent = false;
   rowFrame.itemSpacing = metrics.rowGap;
   // Footer-row padding volgt dezelfde body-rij-padding zodat de
   // footer-rij visueel niet afwijkt van de data-rijen.

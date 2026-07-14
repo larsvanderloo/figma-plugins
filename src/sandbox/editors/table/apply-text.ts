@@ -7,18 +7,37 @@
 // text, not the table structure. This path detects that case and writes the
 // new value straight onto the existing TEXT nodes, skipping the rebuild.
 //
-// It deliberately handles ONLY value/bullet changes. Anything structural
-// (row/column count, header flag, emphasis, delta add/remove, calculations)
-// returns false so the caller falls back to the full applyTable().
+// It deliberately handles ONLY value/bullet changes (plus the footer-sums
+// those values drive). ANY other difference — row/column count, header flag,
+// emphasis, delta text, calc/label/footer-styling — returns false so the
+// caller falls back to the full applyTable(). The preflight must compare
+// CONTENT, not presence: everything the fast path can't write but lets
+// through would otherwise be silently dropped until the next full render.
 //
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
 import type { TableWrapModel, TableRowModel } from '../../../shared/types';
-import { hasColumnCalculations } from '../../../shared/table-calculations';
+import {
+  columnCalculationsEqual,
+  columnEmphasisEqual,
+  columnLabelsEqual,
+  computeTableColumnSummaries,
+  hasColumnCalculations,
+  normalizeColumnCalculations,
+  normalizeColumnEmphasis,
+} from '../../../shared/table-calculations';
 import { tableDeltaDisplay } from '../../../shared/table-delta';
 import { applyCellText, CELL_VALUE_NAME } from './build-rows';
-import { readHasColumnHeader, readColumnCalculations } from './plugin-data';
+import { footerCanvasText } from './footer';
+import {
+  readHasColumnHeader,
+  readColumnCalculations,
+  readColumnCalculationEmphasis,
+  readColumnCalculationCurrency,
+  readColumnCalculationPercent,
+  readColumnCalculationLabel,
+} from './plugin-data';
 
 function findContentContainer(slot: SlotNode): FrameNode | null {
   for (let i = 0; i < slot.children.length; i++) {
@@ -48,25 +67,88 @@ function cellTextNode(cellFrame: FrameNode): TextNode | null {
 }
 
 // A cell qualifies for the fast path only when its non-text attributes are
-// unchanged: same emphasis (font), same delta presence (node structure). A
-// delta or emphasis change needs the full rebuild.
-function cellStructureMatches(cellFrame: FrameNode, desiredCell: { emphasis?: boolean; delta?: string }): boolean {
+// unchanged: same emphasis (font), same delta/badge/check content (node
+// structure). Any such change needs the full rebuild.
+function cellStructureMatches(
+  cellFrame: FrameNode,
+  desiredCell: { emphasis?: boolean; delta?: string; check?: boolean; badge?: string },
+): boolean {
   const curEmphasis = cellFrame.getPluginData('emphasis') === '1';
   if (curEmphasis !== (desiredCell.emphasis === true)) return false;
   const curDelta = cellFrame.getPluginData('delta');
   const wantDelta = tableDeltaDisplay(desiredCell.delta);
-  if ((curDelta !== '') !== (wantDelta !== null)) return false;
+  // Vergelijk de delta-TEKST, niet alleen presence: de fast-path schrijft de
+  // badge-label niet, dus élk delta-verschil ('▲ 12%'→'▲ 15%') moet naar de
+  // full render — presence-only zou zo'n edit stil droppen.
+  if (curDelta !== (wantDelta !== null ? wantDelta : '')) return false;
+  // Zelfde content-vergelijking voor vinkje en nummer-badge: de fast-path
+  // schrijft alleen CellValue-tekst, dus elk verschil hier → full render.
+  const curCheck = cellFrame.getPluginData('check');
+  const wantCheck =
+    desiredCell.check === true ? '1' : desiredCell.check === false ? '0' : '';
+  if (curCheck !== wantCheck) return false;
+  const curBadge = cellFrame.getPluginData('badge');
+  const wantBadge =
+    typeof desiredCell.badge === 'string' && desiredCell.badge.trim() !== ''
+      ? desiredCell.badge.trim()
+      : '';
+  if (curBadge !== wantBadge) return false;
   return true;
 }
 
-// Footer presence is the only calc-derived structural change a text edit could
-// collide with: if the desired calcs add/remove the footer row, the row set
-// changes → full rebuild. Read the persisted calcs from pluginData (cheap)
-// rather than a full slot scan.
-function footerPresenceMatches(slot: SlotNode, desired: TableWrapModel, columnCount: number): boolean {
-  const currentCalcs = readColumnCalculations(slot, columnCount);
-  const desiredCalcs = desired.columnCalculations !== undefined ? desired.columnCalculations : [];
-  return hasColumnCalculations(desiredCalcs) === hasColumnCalculations(currentCalcs);
+// De volledige calc-state moet EXACT overeenkomen — niet alleen footer-
+// presence. Een som die van kolom wisselt, een footer-label-edit of een
+// emphasis/currency/percent-toggle verandert de footer-rij, en die styling
+// schrijft de fast-path niet; zonder content-vergelijking zou zo'n edit stil
+// gedropt worden tot de volgende full render. Alles komt uit pluginData
+// (goedkoop) i.p.v. een full slot-scan.
+function calcStateMatches(slot: SlotNode, desired: TableWrapModel, columnCount: number): boolean {
+  if (
+    !columnCalculationsEqual(
+      desired.columnCalculations,
+      readColumnCalculations(slot, columnCount),
+      columnCount,
+    )
+  ) {
+    return false;
+  }
+  if (
+    !columnEmphasisEqual(
+      desired.columnCalculationEmphasis,
+      readColumnCalculationEmphasis(slot, columnCount),
+      columnCount,
+    )
+  ) {
+    return false;
+  }
+  if (
+    !columnEmphasisEqual(
+      desired.columnCalculationCurrency,
+      readColumnCalculationCurrency(slot, columnCount),
+      columnCount,
+    )
+  ) {
+    return false;
+  }
+  if (
+    !columnEmphasisEqual(
+      desired.columnCalculationPercent,
+      readColumnCalculationPercent(slot, columnCount),
+      columnCount,
+    )
+  ) {
+    return false;
+  }
+  if (
+    !columnLabelsEqual(
+      desired.columnCalculationLabel,
+      readColumnCalculationLabel(slot, columnCount),
+      columnCount,
+    )
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /**
@@ -83,14 +165,20 @@ export function applyTableTextOnly(slot: SlotNode, desired: TableWrapModel): boo
   const container = findContentContainer(slot);
   if (container === null) return false;
 
-  // Header flag / calc-footer presence must match (they change the row set).
-  // Both come from pluginData — far cheaper than a full slot scan.
+  // Alleen tabellen op de huidige canvas-schemaversie mogen in-place worden
+  // bijgeschreven. Oudere tabellen (v<5, vóór de leadingTrim/clipsContent-
+  // typografie) nemen zo één keer de full-rebuild-route en zien de nieuwe
+  // stijl direct — daarna geldt de fast-path weer.
+  if (slot.getPluginData('v') !== '5') return false;
+
+  // Header flag / volledige calc-state moeten matchen (row-set + footer-
+  // styling). Alles komt uit pluginData — veel goedkoper dan een slot-scan.
   if (readHasColumnHeader(slot) !== desired.hasColumnHeader) return false;
   let columnCount = 0;
   for (let i = 0; i < desired.rows.length; i++) {
     if (desired.rows[i].cells.length > columnCount) columnCount = desired.rows[i].cells.length;
   }
-  if (!footerPresenceMatches(slot, desired, columnCount)) return false;
+  if (!calcStateMatches(slot, desired, columnCount)) return false;
 
   // Collect current row frames in order.
   const rowFrames: FrameNode[] = [];
@@ -163,9 +251,60 @@ export function applyTableTextOnly(slot: SlotNode, desired: TableWrapModel): boo
       }
     }
     const desiredCells = effective[r].cells;
+    const isHeaderRow = hasHeader && r === 0;
     for (let c = 0; c < cellFrames.length; c++) {
       const t = cellTextNode(cellFrames[c]);
-      if (t !== null) applyCellText(t, desiredCells[c].value);
+      if (t === null) continue;
+      // Koprij-cellen renderen '- ' letterlijk (buildHeaderCell parseert geen
+      // bullets) — schrijf raw zodat fast-path en full render identiek zijn.
+      if (isHeaderRow) {
+        t.characters = desiredCells[c].value;
+      } else {
+        applyCellText(t, desiredCells[c].value);
+      }
+    }
+  }
+
+  // Footer-sommen in place bijwerken: cel-waarden bepalen de som, dus een
+  // tekst-edit verandert de footer-waarde terwijl de calc-state gelijk blijft
+  // (hierboven bewezen door calcStateMatches) — styling/font is dus
+  // ongewijzigd en alleen `.characters` hoeft mee. maxLines=1 houdt de
+  // footer-hoogte stabiel, dus de height-check hieronder blijft geldig.
+  const calcs = normalizeColumnCalculations(desired.columnCalculations, columnCount);
+  if (hasColumnCalculations(calcs)) {
+    const summaries = computeTableColumnSummaries(
+      desired.rows,
+      hasHeader,
+      calcs,
+      columnCount,
+      normalizeColumnEmphasis(desired.columnCalculationEmphasis, columnCount),
+      normalizeColumnEmphasis(desired.columnCalculationCurrency, columnCount),
+      normalizeColumnEmphasis(desired.columnCalculationPercent, columnCount),
+    );
+    let footerRow: FrameNode | null = null;
+    for (let i = 0; i < container.children.length; i++) {
+      const node = container.children[i];
+      if (node.type === 'FRAME' && node.name === 'TableFooterRow') {
+        footerRow = node as FrameNode;
+        break;
+      }
+    }
+    // Sommen gewenst maar geen footer-rij op canvas → structuur wijkt af.
+    if (footerRow === null) return false;
+    for (let c = 0; c < footerRow.children.length; c++) {
+      const cell = footerRow.children[c];
+      if (cell.type !== 'FRAME' || cell.name.indexOf('TableFooterItem-c') !== 0) continue;
+      const j = parseInt(cell.name.slice('TableFooterItem-c'.length), 10);
+      if (!(j >= 0) || j >= summaries.length) continue;
+      const summary = summaries[j];
+      // Label-kolommen (summary null) zijn tekstueel ongewijzigd bewezen.
+      if (summary === null) continue;
+      const t = (cell as FrameNode).findOne(function (n: SceneNode): boolean {
+        return n.type === 'TEXT';
+      });
+      if (t !== null && t.type === 'TEXT') {
+        (t as TextNode).characters = footerCanvasText(summary);
+      }
     }
   }
 

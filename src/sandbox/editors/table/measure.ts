@@ -41,6 +41,14 @@ export function createTextMeasurer(): TextMeasurer | null {
     node.x = -10000;
     node.y = -10000;
     node.textAutoResize = 'WIDTH_AND_HEIGHT';
+    // Zelfde cap-height-trim als de gerenderde cel-tekst (build-rows/footer),
+    // anders meet measureHeight de ongetrimde (hogere) line-box en schat de
+    // fit de content structureel te hoog in. Breedte-metingen raakt dit niet.
+    try {
+      node.leadingTrim = 'CAP_HEIGHT';
+    } catch (_e) {
+      /* silent — oudere Figma API zonder leadingTrim */
+    }
 
     const cache: { [key: string]: number } = {};
     const heightCache: { [key: string]: number } = {};
