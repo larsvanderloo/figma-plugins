@@ -12,9 +12,10 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-// Accepted leading markers: hyphen/asterisk/bullet glyph, with or without a
-// trailing space (`- a` and `-a` both count, so a stray `-3` still bullets).
-const BULLET_MARKER = /^[-*•]\s*/;
+// Accepted leading markers: hyphen/asterisk/bullet glyph followed by at least
+// one space. The space is required: a dash without a space is a minus sign
+// (`-100` in a numbers column), not a bullet — `- 100` and `- a` bullet.
+const BULLET_MARKER = /^[-*•]\s+/;
 
 // The marker the editor inserts when auto-continuing a bullet list.
 const CONTINUE_MARKER = '- ';
