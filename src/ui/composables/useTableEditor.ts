@@ -74,6 +74,13 @@ function tableSemanticsEqual(a: TableWrapModel | null, b: TableWrapModel): boole
       const aDelta = typeof aCells[j].delta === 'string' ? aCells[j].delta : '';
       const bDelta = typeof bCells[j].delta === 'string' ? bCells[j].delta : '';
       if (aDelta !== bDelta) return false;
+      // Vinkje + nummer-badge: zelfde les als delta — elk veld dat de canvas
+      // rendert moet hier meevergeleken worden, anders wordt een pure
+      // toggle/badge-edit als duplicaat gedropt.
+      if (aCells[j].check !== bCells[j].check) return false;
+      const aBadge = typeof aCells[j].badge === 'string' ? aCells[j].badge : '';
+      const bBadge = typeof bCells[j].badge === 'string' ? bCells[j].badge : '';
+      if (aBadge !== bBadge) return false;
     }
   }
 

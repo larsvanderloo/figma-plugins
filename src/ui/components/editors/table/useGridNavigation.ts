@@ -174,9 +174,10 @@ export function useGridNavigation(
         return;
       }
       if (event.shiftKey || event.altKey) return;
-      // Apple-Notes bullet behavior: inside a bullet list, Enter continues the
-      // list (fresh `- `) or, on an empty bullet, exits it. Outside a bullet
-      // context bulletEnter() returns null and Enter is a normal newline.
+      // Apple-Notes lijst-gedrag: binnen een gemarkeerde lijst (bullet,
+      // vinkje of kruisje) vervolgt Enter de lijst met een verse marker van
+      // hetzelfde type; op een lege marker-regel exit hij de lijst. Buiten
+      // een lijst returnt bulletEnter() null en is Enter een gewone newline.
       const target = event.target;
       if (target instanceof HTMLTextAreaElement) {
         const result = bulletEnter(target.value, target.selectionStart);

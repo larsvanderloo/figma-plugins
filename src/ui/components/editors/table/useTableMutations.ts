@@ -316,6 +316,146 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     scheduleEmit('cell-delta');
   }
 
+  function setCellCheck(i: number, j: number, state: boolean | null): void {
+    if (i < 0 || i >= localRows.value.length) return;
+    if (j >= currentCols.value) return;
+    // Koprij draagt geen vinkje (alleen body-cellen), net als delta/emphasis.
+    if (localHasColumnHeader.value && i === 0) return;
+    const cell = localRows.value[i]?.cells[j];
+    if (cell === undefined) return;
+    const current = cell.check === true ? true : cell.check === false ? false : null;
+    if (current === state) return;
+    if (state === null) {
+      delete cell.check;
+      announce('Vinkje verwijderd');
+    } else {
+      cell.check = state;
+      announce(state ? 'Aangevinkt' : 'Uitgevinkt');
+    }
+    scheduleEmit('cell-check');
+  }
+
+  function setCellBadge(i: number, j: number, value: string): void {
+    if (i < 0 || i >= localRows.value.length) return;
+    if (j >= currentCols.value) return;
+    if (localHasColumnHeader.value && i === 0) return;
+    const cell = localRows.value[i]?.cells[j];
+    if (cell === undefined) return;
+    const trimmed = value.trim();
+    const current = typeof cell.badge === 'string' ? cell.badge : '';
+    if (current === trimmed) return;
+    if (trimmed === '') {
+      delete cell.badge;
+      announce('Badge verwijderd');
+    } else {
+      cell.badge = trimmed;
+      announce('Badge ingesteld');
+    }
+    scheduleEmit('cell-badge');
+  }
+
+  // ── Bulk-varianten per rij/kolom ──────────────────────────────────────
+  // Zelfde per-cel model als de losse setters: bulk schrijft gewoon elke
+  // body-cel in scope. Geen rij/kolom-niveau in het model — dat houdt de
+  // render/scan/fast-path round-trip één-dimensionaal (per cel).
+
+  function bodyCellsInRow(i: number): TableCellModel[] {
+    if (i < 0 || i >= localRows.value.length) return [];
+    if (localHasColumnHeader.value && i === 0) return [];
+    const row = localRows.value[i];
+    return row !== undefined ? row.cells : [];
+  }
+
+  function bodyCellsInColumn(j: number): TableCellModel[] {
+    if (j < 0 || j >= currentCols.value) return [];
+    const out: TableCellModel[] = [];
+    for (let i = 0; i < localRows.value.length; i++) {
+      if (localHasColumnHeader.value && i === 0) continue;
+      const cell = localRows.value[i]?.cells[j];
+      if (cell !== undefined) out.push(cell);
+    }
+    return out;
+  }
+
+  function applyEmphasis(cells: TableCellModel[], on: boolean): boolean {
+    let changed = false;
+    for (const cell of cells) {
+      if ((cell.emphasis === true) === on) continue;
+      if (on) cell.emphasis = true;
+      else delete cell.emphasis;
+      changed = true;
+    }
+    return changed;
+  }
+
+  function applyCheck(cells: TableCellModel[], state: boolean | null): boolean {
+    let changed = false;
+    for (const cell of cells) {
+      const current = cell.check === true ? true : cell.check === false ? false : null;
+      if (current === state) continue;
+      if (state === null) delete cell.check;
+      else cell.check = state;
+      changed = true;
+    }
+    return changed;
+  }
+
+  // Bulk-badge zet alleen PRESENCE: aan = seed '0' waar er nog geen badge
+  // staat (bestaande waarden blijven), uit = alle badges weg. De waarde
+  // zelf is per cel en wordt in de badge-input van de cel getypt.
+  function applyBadge(cells: TableCellModel[], on: boolean): boolean {
+    let changed = false;
+    for (const cell of cells) {
+      const has = typeof cell.badge === 'string' && cell.badge.trim() !== '';
+      if (on && !has) {
+        cell.badge = '0';
+        changed = true;
+      } else if (!on && has) {
+        delete cell.badge;
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  function setRowEmphasis(i: number, on: boolean): void {
+    if (!applyEmphasis(bodyCellsInRow(i), on)) return;
+    announce(on ? 'Rij benadrukt' : 'Nadruk van rij verwijderd');
+    scheduleEmit('row-style');
+  }
+
+  function setColumnEmphasis(j: number, on: boolean): void {
+    if (!applyEmphasis(bodyCellsInColumn(j), on)) return;
+    announce(on ? 'Kolom benadrukt' : 'Nadruk van kolom verwijderd');
+    scheduleEmit('column-style');
+  }
+
+  function setRowCheck(i: number, state: boolean | null): void {
+    if (!applyCheck(bodyCellsInRow(i), state)) return;
+    announce(state === null ? 'Vinkjes van rij verwijderd' : state ? 'Rij aangevinkt' : 'Rij uitgevinkt');
+    scheduleEmit('row-check');
+  }
+
+  function setColumnCheck(j: number, state: boolean | null): void {
+    if (!applyCheck(bodyCellsInColumn(j), state)) return;
+    announce(
+      state === null ? 'Vinkjes van kolom verwijderd' : state ? 'Kolom aangevinkt' : 'Kolom uitgevinkt',
+    );
+    scheduleEmit('column-check');
+  }
+
+  function setRowBadge(i: number, on: boolean): void {
+    if (!applyBadge(bodyCellsInRow(i), on)) return;
+    announce(on ? 'Badges aan rij toegevoegd' : 'Badges van rij verwijderd');
+    scheduleEmit('row-badge');
+  }
+
+  function setColumnBadge(j: number, on: boolean): void {
+    if (!applyBadge(bodyCellsInColumn(j), on)) return;
+    announce(on ? 'Badges aan kolom toegevoegd' : 'Badges van kolom verwijderd');
+    scheduleEmit('column-badge');
+  }
+
   function pasteMatrix(i: number, j: number, matrix: string[][]): void {
     if (matrix.length === 0) return;
     const matrixCols = matrixColumnCount(matrix);
@@ -380,6 +520,14 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     updateCell,
     setCellEmphasis,
     setCellDelta,
+    setCellCheck,
+    setCellBadge,
+    setRowEmphasis,
+    setColumnEmphasis,
+    setRowCheck,
+    setColumnCheck,
+    setRowBadge,
+    setColumnBadge,
     setColumnCalculation,
     setColumnCalculationEmphasis,
     setColumnCalculationCurrency,

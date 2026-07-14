@@ -4,7 +4,13 @@ import type { ComputedRef } from 'vue';
 import type { DropdownMenuItem } from '@nuxt/ui';
 import type { TableColumnCalculationSetting, TableRowModel } from '../../../../shared/types';
 import { DELTA_ARROW_UP, DELTA_ARROW_DOWN, setDeltaArrow } from '../../../../shared/table-delta';
-import { hasBulletLine, addBulletMarkers, stripBulletMarkers } from '../../../../shared/table-bullets';
+import {
+  cellMarkerType,
+  markerPrefix,
+  setLineMarkers,
+  stripBulletMarkers,
+  type LineMarkerType,
+} from '../../../../shared/table-bullets';
 
 interface GridMenusProps {
   rows: TableRowModel[];
@@ -17,6 +23,14 @@ type GridMenusEmit = {
   (event: 'cell-edit', row: number, col: number, value: string): void;
   (event: 'cell-style', row: number, col: number, emphasis: boolean): void;
   (event: 'cell-delta', row: number, col: number, value: string): void;
+  (event: 'cell-check', row: number, col: number, state: boolean | null): void;
+  (event: 'cell-badge', row: number, col: number, value: string): void;
+  (event: 'row-emphasis', row: number, on: boolean): void;
+  (event: 'column-emphasis', col: number, on: boolean): void;
+  (event: 'row-check', row: number, state: boolean | null): void;
+  (event: 'column-check', col: number, state: boolean | null): void;
+  (event: 'row-badge', row: number, on: boolean): void;
+  (event: 'column-badge', col: number, on: boolean): void;
   (event: 'column-calculation', col: number, calculation: TableColumnCalculationSetting): void;
   (event: 'column-calculation-emphasis', col: number, emphasis: boolean): void;
   (event: 'column-calculation-currency', col: number, currency: boolean): void;
@@ -78,6 +92,60 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
         },
       ],
       [
+        { label: 'Opmaak', type: 'label' },
+        {
+          label: 'Rij benadrukken',
+          icon: 'i-lucide-bold',
+          disabled: !canStyleCell(row),
+          onSelect: () => emit('row-emphasis', row, true),
+        },
+        {
+          label: 'Nadruk verwijderen',
+          icon: 'i-lucide-remove-formatting',
+          disabled: !canStyleCell(row),
+          onSelect: () => emit('row-emphasis', row, false),
+        },
+        {
+          label: 'Vinkjes',
+          icon: 'i-lucide-circle-check',
+          disabled: !canStyleCell(row),
+          children: [
+            {
+              label: 'Aangevinkt',
+              icon: 'i-lucide-circle-check',
+              onSelect: () => emit('row-check', row, true),
+            },
+            {
+              label: 'Uitgevinkt',
+              icon: 'i-lucide-circle',
+              onSelect: () => emit('row-check', row, false),
+            },
+            {
+              label: 'Vinkjes verwijderen',
+              icon: 'i-lucide-circle-off',
+              onSelect: () => emit('row-check', row, null),
+            },
+          ],
+        },
+        {
+          label: 'Badges',
+          icon: 'i-lucide-hash',
+          disabled: !canStyleCell(row),
+          children: [
+            {
+              label: 'Badges toevoegen',
+              icon: 'i-lucide-plus',
+              onSelect: () => emit('row-badge', row, true),
+            },
+            {
+              label: 'Badges verwijderen',
+              icon: 'i-lucide-minus',
+              onSelect: () => emit('row-badge', row, false),
+            },
+          ],
+        },
+      ],
+      [
         {
           label: rowRemoveLabel(row),
           icon: 'i-lucide-trash-2',
@@ -112,6 +180,56 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
           icon: 'i-lucide-sigma',
           onSelect: () =>
             setColumnCalculation(col, normalizedColumnCalculations.value[col] === 'sum' ? null : 'sum'),
+        },
+      ],
+      [
+        { label: 'Opmaak', type: 'label' },
+        {
+          label: 'Kolom benadrukken',
+          icon: 'i-lucide-bold',
+          onSelect: () => emit('column-emphasis', col, true),
+        },
+        {
+          label: 'Nadruk verwijderen',
+          icon: 'i-lucide-remove-formatting',
+          onSelect: () => emit('column-emphasis', col, false),
+        },
+        {
+          label: 'Vinkjes',
+          icon: 'i-lucide-circle-check',
+          children: [
+            {
+              label: 'Aangevinkt',
+              icon: 'i-lucide-circle-check',
+              onSelect: () => emit('column-check', col, true),
+            },
+            {
+              label: 'Uitgevinkt',
+              icon: 'i-lucide-circle',
+              onSelect: () => emit('column-check', col, false),
+            },
+            {
+              label: 'Vinkjes verwijderen',
+              icon: 'i-lucide-circle-off',
+              onSelect: () => emit('column-check', col, null),
+            },
+          ],
+        },
+        {
+          label: 'Badges',
+          icon: 'i-lucide-hash',
+          children: [
+            {
+              label: 'Badges toevoegen',
+              icon: 'i-lucide-plus',
+              onSelect: () => emit('column-badge', col, true),
+            },
+            {
+              label: 'Badges verwijderen',
+              icon: 'i-lucide-minus',
+              onSelect: () => emit('column-badge', col, false),
+            },
+          ],
         },
       ],
       [
@@ -154,9 +272,58 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
           onSelect: () => setCellEmphasis(row, col, !isCellEmphasized(row, col)),
         },
         {
-          label: isCellBulleted(row, col) ? 'Opsomming verwijderen' : 'Opsommingstekens',
+          label: 'Lijst',
           icon: 'i-lucide-list',
-          onSelect: () => toggleCellBullets(row, col),
+          children: [
+            {
+              label: 'Opsommingstekens',
+              icon: 'i-lucide-list',
+              onSelect: () => setCellMarkers(row, col, 'bullet'),
+            },
+            {
+              label: 'Vinkjes (' + markerPrefix('check').trim() + ')',
+              icon: 'i-lucide-check',
+              onSelect: () => setCellMarkers(row, col, 'check'),
+            },
+            {
+              label: 'Kruisjes (' + markerPrefix('cross').trim() + ')',
+              icon: 'i-lucide-x',
+              onSelect: () => setCellMarkers(row, col, 'cross'),
+            },
+            {
+              label: 'Lijst verwijderen',
+              icon: 'i-lucide-list-x',
+              disabled: cellMarkerType(cellValue(row, col)) === null,
+              onSelect: () => clearCellMarkers(row, col),
+            },
+          ],
+        },
+        {
+          label: 'Vinkje',
+          icon: 'i-lucide-circle-check',
+          children: [
+            {
+              label: 'Aangevinkt',
+              icon: 'i-lucide-circle-check',
+              onSelect: () => emit('cell-check', row, col, true),
+            },
+            {
+              label: 'Uitgevinkt',
+              icon: 'i-lucide-circle',
+              onSelect: () => emit('cell-check', row, col, false),
+            },
+            {
+              label: 'Vinkje verwijderen',
+              icon: 'i-lucide-circle-off',
+              disabled: cellCheck(row, col) === null,
+              onSelect: () => emit('cell-check', row, col, null),
+            },
+          ],
+        },
+        {
+          label: cellBadge(row, col) === '' ? 'Badge toevoegen' : 'Badge verwijderen',
+          icon: 'i-lucide-hash',
+          onSelect: () => emit('cell-badge', row, col, cellBadge(row, col) === '' ? '0' : ''),
         },
         {
           label: 'Delta',
@@ -244,25 +411,36 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
     return cell !== undefined && typeof cell.value === 'string' ? cell.value : '';
   }
 
-  function isCellBulleted(row: number, col: number): boolean {
-    return hasBulletLine(cellValue(row, col));
+  // Zet de cel op één lijst-type (bullet / vinkje / kruisje). Bestaande
+  // markers van een ander type worden vervangen, dus omschakelen is één
+  // actie. Bullets krijgen op canvas Figma's list-style; ✓/✗ blijven
+  // letterlijke glyphs in de tekst (Figma kent geen check-list-style).
+  function setCellMarkers(row: number, col: number, type: LineMarkerType): void {
+    if (!canStyleCell(row)) return;
+    emit('cell-edit', row, col, setLineMarkers(cellValue(row, col), type));
+    focusCell(row, col);
   }
 
-  // Toggle the cell between bullets and plain lines. If any line is already a
-  // bullet, strip them all; otherwise add a `- ` to every non-empty line. The
-  // canvas renderer applies the Figma list-style per bulleted line; here we
-  // only edit the markers so the round trip and the toggle agree.
-  function toggleCellBullets(row: number, col: number): void {
+  function clearCellMarkers(row: number, col: number): void {
     if (!canStyleCell(row)) return;
-    const value = cellValue(row, col);
-    const next = hasBulletLine(value) ? stripBulletMarkers(value) : addBulletMarkers(value);
-    emit('cell-edit', row, col, next);
+    emit('cell-edit', row, col, stripBulletMarkers(cellValue(row, col)));
     focusCell(row, col);
   }
 
   function cellDelta(row: number, col: number): string {
     const cell = props.rows[row]?.cells[col];
     return cell !== undefined && typeof cell.delta === 'string' ? cell.delta : '';
+  }
+
+  function cellCheck(row: number, col: number): boolean | null {
+    const cell = props.rows[row]?.cells[col];
+    if (cell === undefined) return null;
+    return cell.check === true ? true : cell.check === false ? false : null;
+  }
+
+  function cellBadge(row: number, col: number): string {
+    const cell = props.rows[row]?.cells[col];
+    return cell !== undefined && typeof cell.badge === 'string' ? cell.badge : '';
   }
 
   function setCellDeltaArrow(row: number, col: number, arrow: string | null): void {

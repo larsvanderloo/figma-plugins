@@ -12,13 +12,41 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-// Accepted leading markers: hyphen/asterisk/bullet glyph followed by at least
-// one space. The space is required: a dash without a space is a minus sign
-// (`-100` in a numbers column), not a bullet — `- 100` and `- a` bullet.
+// Accepted leading markers: hyphen/asterisk/bullet glyph, gevolgd door
+// minstens één spatie. De spatie is verplicht: een dash zónder spatie is
+// een minteken (`-100` in een getallen-kolom), geen bullet — `- 100` en
+// `- a` bulleten wél.
+//
+// Naast list-bullets bestaan er glyph-markers (✓ vinkje / ✗ kruisje). Die
+// delen dezelfde mechaniek (celmenu-conversie, Enter-continuatie) maar de
+// canvas behandelt ze anders: bullets worden gestript en krijgen Figma's
+// UNORDERED list-style, glyphs blijven letterlijk in de tekst staan — Figma
+// kent geen check-list-style en list-styling zou er een bolletje vóór zetten.
 const BULLET_MARKER = /^[-*•]\s+/;
+const CHECK_MARKER = /^[✓✔]\s+/;
+const CROSS_MARKER = /^[✗✘]\s+/;
+const ANY_MARKER = /^[-*•✓✔✗✘]\s+/;
 
-// The marker the editor inserts when auto-continuing a bullet list.
-const CONTINUE_MARKER = '- ';
+export type LineMarkerType = 'bullet' | 'check' | 'cross';
+
+/** Het marker-voorvoegsel dat de editor invoegt per lijst-type. */
+export function markerPrefix(type: LineMarkerType): string {
+  if (type === 'check') return '✓ ';
+  if (type === 'cross') return '✗ ';
+  return '- ';
+}
+
+function lineMarkerType(line: string): LineMarkerType | null {
+  const t = line.trim();
+  if (CHECK_MARKER.test(t)) return 'check';
+  if (CROSS_MARKER.test(t)) return 'cross';
+  if (BULLET_MARKER.test(t)) return 'bullet';
+  return null;
+}
+
+function isMarkedLine(line: string): boolean {
+  return ANY_MARKER.test(line.trim());
+}
 
 function splitLines(value: string): string[] {
   return value.replace(/\r\n/g, '\n').split('\n');
@@ -77,30 +105,48 @@ export function parseBullets(value: string): ParsedBullets {
 }
 
 /**
- * Add a `- ` marker to every non-empty line that lacks one. Used by the grid
- * "bullet list" toggle to convert a plain cell into a bullet list. Idempotent
- * on lines that already carry a marker.
+ * Lijst-type van de cel voor de menu-state: het type van de eerste
+ * gemarkeerde regel, of null wanneer geen enkele regel een marker draagt.
  */
-export function addBulletMarkers(value: string): string {
+export function cellMarkerType(value: string): LineMarkerType | null {
+  const lines = splitLines(value);
+  for (let i = 0; i < lines.length; i++) {
+    const type = lineMarkerType(lines[i]);
+    if (type !== null) return type;
+  }
+  return null;
+}
+
+/**
+ * Zet elke niet-lege regel op het gegeven lijst-type: bestaande markers
+ * (van welk type dan ook) worden vervangen, ongemarkeerde regels krijgen
+ * het voorvoegsel erbij. Zo is bullet→vinkje één menu-actie i.p.v.
+ * strippen + opnieuw toevoegen.
+ */
+export function setLineMarkers(value: string, type: LineMarkerType): string {
+  const prefix = markerPrefix(type);
   const lines = splitLines(value);
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
-    if (line.trim() === '' || isBulletLine(line)) {
+    if (line.trim() === '') {
       out.push(line);
+    } else if (isMarkedLine(line)) {
+      out.push(prefix + line.trim().replace(ANY_MARKER, ''));
     } else {
-      out.push(CONTINUE_MARKER + line);
+      out.push(prefix + line);
     }
   }
   return out.join('\n');
 }
 
-/** Strip every per-line bullet marker (used by the toggle to un-bullet). */
+/** Strip elke per-regel marker, ongeacht type (menu-actie "verwijderen"). */
 export function stripBulletMarkers(value: string): string {
   const lines = splitLines(value);
   const out: string[] = [];
   for (let i = 0; i < lines.length; i++) {
-    out.push(isBulletLine(lines[i]) ? lines[i].replace(BULLET_MARKER, '') : lines[i]);
+    const line = lines[i];
+    out.push(isMarkedLine(line) ? line.trim().replace(ANY_MARKER, '') : line);
   }
   return out.join('\n');
 }
@@ -111,17 +157,18 @@ export interface BulletEnterResult {
 }
 
 /**
- * Apple-Notes Enter behavior inside a bullet line, computed purely from the
- * value + caret. Returns the new value/caret, or null when Enter should fall
- * through to a normal newline (caller does nothing special).
+ * Apple-Notes Enter behavior inside a marked line (bullet, vinkje of
+ * kruisje), computed purely from the value + caret. Returns the new
+ * value/caret, or null when Enter should fall through to a normal newline
+ * (caller does nothing special).
  *
  * Rules:
- * - Caret on a marker-only / empty bullet line → EXIT: drop the marker so the
- *   line becomes plain and empty; caret stays at the line start. The next Enter
- *   is then a normal newline.
- * - Caret on a bullet line with content → CONTINUE: insert a newline + a fresh
- *   `- ` marker at the caret.
- * - Caret not on a bullet line → null (normal newline / plain prose).
+ * - Caret on a marker-only / empty marked line → EXIT: drop the marker so
+ *   the line becomes plain and empty; caret stays at the line start. The
+ *   next Enter is then a normal newline.
+ * - Caret on a marked line with content → CONTINUE: insert a newline + a
+ *   fresh marker of the SAME type at the caret.
+ * - Caret not on a marked line → null (normal newline / plain prose).
  */
 export function bulletEnter(value: string, caret: number): BulletEnterResult | null {
   const safeCaret = caret < 0 ? 0 : caret > value.length ? value.length : caret;
@@ -130,16 +177,17 @@ export function bulletEnter(value: string, caret: number): BulletEnterResult | n
   const lineEnd = lineEndRaw === -1 ? value.length : lineEndRaw;
   const line = value.slice(lineStart, lineEnd);
 
-  if (!isBulletLine(line)) return null;
+  const markerType = lineMarkerType(line);
+  if (markerType === null) return null;
 
-  const afterMarker = line.replace(BULLET_MARKER, '');
+  const afterMarker = line.trim().replace(ANY_MARKER, '');
   if (afterMarker.trim() === '') {
-    // Empty bullet → exit: drop the marker, leaving a plain empty line.
+    // Empty marker line → exit: drop the marker, leaving a plain empty line.
     const next = value.slice(0, lineStart) + value.slice(lineEnd);
     return { value: next, caret: lineStart };
   }
 
-  const insert = '\n' + CONTINUE_MARKER;
+  const insert = '\n' + markerPrefix(markerType);
   const next = value.slice(0, safeCaret) + insert + value.slice(safeCaret);
   return { value: next, caret: safeCaret + insert.length };
 }

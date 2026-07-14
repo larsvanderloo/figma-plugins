@@ -36,6 +36,14 @@ const emit = defineEmits<{
   'cell-edit': [row: number, col: number, value: string];
   'cell-style': [row: number, col: number, emphasis: boolean];
   'cell-delta': [row: number, col: number, value: string];
+  'cell-check': [row: number, col: number, state: boolean | null];
+  'cell-badge': [row: number, col: number, value: string];
+  'row-emphasis': [row: number, on: boolean];
+  'column-emphasis': [col: number, on: boolean];
+  'row-check': [row: number, state: boolean | null];
+  'column-check': [col: number, state: boolean | null];
+  'row-badge': [row: number, on: boolean];
+  'column-badge': [col: number, on: boolean];
   'column-calculation': [col: number, calculation: TableColumnCalculationSetting];
   'column-calculation-emphasis': [col: number, emphasis: boolean];
   'column-calculation-currency': [col: number, currency: boolean];
@@ -166,7 +174,7 @@ function cellTextareaUi(row: number, col: number): { root: string; base: string 
   const emphasized = isCellEmphasized(row, col);
   const isHeaderRow = props.hasColumnHeader && row === 0;
   return {
-    root: 'w-full',
+    root: 'min-w-0 flex-1',
     base:
       'block min-h-9 w-full resize-none rounded-none border-0 bg-transparent px-2 py-1.5 pr-8 leading-5 text-default outline-none ring-0 placeholder:text-dimmed focus:bg-transparent focus:ring-0 focus-visible:outline-none ' +
       // Koprij iets groter + semibold (mirror van Instrument Sans SemiBold 20 op canvas).
@@ -191,6 +199,37 @@ function cellDeltaValue(row: number, col: number): string {
 }
 function updateCellDelta(value: unknown, row: number, col: number): void {
   emit('cell-delta', row, col, String(value ?? ''));
+}
+
+// Vinkje: tri-state (aangevinkt / uitgevinkt / geen). De toggle-knop in de
+// cel wisselt alleen tussen aan/uit; aan- en uitzetten van het vinkje zelf
+// loopt via het cel/rij/kolom-menu.
+function cellCheckState(row: number, col: number): boolean | null {
+  const cell = props.rows[row]?.cells[col];
+  if (cell === undefined) return null;
+  return cell.check === true ? true : cell.check === false ? false : null;
+}
+function toggleCellCheck(row: number, col: number): void {
+  const current = cellCheckState(row, col);
+  if (current === null) return;
+  emit('cell-check', row, col, !current);
+}
+
+// Badge: vrije tekst (nummers of woorden), zelfde presence-model als delta —
+// niet-lege string = badge, leegmaken van de input verwijdert hem.
+function cellBadgeValue(row: number, col: number): string {
+  const cell = props.rows[row]?.cells[col];
+  return cell !== undefined && typeof cell.badge === 'string' ? cell.badge : '';
+}
+function updateCellBadge(value: unknown, row: number, col: number): void {
+  emit('cell-badge', row, col, String(value ?? ''));
+}
+// Chip-gevoel: de badge-input hugt zijn inhoud (ch-breedte, geklemd) in
+// plaats van een vaste smalle kolom — vrije tekst paste daar niet in.
+function badgeInputStyle(row: number, col: number): Record<string, string> {
+  const len = cellBadgeValue(row, col).length;
+  const ch = Math.min(Math.max(len + 1, 3), 18);
+  return { width: 'calc(' + String(ch) + 'ch + 1.25rem)' };
 }
 
 function setColumnLabel(col: number, label: string): void {
@@ -306,7 +345,19 @@ const footerLabelUi = {
             @focusout="(event: FocusEvent) => clearActiveCellFromFocus(event, rowIdx, colIdx)"
             @pointerdown="(event: PointerEvent) => onCellPointerDown(event, rowIdx, colIdx)"
           >
-            <div class="relative">
+            <div class="relative flex items-start">
+              <UButton
+                v-if="isBodyCell(rowIdx) && cellCheckState(rowIdx, colIdx) !== null"
+                color="neutral"
+                variant="ghost"
+                size="xs"
+                square
+                :icon="cellCheckState(rowIdx, colIdx) === true ? 'i-lucide-circle-check' : 'i-lucide-circle'"
+                class="ml-1 mt-1 shrink-0"
+                :aria-label="(cellCheckState(rowIdx, colIdx) === true ? 'Uitvinken: ' : 'Aanvinken: ') + cellLabel(rowIdx, colIdx)"
+                :title="cellCheckState(rowIdx, colIdx) === true ? 'Uitvinken' : 'Aanvinken'"
+                @click.stop="toggleCellCheck(rowIdx, colIdx)"
+              />
               <UTextarea
                 :ref="(el) => setInputRef(el, rowIdx, colIdx)"
                 :model-value="cell.value"
@@ -323,6 +374,19 @@ const footerLabelUi = {
                 wrap="soft"
                 @update:model-value="(value: string) => updateCellValue(value, rowIdx, colIdx)"
                 @keydown="(event: KeyboardEvent) => onKeydown(event, rowIdx, colIdx)"
+              />
+              <UInput
+                v-if="isBodyCell(rowIdx) && cellBadgeValue(rowIdx, colIdx) !== ''"
+                :model-value="cellBadgeValue(rowIdx, colIdx)"
+                placeholder="#"
+                size="xs"
+                variant="soft"
+                color="neutral"
+                class="mr-7 mt-1 shrink-0"
+                :style="badgeInputStyle(rowIdx, colIdx)"
+                :ui="{ base: 'rounded-full px-2 py-0.5 text-center text-xs text-dimmed' }"
+                :aria-label="'Badge voor ' + cellLabel(rowIdx, colIdx)"
+                @update:model-value="(value: string | number) => updateCellBadge(value, rowIdx, colIdx)"
               />
               <UDropdownMenu
                 :items="cellMenuItems(rowIdx, colIdx)"
