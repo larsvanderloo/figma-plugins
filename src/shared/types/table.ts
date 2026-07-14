@@ -78,6 +78,18 @@ export interface TableCellModel {
    * chart-delta-badge); leeg/undefined → geen badge. Body-cellen alleen.
    */
   delta?: string;
+  /**
+   * Per-cell vinkje links van de waarde: true = aangevinkt (lucide
+   * circle-check), false = uitgevinkt (lucide circle). Undefined → geen
+   * vinkje. Body-cellen alleen.
+   */
+  check?: boolean;
+  /**
+   * Per-cell badge — chip rechts van de waarde op de waarderegel (zelfde
+   * Badge-clone als de delta, zonder richtingpijl). Vrije tekst: nummers
+   * én woorden. Leeg/undefined → geen badge. Body-cellen alleen.
+   */
+  badge?: string;
 }
 
 export type TableColumnCalculation = 'sum';
