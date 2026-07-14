@@ -67,21 +67,28 @@ async function runUpdateTable(
     });
     return;
   }
-  figma.commitUndo();
+  // Settle-pass (msg.settle): reconciliatie-render ná een typ-burst, geen
+  // user-actie — geen nieuwe undo-stap, zodat cmd+Z direct de edit zelf
+  // terugdraait i.p.v. eerst een visueel identieke rebuild.
+  if (!msg.settle) figma.commitUndo();
   // Fast-path: when only cell text changed (structure intact — the common case
   // while typing), write text in place and skip the full clear+rebuild. Fonts
   // must be loaded first because setting `.characters` on existing nodes needs
   // their fonts available. Falls back to the full PUT on any structural change.
+  // A settle-pass skips the fast path on purpose: its whole point is the full
+  // render (font-fit + column-autofit + padding) that in-place writes defer.
   await Promise.all([
     figma.loadFontAsync({ family: 'Inter', style: 'Regular' }),
     figma.loadFontAsync({ family: 'Inter', style: 'Medium' }),
     figma.loadFontAsync({ family: 'Instrument Sans', style: 'SemiBold' }),
   ]);
   let appliedInPlace = false;
-  try {
-    appliedInPlace = applyTableTextOnly(slotNode as SlotNode, msg.desired);
-  } catch (_e) {
-    appliedInPlace = false;
+  if (msg.settle !== true) {
+    try {
+      appliedInPlace = applyTableTextOnly(slotNode as SlotNode, msg.desired);
+    } catch (_e) {
+      appliedInPlace = false;
+    }
   }
   // Fast-path edits never overflow (they bail to full render on any row-height
   // change); only the full applyTable() reports the overflow-at-min-font state.

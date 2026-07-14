@@ -1,6 +1,6 @@
 // useTableEditor — binds the Graphs → Table instance(s) to the store + bridge.
 
-import { computed, reactive, ref } from 'vue';
+import { computed, onUnmounted, reactive, ref } from 'vue';
 import { debugLog } from '../../shared/debug';
 import {
   columnCalculationsEqual,
@@ -117,6 +117,47 @@ export function useTableEditor() {
     overflow.value = msg.ok === true && msg.tableOverflow === true;
   });
 
+  // Settle-pass: de sandbox-fast-path schrijft tijdens het typen alleen tekst
+  // in place en stelt font-fit/kolom-autofit/padding uit. Eén full render
+  // reconcilieert die drift — getriggerd op BLUR (focus verlaat de invoer),
+  // niet op een idle-timer: een timer vuurt midden in natuurlijke typ-pauzes
+  // en de ~215ms render botst dan met de volgende aanslag (voelt traag).
+  // Zolang je in de cel zit verspringt er dus niets; zodra je 'm verlaat
+  // reconcilieert de tabel één keer. Geen tracker.register(): dit is
+  // achtergrond-reconciliatie, geen user-actie.
+  let settleArmed = false;
+  let settleFlushTimer: ReturnType<typeof setTimeout> | null = null;
+  function fireSettle(): void {
+    settleFlushTimer = null;
+    if (!settleArmed) return;
+    const slideId = view.state.currentSlideId;
+    const inst = selected.value;
+    if (slideId === null || inst === null || inst.tableModel === null) return;
+    settleArmed = false;
+    bridge.post({
+      type: 'update-table',
+      slideId: slideId,
+      slotId: inst.tableModel.slotId,
+      desired: inst.tableModel,
+      settle: true,
+    });
+  }
+  function onGridFocusOut(event: FocusEvent): void {
+    if (!settleArmed) return;
+    // Focus schuift naar een ander invoerveld → nog aan het editen; wachten.
+    const next = event.relatedTarget;
+    if (next instanceof HTMLElement && next.closest('textarea, input') !== null) return;
+    // 250ms uitstel zodat de 200ms-debounce van de grid-emit eerst flusht en
+    // de settle het ACTUELE model rendert i.p.v. de vorige toetsaanslag.
+    if (settleFlushTimer !== null) clearTimeout(settleFlushTimer);
+    settleFlushTimer = setTimeout(fireSettle, 250);
+  }
+  document.addEventListener('focusout', onGridFocusOut);
+  onUnmounted(() => {
+    document.removeEventListener('focusout', onGridFocusOut);
+    if (settleFlushTimer !== null) clearTimeout(settleFlushTimer);
+  });
+
   function update(next: TableWrapModel): void {
     const slideId = view.state.currentSlideId;
     const inst = selected.value;
@@ -140,6 +181,9 @@ export function useTableEditor() {
       slotId: next.slotId,
       desired: next,
     });
+    // Er is nu (mogelijk fast-path-)drift; de eerstvolgende grid-blur rendert
+    // één keer full om te reconciliëren.
+    settleArmed = true;
   }
 
   function importCsv(csv: string): void {

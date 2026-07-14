@@ -108,6 +108,13 @@ export type UIToPluginMessage =
       slideId: string;
       slotId: string;
       desired: TableWrapModel;
+      /**
+       * Settle-pass: true → sla de in-place fast-path over en render full,
+       * zodat font-fit/kolom-autofit/padding reconciliëren met de tekst-edits
+       * die de fast-path onderweg oversloeg. De UI stuurt dit één keer nadat
+       * het typen ~1s idle is; géén nieuwe undo-stap (merge't met de edit).
+       */
+      settle?: boolean;
     }
   | {
       /**
