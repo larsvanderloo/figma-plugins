@@ -156,21 +156,53 @@ watch(
   (next) => hydrateDimWords(next),
 );
 
+// Herpositioneer accent-ranges over een tekst-edit heen in plaats van ze
+// te wissen (het oude gedrag — per blur nauwelijks zichtbaar, maar met
+// live typing verdween elke nadruk al bij het bijtypen van een woord).
+// Prefix/suffix-diff: ranges vóór de edit blijven staan, ranges erna
+// schuiven met het lengteverschil mee; alleen een range die de bewerkte
+// regio zelf raakt vervalt — dat woord is dan wezenlijk veranderd.
+function remapDimRanges(
+  oldText: string,
+  newText: string,
+  ranges: Array<[number, number]>,
+): Array<[number, number]> {
+  if (ranges.length === 0 || oldText === newText) return ranges;
+  const oldLen = oldText.length;
+  const newLen = newText.length;
+  const minLen = Math.min(oldLen, newLen);
+  let prefix = 0;
+  while (prefix < minLen && oldText[prefix] === newText[prefix]) prefix++;
+  let suffix = 0;
+  while (
+    suffix < minLen - prefix &&
+    oldText[oldLen - 1 - suffix] === newText[newLen - 1 - suffix]
+  ) {
+    suffix++;
+  }
+  const oldChangeEnd = oldLen - suffix;
+  const delta = newLen - oldLen;
+  const out: Array<[number, number]> = [];
+  for (const [start, end] of ranges) {
+    if (end <= prefix) out.push([start, end]);
+    else if (start >= oldChangeEnd) out.push([start + delta, end + delta]);
+  }
+  return out;
+}
+
 function onHeadingCommit(value: string): void {
   headingLive.cancel();
   if (td.model === null) return;
-  const headingChangedLength = value.length !== td.model.heading.length;
   td.update({
     heading: value,
     paragraph: td.model.paragraph,
     headingVisible: td.model.headingVisible,
     paragraphVisible: td.model.paragraphVisible,
-    headingDim: headingChangedLength ? [] : td.model.headingDim,
+    headingDim: remapDimRanges(td.model.heading, value, td.model.headingDim ?? []),
     size: td.model.size,
   });
-  if (headingChangedLength && dimWords.value.size > 0) {
-    dimWords.value = new Set();
-  }
+  // Geen dimWords-wipe meer: de headingDim-watch hydrateert de chips
+  // opnieuw zodra de (geremapte) ranges in de store landen.
 }
 
 function onParagraphCommit(value: string): void {

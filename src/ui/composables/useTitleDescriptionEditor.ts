@@ -49,12 +49,23 @@ export function useTitleDescriptionEditor() {
     const td = view.state.general?.titleDescription;
     if (slideId === null || td === null || td === undefined) return;
 
+    const headingChanged = next.heading !== td.heading;
     const nextHeadingDim =
       td.headingDim !== null &&
       next.headingDim !== null &&
       !rangesEqual(td.headingDim, next.headingDim)
         ? next.headingDim
         : null;
+    // Een characters-write verstoort de range-fills op het canvas, dus bij
+    // een gewijzigde heading moeten de (geremapte) ranges ALTIJD mee in de
+    // payload zodat de sandbox ze ná de write opnieuw aanbrengt — ook
+    // wanneer de ranges zelf identiek bleven (bv. woord achteraan erbij).
+    const dimForPayload =
+      nextHeadingDim !== null
+        ? nextHeadingDim
+        : headingChanged && next.headingDim !== null && next.headingDim.length > 0
+          ? next.headingDim
+          : null;
 
     // Live typing flushes through this same path on every pause, so the
     // trailing blur/unmount commit often carries exactly the store values.
@@ -94,7 +105,7 @@ export function useTitleDescriptionEditor() {
       payload: {
         heading: next.heading,
         paragraph: next.paragraph === null ? undefined : next.paragraph,
-        headingDim: nextHeadingDim === null ? undefined : nextHeadingDim,
+        headingDim: dimForPayload === null ? undefined : dimForPayload,
       },
     });
   }
