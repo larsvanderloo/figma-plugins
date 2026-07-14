@@ -19,7 +19,35 @@ import { findVisibleTextNodeByName, resolveTypHeadingSizeHost } from '../scan/re
 import { refreshTablesOnSlide, refreshChartsOnSlide } from '../scan/graphs';
 import type { UIToPluginMessage } from '../../shared/types';
 
-export async function handleUpdateGeneral(
+// Alleen update-general loopt door deze ketting: live titel-typen post
+// per ~200ms en de refreshTables/ChartsOnSlide daarin doet een
+// clear+rebuild die met de volgende burst kan interleaven (main.ts
+// dispatcht fire-and-forget). De overige handlers hier zijn discrete
+// klik-acties (toggle/variant) die zichzelf niet in bursts opvolgen, en
+// accent-writes moeten juist NIET achter een trage tabel-refresh
+// wachten — die blijven dus buiten de ketting.
+let queue: Promise<void> = Promise.resolve();
+
+function noop(): void {}
+
+function enqueue(work: () => Promise<void>): Promise<void> {
+  const run = queue.then(work);
+  // Een rejection mag de ketting niet vergiftigen — de volgende apply
+  // moet gewoon starten. De caller ziet de rejection alsnog via `run`
+  // (main.ts post daarop de error-ack).
+  queue = run.then(noop, noop);
+  return run;
+}
+
+export function handleUpdateGeneral(
+  msg: Extract<UIToPluginMessage, { type: 'update-general' }>,
+): Promise<void> {
+  return enqueue(function () {
+    return runUpdateGeneral(msg);
+  });
+}
+
+async function runUpdateGeneral(
   msg: Extract<UIToPluginMessage, { type: 'update-general' }>,
 ): Promise<void> {
   const slide = await findSlideById(msg.slideId);

@@ -8,8 +8,9 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { postToUI } from '../bridge';
-import { findSlideAncestor } from '../slides';
+import { markSelfWrite, postToUI } from '../bridge';
+import { findSlideAncestor, summaryForSlide } from '../slides';
+import { scanSlide } from '../scan/slide-scan';
 import { findCardWrap } from '../slide-machine';
 import { applyImage } from '../editors/general/image';
 import { applyCardVisual } from '../editors/content/card';
@@ -50,6 +51,12 @@ export async function handleUploadImage(
     cardWrap !== null && targetParent !== null && targetParent.id === cardWrap.id;
 
   figma.commitUndo();
+  // Mark vóór én na de mutatie (patroon: handleUpdateGeneral in
+  // general.ts): de fill-write triggert documentchange → 200ms-debounce
+  // van postSlideContent → volledige re-scan + store-replace in de
+  // iframe. Die route is hier overbodig — de expliciete scan+post
+  // onderaan dekt wat de store van de re-scan nodig heeft.
+  markSelfWrite();
 
   if (isCardChild) {
     const newHash = await applyCardVisual(slide, msg.targetNodeId, msg.bytes);
@@ -61,6 +68,7 @@ export async function handleUploadImage(
       });
       return;
     }
+    markSelfWrite();
     // Refresh thumbnail in iframe immediately — bytes are already in
     // scope (the user just uploaded them), so no getBytesAsync round-
     // trip. fillW/fillH come from the card's visual slot for aspect-
@@ -90,6 +98,7 @@ export async function handleUploadImage(
       ok: true,
       targetId: msg.targetNodeId,
     });
+    await postSlideLoadedAfterUpload(slide);
     return;
   }
 
@@ -102,6 +111,7 @@ export async function handleUploadImage(
     });
     return;
   }
+  markSelfWrite();
 
   // Refresh thumbnail in UI immediately — no need for getBytesAsync, we
   // already have the bytes that were just uploaded (FIG-ASYNC-01 compliant:
@@ -139,5 +149,32 @@ export async function handleUploadImage(
     ok: true,
     targetId: msg.targetNodeId,
   });
+  await postSlideLoadedAfterUpload(slide);
   return;
+}
+
+/**
+ * Re-sync de iframe-store na een upload. De documentchange-route is
+ * onderdrukt door markSelfWrite(), maar de preview-posts hierboven
+ * dekken alleen de thumbnail-bytes — de store-velden imageHash
+ * (General → Image: statuslabel + "Uploaden"/"Vervangen"-knop) en
+ * visualHash (CardItemEditor, idem) komen uitsluitend via slide-loaded
+ * binnen. Zonder deze post blijft een eerste upload in een leeg slot
+ * op "Nog geen afbeelding" staan. Eén expliciete scan i.p.v. de
+ * ongecontroleerde debounced re-scan — zelfde patroon als
+ * handleImportCsv in handlers/table.ts.
+ */
+async function postSlideLoadedAfterUpload(slide: InstanceNode): Promise<void> {
+  try {
+    const scan = await scanSlide(slide);
+    postToUI({
+      type: 'slide-loaded',
+      summary: summaryForSlide(slide),
+      general: scan.general,
+      content: scan.content,
+      graphs: scan.graphs,
+    });
+  } catch (err) {
+    console.log('[welder-slide-editor] post-upload scanSlide failed:', err);
+  }
 }

@@ -159,12 +159,27 @@ export async function handleUpdateTimelineItem(
     return;
   }
   figma.commitUndo();
+  // Mark vóór én na apply (patroon: handleUpdateGeneral in general.ts).
+  // De writes hieronder triggeren documentchange-events die de 200ms-
+  // debounce van postSlideContent armen; duurt apply langer dan 200ms
+  // (font-loads + auto-layout-reflow), dan vuurt de re-scan vóór apply
+  // klaar is en clobbert de slide-loaded-post in-progress typing in de
+  // iframe. Pre-apply opent de suppress-window vroeg; post-apply
+  // verlengt 'm voorbij de laatste write.
+  markSelfWrite();
   if (typeof msg.payload.heading === 'string') {
     const headingNode = copyWrap.findOne((n: SceneNode) => {
       return n.type === 'TEXT' && n.name === 'Heading';
     });
     if (headingNode !== null && headingNode.type === 'TEXT') {
-      await setTextCharactersSafe(headingNode as TextNode, msg.payload.heading);
+      const headingText = headingNode as TextNode;
+      // No-op-skip per veld (patroon: applyCard in editors/content/card.ts):
+      // de iframe stuurt heading én paragraph samen per typepauze, ook als
+      // maar één veld wijzigde. Alleen schrijven bij echt verschil bespaart
+      // de font-load + write op het ongewijzigde veld.
+      if (headingText.characters !== msg.payload.heading) {
+        await setTextCharactersSafe(headingText, msg.payload.heading);
+      }
     }
   }
   if (typeof msg.payload.paragraph === 'string') {
@@ -172,9 +187,13 @@ export async function handleUpdateTimelineItem(
       return n.type === 'TEXT' && n.name === 'Paragraph';
     });
     if (paragraphNode !== null && paragraphNode.type === 'TEXT') {
-      await setTextCharactersSafe(paragraphNode as TextNode, msg.payload.paragraph);
+      const paragraphText = paragraphNode as TextNode;
+      if (paragraphText.characters !== msg.payload.paragraph) {
+        await setTextCharactersSafe(paragraphText, msg.payload.paragraph);
+      }
     }
   }
+  markSelfWrite();
   postToUI({
     type: 'target-updated',
     ok: true,
