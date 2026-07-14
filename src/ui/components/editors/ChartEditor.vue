@@ -216,8 +216,11 @@ function setProgressMax(raw: string | number): void {
 }
 
 // Transponeren (Datawrapper/Flourish-conventie: expliciete actie,
-// nooit stille auto-rotatie): categorieën ↔ series wisselen. Reset
-// nadruk/overrides — rij-identiteit verandert.
+// nooit stille auto-rotatie): categorieën ↔ series wisselen. Cel-nadruk
+// hoort bij een waarde en transponeert dus mee met de waardenmatrix.
+// Rij/kolom-vlaggen resetten bewust — categorie-nadruk, delta-overrides
+// én procent-per-serie hebben geen coherente plek meer nadat series
+// categorieën worden (en vice versa).
 const canTranspose = computed<boolean>(
   () =>
     local.value.categories.length <= CHART_MAX_SERIES &&
@@ -227,13 +230,23 @@ const canTranspose = computed<boolean>(
 function transpose(): void {
   if (!canTranspose.value) return;
   const oldCategories = local.value.categories.slice();
-  const oldSeries = local.value.series.map((sr) => ({ name: sr.name, values: sr.values.slice() }));
+  const oldSeries = local.value.series.map((sr) => ({
+    name: sr.name,
+    values: sr.values.slice(),
+    emphasis: sr.emphasis !== undefined ? sr.emphasis.slice() : undefined,
+  }));
+  const anyEmphasis = oldSeries.some((sr) => sr.emphasis !== undefined);
   local.value.categories = oldSeries.map((sr, idx) =>
     sr.name !== '' ? sr.name : 'Categorie ' + String(idx + 1),
   );
   local.value.series = oldCategories.map((cat, i) => ({
     name: cat !== '' ? cat : 'Serie ' + String(i + 1),
     values: oldSeries.map((sr) => sr.values[i]),
+    // Cel (serie s, categorie i) wordt cel (serie i, categorie s):
+    // dezelfde transpositie als de waarden zelf.
+    emphasis: anyEmphasis
+      ? oldSeries.map((sr) => sr.emphasis !== undefined && sr.emphasis[i] === true)
+      : undefined,
   }));
   local.value.categoryEmphasis = undefined;
   local.value.deltaOverrides = undefined;

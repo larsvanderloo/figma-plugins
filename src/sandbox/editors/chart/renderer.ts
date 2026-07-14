@@ -115,9 +115,12 @@ const CHART_FALLBACK_ASPECT = 759 / 1728;
 /**
  * Full-state PUT: clear alle Slot-children en bouw opnieuw uit
  * `desired`. Persisteert het genormaliseerde model als pluginData
- * (source of truth voor de volgende scan).
+ * (source of truth voor de volgende scan). Retourneert false wanneer
+ * de library-vars ontbreken en de rebuild is overgeslagen: dan wordt
+ * er niets gecleard én niets gepersisteerd, zodat canvas en
+ * pluginData consistent de oude staat houden.
  */
-export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promise<void> {
+export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promise<boolean> {
   await Promise.all([
     figma.loadFontAsync({ family: 'Inter', style: 'Regular' }),
     figma.loadFontAsync({ family: 'Inter', style: 'Medium' }),
@@ -125,6 +128,15 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
   ]);
   const vars = await loadAccentVars();
   const model = normalizeChartModel(desired);
+
+  // Vars éérst resolven, vóór het clearen: zonder Text/Dimmer valt er
+  // geen kaart te bouwen, en een clear zou de slot leeg achterlaten
+  // terwijl pluginData al het nieuwe model claimt. Abort hier met de
+  // oude canvas intact.
+  if (vars.text === null || vars.dimmer === null) {
+    console.log('[welder-slide-editor] applyChart: library-vars missing, skipping rebuild');
+    return false;
+  }
 
   // Clear bestaande children (toegestaan binnen SlotNode).
   const snapshot: SceneNode[] = [];
@@ -137,137 +149,136 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
     }
   }
 
-  if (vars.text !== null && vars.dimmer !== null) {
-    // MCP-geverifieerd (2026-06-12): resolveForConsumer op de Slot/kaart
-    // resolved in de DEFAULT-mode van de Theme-collectie, niet in de mode
-    // van de slide (gebonden paints volgen de slide-mode wél). Resolve
-    // daarom tegen de omsluitende Slide-INSTANCE; fallback = orange-mode
-    // accent (#ff7700).
-    const modeContext = findSlideAncestor(slot);
-    const dimmerRGB = await resolveColorInNodeMode(vars.dimmer, modeContext, TEXT_DIMMER_RGB);
-    const accentRGB = await resolveColorInNodeMode(vars.text, modeContext, {
-      r: 1,
-      g: 0.467,
-      b: 0,
-    });
-    // Kaart-paint één keer bouwen: hergebruikt voor de kaart-fill én als
-    // segment-separator-stroke in de donut/pie.
-    const cardPaint = figma.variables.setBoundVariableForPaint(
-      { type: 'SOLID', color: accentRGB },
-      'color',
-      vars.text,
-    ) as SolidPaint;
-    const card = buildChartCard(cardPaint);
-    slot.appendChild(card);
+  // MCP-geverifieerd (2026-06-12): resolveForConsumer op de Slot/kaart
+  // resolved in de DEFAULT-mode van de Theme-collectie, niet in de mode
+  // van de slide (gebonden paints volgen de slide-mode wél). Resolve
+  // daarom tegen de omsluitende Slide-INSTANCE; fallback = orange-mode
+  // accent (#ff7700).
+  const modeContext = findSlideAncestor(slot);
+  const dimmerRGB = await resolveColorInNodeMode(vars.dimmer, modeContext, TEXT_DIMMER_RGB);
+  const accentRGB = await resolveColorInNodeMode(vars.text, modeContext, {
+    r: 1,
+    g: 0.467,
+    b: 0,
+  });
+  // Kaart-paint één keer bouwen: hergebruikt voor de kaart-fill én als
+  // segment-separator-stroke in de donut/pie.
+  const cardPaint = figma.variables.setBoundVariableForPaint(
+    { type: 'SOLID', color: accentRGB },
+    'color',
+    vars.text,
+  ) as SolidPaint;
+  const card = buildChartCard(cardPaint);
+  slot.appendChild(card);
 
-    // Pin de kaart op (0,0) binnen de Slot. Een auto-layout-Slot (met
-    // padding) plaatst appended children anders op (padX,padY) terwijl de
-    // kaart full-slot gesized wordt → overflow rechts/onder. ABSOLUTE haalt
-    // de kaart uit de slot-layout; x/y=0 dekt ook layout-NONE slots.
-    try {
-      if (slot.layoutMode !== 'NONE') {
-        card.layoutPositioning = 'ABSOLUTE';
-      }
-    } catch (_e) {
-      /* silent — parent zonder auto-layout accepteert geen ABSOLUTE */
+  // Pin de kaart op (0,0) binnen de Slot. Een auto-layout-Slot (met
+  // padding) plaatst appended children anders op (padX,padY) terwijl de
+  // kaart full-slot gesized wordt → overflow rechts/onder. ABSOLUTE haalt
+  // de kaart uit de slot-layout; x/y=0 dekt ook layout-NONE slots.
+  try {
+    if (slot.layoutMode !== 'NONE') {
+      card.layoutPositioning = 'ABSOLUTE';
     }
-    card.x = 0;
-    card.y = 0;
-    // Content op de accent-kaart is licht: bind aan de `Background`-
-    // variable (gevonden via de slide-fill-binding), fallback cream.
-    const backgroundVar = await findBackgroundVariable(modeContext);
-    const lightRGB =
-      backgroundVar !== null
-        ? await resolveColorInNodeMode(backgroundVar, modeContext, { r: 1, g: 0.957, b: 0.918 })
-        : { r: 1, g: 0.957, b: 0.918 };
-    const labelVar = backgroundVar !== null ? backgroundVar : vars.dimmer;
-    // De wrap kan een geflipte theme-mode voeren: de kaart-fill
-    // (Text-binding) rendert dan in een ANDERE kleur dan accentRGB op
-    // slide-niveau. Resolve Text in de kaart-mode (de kaart hangt nu in
-    // de tree) en kies als on-card-tekstkleur de variant met het meeste
-    // kanaal-contrast t.o.v. de werkelijke kaartkleur.
-    const cardRGB = await resolveColorInNodeMode(vars.text, card, accentRGB);
-    const distAccent =
-      Math.abs(cardRGB.r - accentRGB.r) +
-      Math.abs(cardRGB.g - accentRGB.g) +
-      Math.abs(cardRGB.b - accentRGB.b);
-    const distLight =
-      Math.abs(cardRGB.r - lightRGB.r) +
-      Math.abs(cardRGB.g - lightRGB.g) +
-      Math.abs(cardRGB.b - lightRGB.b);
-    const onCardRGB = distAccent >= distLight ? accentRGB : lightRGB;
-    const theme: ChartTheme = {
-      textVar: labelVar,
-      dimmerVar: vars.dimmer,
-      textRGB: lightRGB,
-      dimmerRGB: dimmerRGB,
-      accentRGB: accentRGB,
-      onCardRGB: onCardRGB,
-    };
-    // Zelfde als de tabel: SlotNode host geen FILL-children —
-    // expliciete resize naar de actuele slot-afmetingen, zodat de kaart
-    // toekomstige smallere/kortere slot-varianten automatisch volgt.
-    // Surface-preset is alleen fallback voor legacy/invalid slots.
-    const surfaceName = findEnclosingSurfaceName(slot);
-    const fallbackW = tableWidthForSurface(surfaceName, 1);
-    const targetW = slot.width > 0 ? slot.width : fallbackW;
-    const targetH = slot.height > 0 ? slot.height : Math.round(targetW * CHART_FALLBACK_ASPECT);
-    try {
-      card.resize(targetW, targetH);
-    } catch (_e) {
-      /* silent — slot/card kan resize-locked zijn */
-    }
-
-    // Inner padding volledig proportioneel met de kaart (4.5% breedte,
-    // 9% hoogte), met een 16px-floor zodat kleine slot-varianten geen
-    // rand-rakende content krijgen. Bij 800×400: padX=36, padY=36 →
-    // content 728×328.
-    const padX = Math.max(16, Math.round(targetW * 0.045));
-    const padY = Math.max(16, Math.round(targetH * 0.09));
-    const contentW = Math.max(1, targetW - padX * 2);
-    const contentH = Math.max(1, targetH - padY * 2);
-    const labelSize = chartLabelSize(targetH);
-
-    // Donut/pie kleuren per categorie; bar/line/progress per serie —
-    // ramp-lengte volgt de variant met de meeste tinten nodig.
-    const rampCount =
-      model.chartType === 'donut' || model.chartType === 'pie' || model.chartType === 'progress'
-        ? model.categories.length
-        : model.series.length;
-    const ramp = cardRamp(lightRGB, accentRGB, rampCount);
-
-    const deltaCtx = createDeltaContext(modeContext, model, theme, labelSize);
-
-    let content: FrameNode;
-    if (model.chartType === 'donut' || model.chartType === 'pie') {
-      content = buildDonut(model, contentW, contentH, ramp, theme, labelSize, cardPaint, deltaCtx);
-    } else if (model.chartType === 'bar') {
-      content = buildBars(model, contentW, contentH, ramp, theme, labelSize, deltaCtx);
-    } else if (model.chartType === 'progress') {
-      content = buildProgress(model, contentW, contentH, ramp, lightRGB, theme, labelSize, deltaCtx);
-    } else if (model.chartType === 'matrix') {
-      content = buildMatrix(model, contentW, contentH, lightRGB, accentRGB, theme, labelSize);
-    } else {
-      content = buildLine(model, contentW, contentH, ramp, lightRGB, theme, labelSize, deltaCtx);
-    }
-    card.appendChild(content);
-    try {
-      content.layoutSizingHorizontal = 'FIXED';
-      content.layoutSizingVertical = 'FIXED';
-    } catch (_e) {
-      /* silent */
-    }
-
-    debugLog('chart', 'apply', {
-      type: model.chartType,
-      categories: model.categories.length,
-      series: model.series.length,
-      slotW: slot.width,
-      slotH: slot.height,
-    });
-  } else {
-    console.log('[welder-slide-editor] applyChart: library-vars missing, skipping rebuild');
+  } catch (_e) {
+    /* silent — parent zonder auto-layout accepteert geen ABSOLUTE */
+  }
+  card.x = 0;
+  card.y = 0;
+  // Content op de accent-kaart is licht: bind aan de `Background`-
+  // variable (gevonden via de slide-fill-binding), fallback cream.
+  const backgroundVar = await findBackgroundVariable(modeContext);
+  const lightRGB =
+    backgroundVar !== null
+      ? await resolveColorInNodeMode(backgroundVar, modeContext, { r: 1, g: 0.957, b: 0.918 })
+      : { r: 1, g: 0.957, b: 0.918 };
+  const labelVar = backgroundVar !== null ? backgroundVar : vars.dimmer;
+  // De wrap kan een geflipte theme-mode voeren: de kaart-fill
+  // (Text-binding) rendert dan in een ANDERE kleur dan accentRGB op
+  // slide-niveau. Resolve Text in de kaart-mode (de kaart hangt nu in
+  // de tree) en kies als on-card-tekstkleur de variant met het meeste
+  // kanaal-contrast t.o.v. de werkelijke kaartkleur.
+  const cardRGB = await resolveColorInNodeMode(vars.text, card, accentRGB);
+  const distAccent =
+    Math.abs(cardRGB.r - accentRGB.r) +
+    Math.abs(cardRGB.g - accentRGB.g) +
+    Math.abs(cardRGB.b - accentRGB.b);
+  const distLight =
+    Math.abs(cardRGB.r - lightRGB.r) +
+    Math.abs(cardRGB.g - lightRGB.g) +
+    Math.abs(cardRGB.b - lightRGB.b);
+  const onCardRGB = distAccent >= distLight ? accentRGB : lightRGB;
+  const theme: ChartTheme = {
+    textVar: labelVar,
+    dimmerVar: vars.dimmer,
+    textRGB: lightRGB,
+    dimmerRGB: dimmerRGB,
+    accentRGB: accentRGB,
+    onCardRGB: onCardRGB,
+  };
+  // Zelfde als de tabel: SlotNode host geen FILL-children —
+  // expliciete resize naar de actuele slot-afmetingen, zodat de kaart
+  // toekomstige smallere/kortere slot-varianten automatisch volgt.
+  // Surface-preset is alleen fallback voor legacy/invalid slots.
+  const surfaceName = findEnclosingSurfaceName(slot);
+  const fallbackW = tableWidthForSurface(surfaceName, 1);
+  const targetW = slot.width > 0 ? slot.width : fallbackW;
+  const targetH = slot.height > 0 ? slot.height : Math.round(targetW * CHART_FALLBACK_ASPECT);
+  try {
+    card.resize(targetW, targetH);
+  } catch (_e) {
+    /* silent — slot/card kan resize-locked zijn */
   }
 
+  // Inner padding volledig proportioneel met de kaart (4.5% breedte,
+  // 9% hoogte), met een 16px-floor zodat kleine slot-varianten geen
+  // rand-rakende content krijgen. Bij 800×400: padX=36, padY=36 →
+  // content 728×328.
+  const padX = Math.max(16, Math.round(targetW * 0.045));
+  const padY = Math.max(16, Math.round(targetH * 0.09));
+  const contentW = Math.max(1, targetW - padX * 2);
+  const contentH = Math.max(1, targetH - padY * 2);
+  const labelSize = chartLabelSize(targetH);
+
+  // Donut/pie kleuren per categorie; bar/line/progress per serie —
+  // ramp-lengte volgt de variant met de meeste tinten nodig.
+  const rampCount =
+    model.chartType === 'donut' || model.chartType === 'pie' || model.chartType === 'progress'
+      ? model.categories.length
+      : model.series.length;
+  const ramp = cardRamp(lightRGB, accentRGB, rampCount);
+
+  const deltaCtx = createDeltaContext(modeContext, model, theme, labelSize);
+
+  let content: FrameNode;
+  if (model.chartType === 'donut' || model.chartType === 'pie') {
+    content = buildDonut(model, contentW, contentH, ramp, theme, labelSize, cardPaint, deltaCtx);
+  } else if (model.chartType === 'bar') {
+    content = buildBars(model, contentW, contentH, ramp, theme, labelSize, deltaCtx);
+  } else if (model.chartType === 'progress') {
+    content = buildProgress(model, contentW, contentH, ramp, lightRGB, theme, labelSize, deltaCtx);
+  } else if (model.chartType === 'matrix') {
+    content = buildMatrix(model, contentW, contentH, lightRGB, accentRGB, theme, labelSize);
+  } else {
+    content = buildLine(model, contentW, contentH, ramp, lightRGB, theme, labelSize, deltaCtx);
+  }
+  card.appendChild(content);
+  try {
+    content.layoutSizingHorizontal = 'FIXED';
+    content.layoutSizingVertical = 'FIXED';
+  } catch (_e) {
+    /* silent */
+  }
+
+  debugLog('chart', 'apply', {
+    type: model.chartType,
+    categories: model.categories.length,
+    series: model.series.length,
+    slotW: slot.width,
+    slotH: slot.height,
+  });
+
+  // Pas persisteren nu de rebuild daadwerkelijk gebeurd is: pluginData
+  // is de scan-truth en mag geen staat claimen die de canvas niet toont.
   writeChartModel(slot, model);
+  return true;
 }

@@ -68,8 +68,21 @@ async function runUpdateChart(
   // van de slot; een eerder-gedebouncede scan mag niet interleaven met
   // half-verwijderde clone-sublayers.
   markSelfWrite();
-  await applyChart(slotNode as SlotNode, msg.desired);
+  const rebuilt = await applyChart(slotNode as SlotNode, msg.desired);
   markSelfWrite();
+  if (!rebuilt) {
+    // applyChart liet canvas én pluginData onaangeroerd (library-vars
+    // ontbreken). ok:false mét targetId, zodat de UI weet dat de
+    // optimistisch geschreven store en de canvas voor deze slot
+    // uiteenlopen en de duplicate-guard neutraliseert.
+    postToUI({
+      type: 'target-updated',
+      ok: false,
+      targetId: msg.slotId,
+      error: 'Chart library variables missing; rebuild skipped',
+    });
+    return;
+  }
   postToUI({
     type: 'target-updated',
     ok: true,
