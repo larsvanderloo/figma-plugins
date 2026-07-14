@@ -76,6 +76,28 @@ export async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
 async function refreshTableSlot(wrap: InstanceNode): Promise<void> {
   const slot = findSlotInWrap(wrap);
   if (slot === null) return;
+  // Alleen re-renderen wanneer de slot-afmetingen écht zijn veranderd
+  // (zelfde guard als refreshChartSlot): deze refresh draait op elke
+  // CopyWrap-keystroke en applyTable is een full clear+rebuild die
+  // zichtbaar flitst. applyTable bevriest de container op de slot-
+  // afmetingen op apply-moment (resolveTableRenderWidth → slot.width,
+  // resize → slot.height), dus gelijke afgeronde afmetingen = geen
+  // reflow, niets te doen. Geen force-pad zoals bij charts: tabel-
+  // kleuren zijn variable-bound en volgen theme-switches vanzelf.
+  try {
+    if (slot.children.length > 0) {
+      const container = slot.children[0];
+      if (
+        container.name === 'WelderTableContent' &&
+        Math.round(container.width) === Math.round(slot.width) &&
+        Math.round(container.height) === Math.round(slot.height)
+      ) {
+        return;
+      }
+    }
+  } catch (_e) {
+    /* stale node — gewoon doorgaan met re-apply */
+  }
   try {
     const model = scanTableSlot(slot);
     if (model.rows.length === 0) return;
