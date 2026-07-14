@@ -27,6 +27,7 @@ import {
 } from '../_shared/icon-swap';
 import { replaceIconViaSlot } from '../_shared/icon-slot';
 import { findNestedIconInstance, findTextByName } from '../_shared/node-finders';
+import { readBadgeIcon } from '../../scan/readers';
 import { setTextCharactersSafe } from '../_shared/fonts';
 import { debugLog } from '../../../shared/debug';
 
@@ -145,26 +146,51 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
   }
 
   if (typeof payload.icon === 'string' && payload.icon.length > 0) {
-    let handled = false;
-    if (typeof payload.iconSvg === 'string' && payload.iconSvg.length > 0) {
-      handled = replaceIconViaSlot(badge, payload.icon, payload.iconSvg);
-    }
-    if (!handled) {
-      await applyIconSwap(badge, payload.icon);
-    }
-    // Persist the picked icon as plugin data on the Badge instance —
-    // mirrors the Card-side fix. Slot-child overrides do NOT survive
-    // a library-master republish; plugin data does. Scan side reads it
-    // and the iframe auto-reconciles if slot.child.name diverges.
+    const desiredIconKey = normalizeIconKey(payload.icon);
+    // No-op-pre-check (zelfde motivatie als card.ts): de iframe stuurt
+    // bij elke label-commit de VOLLEDIGE payload mee, inclusief icon +
+    // iconSvg — zonder guard betekent elke label-wijziging een volledige
+    // slot-teardown + createNodeFromSvg-rebuild. We vergelijken tegen de
+    // gepersisteerde plugin-data-key ÉN de daadwerkelijke slot-inhoud
+    // (readBadgeIcon, dezelfde reader als de scan): na een library-
+    // republish wist Figma de slot-override terwijl de plugin-data blijft
+    // staan, en dan stuurt de reconcile exact dezelfde key opnieuw — die
+    // re-apply moet WEL doorgaan. Eerste toepassing (nog geen persisted
+    // key) applyt altijd.
+    let appliedIconKey = '';
     try {
-      const desiredIconKey = normalizeIconKey(payload.icon);
-      badge.setSharedPluginData('welder', 'icon', desiredIconKey);
-      debugLog(
-        'badge',
-        'persisted icon="' + desiredIconKey + '" to plugin data on ' + badge.id,
-      );
+      appliedIconKey = badge.getSharedPluginData('welder', 'icon');
     } catch (e) {
-      console.log('[badge] setSharedPluginData failed: ' + String(e));
+      appliedIconKey = '';
+    }
+    const unchanged =
+      typeof appliedIconKey === 'string' &&
+      appliedIconKey.length > 0 &&
+      normalizeIconKey(appliedIconKey) === desiredIconKey &&
+      readBadgeIcon(badge) === desiredIconKey;
+    if (unchanged) {
+      debugLog('badge', 'icon unchanged ("' + desiredIconKey + '") — slot rebuild skipped');
+    } else {
+      let handled = false;
+      if (typeof payload.iconSvg === 'string' && payload.iconSvg.length > 0) {
+        handled = replaceIconViaSlot(badge, payload.icon, payload.iconSvg);
+      }
+      if (!handled) {
+        await applyIconSwap(badge, payload.icon);
+      }
+      // Persist the picked icon as plugin data on the Badge instance —
+      // mirrors the Card-side fix. Slot-child overrides do NOT survive
+      // a library-master republish; plugin data does. Scan side reads it
+      // and the iframe auto-reconciles if slot.child.name diverges.
+      try {
+        badge.setSharedPluginData('welder', 'icon', desiredIconKey);
+        debugLog(
+          'badge',
+          'persisted icon="' + desiredIconKey + '" to plugin data on ' + badge.id,
+        );
+      } catch (e) {
+        console.log('[badge] setSharedPluginData failed: ' + String(e));
+      }
     }
   }
 }

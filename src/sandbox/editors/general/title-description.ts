@@ -39,10 +39,18 @@ export async function applyTitleDescription(
   const copyWrap = findCopyWrap(slide);
   if (copyWrap === null) return;
 
+  // No-op-guards per text-node (zelfde patroon als editors/content/card.ts):
+  // live typing vuurt deze handler elke ~200ms met de volledige payload,
+  // ook wanneer maar één veld wijzigde. Zonder guard betekent dat een
+  // font-load + characters-write per pauze voor BEIDE nodes; met guard
+  // raakt alleen de daadwerkelijk gewijzigde node de canvas. Accent-ranges
+  // blijven buiten de guard — dim kan wijzigen zonder dat de tekst wijzigt.
   if (typeof payload.heading === 'string') {
     const headingNode = findTextByName(copyWrap, 'Heading');
     if (headingNode !== null) {
-      await setTextCharactersSafe(headingNode, payload.heading);
+      if (headingNode.characters !== payload.heading) {
+        await setTextCharactersSafe(headingNode, payload.heading);
+      }
       // Visibility is driven by the explicit `headingVisible` switch
       // (see below). Keep the inner TEXT visible so the CopyWrap toggle
       // never blanks the node itself.
@@ -56,7 +64,9 @@ export async function applyTitleDescription(
   if (typeof payload.paragraph === 'string') {
     const paragraphNode = findTextByName(copyWrap, 'Paragraph');
     if (paragraphNode !== null) {
-      await setTextCharactersSafe(paragraphNode, payload.paragraph);
+      if (paragraphNode.characters !== payload.paragraph) {
+        await setTextCharactersSafe(paragraphNode, payload.paragraph);
+      }
       paragraphNode.visible = true;
     }
   }

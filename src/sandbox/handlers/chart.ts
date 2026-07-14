@@ -14,7 +14,35 @@ import { applyChart } from '../editors/chart/renderer';
 import { importChartCSV } from '../editors/chart/csv';
 import type { UIToPluginMessage } from '../../shared/types';
 
-export async function handleUpdateChart(
+// Applies binnen dit domein serialiseren: main.ts dispatcht handlers
+// fire-and-forget en applyChart await tussen het clearen van de slot en
+// het appenden van de nieuwe kaart. Twee snel opeenvolgende updates
+// (typ-debounce ~200ms) kunnen dan interleaven — in het slechtste geval
+// twee gestapelde kaarten + stale pluginData. De ketting laat elke apply
+// pas starten als de vorige klaar is. Bewust per module, niet globaal:
+// een trage chart-render mag tabel- of accent-writes niet blokkeren.
+let queue: Promise<void> = Promise.resolve();
+
+function noop(): void {}
+
+function enqueue(work: () => Promise<void>): Promise<void> {
+  const run = queue.then(work);
+  // Een rejection mag de ketting niet vergiftigen — de volgende apply
+  // moet gewoon starten. De caller ziet de rejection alsnog via `run`
+  // (main.ts post daarop de error-ack).
+  queue = run.then(noop, noop);
+  return run;
+}
+
+export function handleUpdateChart(
+  msg: Extract<UIToPluginMessage, { type: 'update-chart' }>,
+): Promise<void> {
+  return enqueue(function () {
+    return runUpdateChart(msg);
+  });
+}
+
+async function runUpdateChart(
   msg: Extract<UIToPluginMessage, { type: 'update-chart' }>,
 ): Promise<void> {
   const slide = await findSlideById(msg.slideId);
@@ -40,8 +68,21 @@ export async function handleUpdateChart(
   // van de slot; een eerder-gedebouncede scan mag niet interleaven met
   // half-verwijderde clone-sublayers.
   markSelfWrite();
-  await applyChart(slotNode as SlotNode, msg.desired);
+  const rebuilt = await applyChart(slotNode as SlotNode, msg.desired);
   markSelfWrite();
+  if (!rebuilt) {
+    // applyChart liet canvas én pluginData onaangeroerd (library-vars
+    // ontbreken). ok:false mét targetId, zodat de UI weet dat de
+    // optimistisch geschreven store en de canvas voor deze slot
+    // uiteenlopen en de duplicate-guard neutraliseert.
+    postToUI({
+      type: 'target-updated',
+      ok: false,
+      targetId: msg.slotId,
+      error: 'Chart library variables missing; rebuild skipped',
+    });
+    return;
+  }
   postToUI({
     type: 'target-updated',
     ok: true,
@@ -50,7 +91,15 @@ export async function handleUpdateChart(
   return;
 }
 
-export async function handleImportChartCsv(
+export function handleImportChartCsv(
+  msg: Extract<UIToPluginMessage, { type: 'import-chart-csv' }>,
+): Promise<void> {
+  return enqueue(function () {
+    return runImportChartCsv(msg);
+  });
+}
+
+async function runImportChartCsv(
   msg: Extract<UIToPluginMessage, { type: 'import-chart-csv' }>,
 ): Promise<void> {
   const slide = await findSlideById(msg.slideId);

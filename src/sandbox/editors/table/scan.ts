@@ -127,6 +127,13 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
       const delta = cellFrame.getPluginData('delta');
       const cellModel: TableCellModel = { cellNodeId: cellFrame.id, value: value, emphasis: emphasis };
       if (delta !== '') cellModel.delta = delta;
+      // Vinkje/nummer-badge: zelfde pluginData-round-trip als delta, zodat
+      // een re-apply van het gescande model de cel identiek terugbouwt.
+      const check = cellFrame.getPluginData('check');
+      if (check === '1') cellModel.check = true;
+      else if (check === '0') cellModel.check = false;
+      const numberBadge = cellFrame.getPluginData('badge');
+      if (numberBadge !== '') cellModel.badge = numberBadge;
       cells.push(cellModel);
     }
     rows.push({ rowNodeId: rowFrame.id, cells: cells });

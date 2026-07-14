@@ -47,6 +47,12 @@ function cloneRows(rows: TableRowModel[]): TableRowModel[] {
       if (rows[i].cells[j].emphasis === true) cell.emphasis = true;
       const delta = rows[i].cells[j].delta;
       if (typeof delta === 'string' && delta.trim() !== '') cell.delta = delta;
+      // check/badge horen bij de cel-semantiek: wie hier niet meekopieert,
+      // stript het veld uit elke emit (zelfde valkuil als delta destijds).
+      const check = rows[i].cells[j].check;
+      if (check === true || check === false) cell.check = check;
+      const badge = rows[i].cells[j].badge;
+      if (typeof badge === 'string' && badge.trim() !== '') cell.badge = badge;
       cells.push(cell);
     }
     while (cells.length < maxLen) cells.push({ cellNodeId: '', value: '' });
@@ -83,6 +89,10 @@ function rowsDiffer(a: TableRowModel[], b: TableRowModel[]): boolean {
       const aDelta = typeof a[i].cells[j].delta === 'string' ? a[i].cells[j].delta : '';
       const bDelta = typeof b[i].cells[j].delta === 'string' ? b[i].cells[j].delta : '';
       if (aDelta !== bDelta) return true;
+      if (a[i].cells[j].check !== b[i].cells[j].check) return true;
+      const aBadge = typeof a[i].cells[j].badge === 'string' ? a[i].cells[j].badge : '';
+      const bBadge = typeof b[i].cells[j].badge === 'string' ? b[i].cells[j].badge : '';
+      if (aBadge !== bBadge) return true;
     }
   }
   return false;
@@ -245,10 +255,12 @@ export function useTableEditorState(
       });
       const rows = cloneRows(localRows.value);
       if (localHasColumnHeader.value && rows.length > 0) {
-        // Koprij draagt geen per-cell emphasis of delta-badge.
+        // Koprij draagt geen per-cell emphasis, delta, vinkje of badge.
         for (let j = 0; j < rows[0].cells.length; j++) {
           delete rows[0].cells[j].emphasis;
           delete rows[0].cells[j].delta;
+          delete rows[0].cells[j].check;
+          delete rows[0].cells[j].badge;
         }
       }
       const columnCalculations = normalizeColumnCalculations(

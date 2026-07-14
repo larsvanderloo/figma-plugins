@@ -38,6 +38,14 @@ const {
   updateCell,
   setCellEmphasis,
   setCellDelta,
+  setCellCheck,
+  setCellBadge,
+  setRowEmphasis,
+  setColumnEmphasis,
+  setRowCheck,
+  setColumnCheck,
+  setRowBadge,
+  setColumnBadge,
   setColumnCalculation,
   setColumnCalculationEmphasis,
   setColumnCalculationCurrency,
@@ -98,6 +106,14 @@ const { csvUploadFile, csvError, lastImport, onCsvFileChange } = useCsvImport(pr
       @cell-edit="updateCell"
       @cell-style="setCellEmphasis"
       @cell-delta="setCellDelta"
+      @cell-check="setCellCheck"
+      @cell-badge="setCellBadge"
+      @row-emphasis="setRowEmphasis"
+      @column-emphasis="setColumnEmphasis"
+      @row-check="setRowCheck"
+      @column-check="setColumnCheck"
+      @row-badge="setRowBadge"
+      @column-badge="setColumnBadge"
       @column-calculation="setColumnCalculation"
       @column-calculation-emphasis="setColumnCalculationEmphasis"
       @column-calculation-currency="setColumnCalculationCurrency"

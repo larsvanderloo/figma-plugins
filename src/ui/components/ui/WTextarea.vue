@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue';
+import { onUnmounted, ref, watch } from 'vue';
 
 interface Props {
   modelValue: string;
@@ -8,6 +8,7 @@ interface Props {
 const props = defineProps<Props>();
 const emit = defineEmits<{
   'update:modelValue': [value: string];
+  live: [value: string];
 }>();
 
 const local = ref<string>(props.modelValue);
@@ -24,13 +25,22 @@ function commit(): void {
     emit('update:modelValue', local.value);
   }
 }
+
+function onInput(v: string): void {
+  local.value = v;
+  emit('live', v);
+}
+
+// Zelfde unmount-flush als WInput: tab-switch unmount zonder blur mag
+// getypte tekst niet weggooien; slide-wissel unmount panels niet.
+onUnmounted(commit);
 </script>
 
 <template>
   <UTextarea
     v-bind="$attrs"
     :model-value="local"
-    @update:model-value="(v: string) => (local = v)"
+    @update:model-value="onInput"
     @blur="commit"
   />
 </template>

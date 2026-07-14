@@ -251,6 +251,23 @@ export function replaceIconViaSlot(
     }
   }
 
+  // ── Centreer in slots zonder auto-layout ───────────────────────────
+  // Auto-layout-slots (Badge, Card-top) centreren hun children zelf en
+  // negeren x/y. De side-variant slot (in `icon-border-wrap`) heeft GEEN
+  // auto-layout: een vers geappende node blijft dan op (0,0) linksboven
+  // hangen terwijl de master-default gecentreerd staat (bv. 58×58 in een
+  // 68×68 slot op (5,5)). Expliciet centreren i.p.v. de oude positie
+  // overnemen: dat herstelt ook overrides die eerder al scheef zijn gezet.
+  try {
+    const slotFrame = slotNode as unknown as { layoutMode?: string };
+    if (slotFrame.layoutMode === undefined || slotFrame.layoutMode === 'NONE') {
+      temp.x = (slotNode.width - temp.width) / 2;
+      temp.y = (slotNode.height - temp.height) / 2;
+    }
+  } catch (_e) {
+    /* silent — positie is cosmetisch, mag de swap nooit laten falen */
+  }
+
   // ── Re-apply captured stroke properties to all child vectors ───────
   const vectors = temp.findAll(function (n: SceneNode) {
     return n.type === 'VECTOR';

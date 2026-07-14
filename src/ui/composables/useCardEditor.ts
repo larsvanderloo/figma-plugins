@@ -40,8 +40,7 @@ export function useCardEditor() {
 
   // Per-card snapshot of what we last emitted to the sandbox. Lets the
   // update() function include only changed fields in the payload — and
-  // skip the bridge call entirely when nothing changed. Cleared on
-  // slide-switch so cardNodeIds from a previous slide don't leak.
+  // skip the bridge call entirely when nothing changed.
   const lastSent: Record<string, CardItem> = {};
 
   watch(
@@ -49,6 +48,22 @@ export function useCardEditor() {
     () => {
       previewUrls.value = {};
       previewSizes.value = {};
+    },
+  );
+
+  // De snapshot is alleen betrouwbaar zolang het canvas nog bevat wat we
+  // laatst stuurden. Elke content-vervanging uit een canvas-scan
+  // (slide-loaded — ook na native undo of een externe edit) betekent dat
+  // het canvas teruggedraaid kan zijn: een her-commit van de eerder
+  // verzonden waarde zou dan een lege delta opleveren en stil gedropt
+  // worden, waarna store en canvas uiteenlopen tot de volgende
+  // slide-wissel. Cache legen op iedere nieuwe content-referentie (dekt
+  // ook slide-wissel, dus cardNodeIds van een vorige slide lekken niet);
+  // worst case post de eerstvolgende update één keer een volledige
+  // payload in plaats van een delta.
+  watch(
+    () => view.state.content,
+    () => {
       for (const key in lastSent) delete lastSent[key];
     },
   );

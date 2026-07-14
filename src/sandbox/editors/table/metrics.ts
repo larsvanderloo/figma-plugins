@@ -71,7 +71,20 @@ export function getFontSizes(
 }
 
 /**
- * Responsive row-padding op basis van bodyRowCount.
+ * Font-proportioneel deel van de verticale rij-padding (per kant, in em).
+ * De cap-height-trim haalde de leading uit het tekst-vak — die leading gaf
+ * vroeger impliciet de lucht rond de regel. Dit em-deel geeft die lucht
+ * expliciet (en symmetrisch) terug bóvenop de rowCount-basis hieronder, en is
+ * ≥ de font-descent (~0.24em) zodat descenders altijd binnen de padding
+ * landen en nooit de rij-divider raken. De fit rekent met dezelfde formule,
+ * dus groter korps kost vanzelf meer padding → de zoek balanceert korps
+ * tegen lucht i.p.v. alle vrijgekomen ruimte aan tekst te besteden.
+ */
+export const TABLE_ROW_PAD_EM = 0.25;
+
+/**
+ * Responsive row-padding-BASIS op basis van bodyRowCount; het
+ * font-proportionele deel (TABLE_ROW_PAD_EM × bodyFont) komt er per kant bij.
  * Bij weinig rijen: ruime padding voor breathing room. Bij veel rijen:
  * compactere padding zodat text-area per rij voldoende blijft.
  */
