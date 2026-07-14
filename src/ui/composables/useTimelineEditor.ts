@@ -17,12 +17,21 @@ export function useTimelineEditor() {
     if (slideId === null) return;
 
     const list = view.state.content?.timelineItems ?? null;
-    if (list !== null) {
-      const idx = list.findIndex((t) => t.copyWrapNodeId === copyWrapNodeId);
-      if (idx >= 0) {
-        list[idx].heading = value.heading;
-        list[idx].paragraph = value.paragraph;
-      }
+    const idx = list !== null ? list.findIndex((t) => t.copyWrapNodeId === copyWrapNodeId) : -1;
+    const prev = idx >= 0 && list !== null ? list[idx] : null;
+
+    // Ongewijzigde commits overslaan — live typen en blur/Enter lopen door
+    // dezelfde handler, dus een blur ná een gedebouncede live-post zou
+    // anders exact dezelfde payload nogmaals posten. De store wordt
+    // hieronder optimistisch bijgewerkt én door scans hersynchroniseerd,
+    // dus vergelijken tegen de store blijft ook na undo/externe edits eerlijk.
+    if (prev !== null && prev.heading === value.heading && prev.paragraph === value.paragraph) {
+      return;
+    }
+
+    if (prev !== null && list !== null) {
+      list[idx].heading = value.heading;
+      list[idx].paragraph = value.paragraph;
     }
 
     tracker.register();

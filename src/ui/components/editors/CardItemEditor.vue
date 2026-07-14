@@ -7,6 +7,7 @@ import WTextarea from '../ui/WTextarea.vue';
 
 import { compressImageForUpload } from '../../utils/image-compress';
 import { formatBytes } from '../../utils/format-bytes';
+import { useLiveText } from '../../composables/useLiveText';
 
 interface Props {
   modelValue: CardItem;
@@ -38,10 +39,32 @@ function emitWith(patch: Partial<CardItem>): void {
   emit('update:modelValue', { ...props.modelValue, ...patch });
 }
 
+// Live meetypen op het canvas: elke aanslag komt binnen via het
+// `live`-event en gaat gedebounced (useLiveText) dezelfde emit-route op
+// als een commit — de delta-guard in useCardEditor blijft de dedupe-laag.
+// De waarde wordt bij het vuren pas gespreid over props.modelValue, zodat
+// tussentijdse wijzigingen aan andere velden niet worden teruggedraaid.
+// Commit (blur/Enter) cancel()t het lopende timertje eerst: anders zou de
+// debounce ná de commit nog een verouderde waarde posten.
+let liveHeadingValue = '';
+const liveHeading = useLiveText(() => emitWith({ heading: liveHeadingValue }));
+function onHeadingLive(value: string): void {
+  liveHeadingValue = value;
+  liveHeading.schedule();
+}
 function onHeadingCommit(value: string): void {
+  liveHeading.cancel();
   emitWith({ heading: value });
 }
+
+let liveParagraphValue = '';
+const liveParagraph = useLiveText(() => emitWith({ paragraph: liveParagraphValue }));
+function onParagraphLive(value: string): void {
+  liveParagraphValue = value;
+  liveParagraph.schedule();
+}
 function onParagraphCommit(value: string): void {
+  liveParagraph.cancel();
   emitWith({ paragraph: value });
 }
 function onIconChange(value: string): void {
@@ -134,6 +157,7 @@ async function onVisualFileChange(file: File | null | undefined): Promise<void> 
           placeholder="Koptekst"
           class="flex-1"
           @update:model-value="onHeadingCommit"
+          @live="onHeadingLive"
         />
       </div>
     </UFormField>
@@ -146,6 +170,7 @@ async function onVisualFileChange(file: File | null | undefined): Promise<void> 
         placeholder="Alineatekst"
         class="w-full"
         @update:model-value="onParagraphCommit"
+        @live="onParagraphLive"
       />
     </UFormField>
   </div>

@@ -22,6 +22,13 @@ export function useBadgeEditor() {
     const b = view.state.general?.badge;
     if (slideId === null || b === null || b === undefined) return;
 
+    // Same no-op guard as the title editor: live typing already posted
+    // this value on the last pause, so a blur/unmount commit with an
+    // unchanged label+icon would only repeat the sandbox write. Skipping
+    // also leaves a pending iconIntended reconcile intact instead of
+    // clobbering it with the (unchanged) scanned icon.
+    if (next.label === b.label && next.icon === b.icon) return;
+
     b.label = next.label;
     b.icon = next.icon;
     // Also sync iconIntended so the reconcile watcher (below) doesn't

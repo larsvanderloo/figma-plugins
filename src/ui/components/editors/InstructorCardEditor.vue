@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { InstructorCardItem } from '../../../shared/types';
 import WTextarea from '../ui/WTextarea.vue';
+import { useLiveText } from '../../composables/useLiveText';
 
 interface Props {
   modelValue: InstructorCardItem;
@@ -27,7 +28,28 @@ function onVisibleToggle(value: boolean): void {
   emitWith({ visible: value });
 }
 
+// Live meetypen voor de puntenlijst. Eén debounce-kanaal volstaat: er kan
+// maar één punt tegelijk focus hebben, en bij het verlaten van een veld
+// cancel()t de blur-commit het lopende timertje voordat een verouderde
+// waarde zou posten. Het items-array wordt pas bij het vuren opgebouwd,
+// zodat de overige punten hun actuele store-waarde houden; de delta-guard
+// in useInstructorEditor vangt eventuele no-op-posts af.
+let liveItemIndex = -1;
+let liveItemValue = '';
+const liveItems = useLiveText(() => {
+  if (liveItemIndex < 0) return;
+  const next = [...props.modelValue.items];
+  next[liveItemIndex] = liveItemValue;
+  emitWith({ items: next });
+});
+function onItemLive(itemIndex: number, value: string): void {
+  liveItemIndex = itemIndex;
+  liveItemValue = value;
+  liveItems.schedule();
+}
+
 function onItemCommit(itemIndex: number, value: string): void {
+  liveItems.cancel();
   const next = [...props.modelValue.items];
   next[itemIndex] = value;
   emitWith({ items: next });
@@ -69,6 +91,7 @@ function onItemCommit(itemIndex: number, value: string): void {
           autoresize
           class="w-full"
           @update:model-value="(v: string) => onItemCommit(itemIdx, v)"
+          @live="(v: string) => onItemLive(itemIdx, v)"
         />
       </UFormField>
     </template>
