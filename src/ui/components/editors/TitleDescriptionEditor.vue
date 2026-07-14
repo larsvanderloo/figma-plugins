@@ -6,6 +6,7 @@ import WTextarea from '../ui/WTextarea.vue';
 import IconPicker from '../ui/IconPicker.vue';
 import { useTitleDescriptionEditor } from '../../composables/useTitleDescriptionEditor';
 import { useBadgeEditor } from '../../composables/useBadgeEditor';
+import { useLiveText } from '../../composables/useLiveText';
 
 export interface TitleDescriptionValue {
   heading: string;
@@ -156,6 +157,7 @@ watch(
 );
 
 function onHeadingCommit(value: string): void {
+  headingLive.cancel();
   if (td.model === null) return;
   const headingChangedLength = value.length !== td.model.heading.length;
   td.update({
@@ -172,6 +174,7 @@ function onHeadingCommit(value: string): void {
 }
 
 function onParagraphCommit(value: string): void {
+  paragraphLive.cancel();
   if (td.model === null) return;
   td.update({
     heading: td.model.heading,
@@ -207,6 +210,7 @@ function onAccentFocusOut(event: FocusEvent): void {
 }
 
 function onBadgeLabelCommit(value: string): void {
+  badgeLabelLive.cancel();
   if (bd.model === null) return;
   bd.update({ label: value, icon: bd.model.icon, visible: bd.model.visible });
 }
@@ -218,6 +222,32 @@ function onBadgeIconChange(value: string): void {
 
 function onBadgeVisibilityToggle(next: boolean): void {
   bd.commitVisibility(next);
+}
+
+// Live meetypen op het canvas: elke aanslag komt via het `live`-event
+// binnen en gaat gedebounced (200ms, zie useLiveText) door exact dezelfde
+// commit-handler als blur/Enter — één write per typ-pauze, zelfde gevoel
+// als de tabel-grid. De commit-handlers cancel()en eerst de pending tick:
+// een commit post zelf direct, anders vuurt dezelfde waarde twee keer.
+let liveHeadingValue = '';
+const headingLive = useLiveText(() => onHeadingCommit(liveHeadingValue));
+function onHeadingLive(value: string): void {
+  liveHeadingValue = value;
+  headingLive.schedule();
+}
+
+let liveParagraphValue = '';
+const paragraphLive = useLiveText(() => onParagraphCommit(liveParagraphValue));
+function onParagraphLive(value: string): void {
+  liveParagraphValue = value;
+  paragraphLive.schedule();
+}
+
+let liveBadgeLabelValue = '';
+const badgeLabelLive = useLiveText(() => onBadgeLabelCommit(liveBadgeLabelValue));
+function onBadgeLabelLive(value: string): void {
+  liveBadgeLabelValue = value;
+  badgeLabelLive.schedule();
 }
 </script>
 
@@ -241,6 +271,7 @@ function onBadgeVisibilityToggle(next: boolean): void {
         placeholder="Bijv. Onze missie voor 2026"
         class="w-full"
         @update:model-value="onHeadingCommit"
+        @live="onHeadingLive"
       />
     </UFormField>
 
@@ -356,6 +387,7 @@ function onBadgeVisibilityToggle(next: boolean): void {
         placeholder="Een korte toelichting onder de titel"
         class="w-full"
         @update:model-value="onParagraphCommit"
+        @live="onParagraphLive"
       />
     </UFormField>
     </template>
@@ -382,6 +414,7 @@ function onBadgeVisibilityToggle(next: boolean): void {
           :disabled="bd.model.visible === false"
           class="flex-1"
           @update:model-value="onBadgeLabelCommit"
+          @live="onBadgeLabelLive"
         />
       </div>
     </UFormField>

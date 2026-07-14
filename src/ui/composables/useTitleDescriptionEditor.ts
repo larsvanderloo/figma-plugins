@@ -56,6 +56,18 @@ export function useTitleDescriptionEditor() {
         ? next.headingDim
         : null;
 
+    // Live typing flushes through this same path on every pause, so the
+    // trailing blur/unmount commit often carries exactly the store values.
+    // Skip the post then — a redundant update-general still costs the
+    // sandbox a font-load + text write.
+    if (
+      next.heading === td.heading &&
+      next.paragraph === td.paragraph &&
+      nextHeadingDim === null
+    ) {
+      return;
+    }
+
     td.heading = next.heading;
     td.paragraph = next.paragraph;
     if (nextHeadingDim !== null) {
