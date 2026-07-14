@@ -227,7 +227,7 @@ onMounted(() => {
     </div>
 
     <div v-else class="relative flex h-full flex-col bg-elevated text-default">
-      <main class="flex-1 overflow-y-auto mx-auto w-full max-w-2xl space-y-3 p-3 pb-28">
+      <main class="flex-1 overflow-y-auto w-full space-y-3 p-3 pb-28">
         <UEmpty
           v-if="view.noSlide"
           icon="i-lucide-mouse-pointer-click"
