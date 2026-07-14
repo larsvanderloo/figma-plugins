@@ -68,6 +68,12 @@ function tableSemanticsEqual(a: TableWrapModel | null, b: TableWrapModel): boole
     for (let j = 0; j < aCells.length; j++) {
       if (aCells[j].value !== bCells[j].value) return false;
       if ((aCells[j].emphasis === true) !== (bCells[j].emphasis === true)) return false;
+      // Delta hoort bij de semantiek: zonder deze vergelijking wordt een pure
+      // delta-edit (pijl-menu of delta-input) als duplicaat geskipt en nooit
+      // gepost — de badge verschijnt dan pas na een latere waarde-edit.
+      const aDelta = typeof aCells[j].delta === 'string' ? aCells[j].delta : '';
+      const bDelta = typeof bCells[j].delta === 'string' ? bCells[j].delta : '';
+      if (aDelta !== bDelta) return false;
     }
   }
 
