@@ -8,7 +8,12 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
-import { findCardWrap, findAllCardWraps, findTimelineWrap } from '../slide-machine';
+import {
+  findCardWrap,
+  findAllCardWraps,
+  findTimelineWrap,
+  isEffectivelyVisible,
+} from '../slide-machine';
 import { ContentItems, CardItem, InstructorCardItem, TimelineItem } from '../../shared/types';
 import {
   findInstructorListTexts,
@@ -44,6 +49,12 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
   });
   for (let i = 0; i < cardInstances.length; i++) {
     const card = cardInstances[i] as InstanceNode;
+    // TimelineWrap masters carry a hidden leftover/template Card sibling
+    // (visible=false) alongside the real, on-canvas timeline items. Without
+    // this gate it passed the heading-check below like any other card and
+    // got a normal, indistinguishable editor panel — edits landed on it
+    // silently (ok:true, no visible change) because it never renders.
+    if (!isEffectivelyVisible(card, slide)) continue;
     const heading = readTextByName(card, 'Heading');
     if (heading === null) continue; // corrupt card: skip
 
