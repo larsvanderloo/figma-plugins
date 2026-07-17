@@ -9,6 +9,8 @@
 // ES2017-compat: geen optional chaining, geen nullish coalescing.
 // ============================================================
 
+import { TABLE_VALUE_GAP_EM, TABLE_BADGE_LABEL_EM, tableBadgeChipPadX } from './metrics';
+
 export interface CellSpec {
   text: string;
   font: FontName;
@@ -67,16 +69,19 @@ function cellContribution(cell: CellSpec, measure: MeasureTextWidth): number {
   // chip zweven dan in een lege kolom.
   if (typeof cell.leadWidth === 'number' && cell.leadWidth > 0) width += cell.leadWidth;
   if (typeof cell.badgeText === 'string' && cell.badgeText !== '') {
+    // Lockstep met buildBadgeChip: label op TABLE_BADGE_LABEL_EM × korps in
+    // Inter Medium, plus de chip-padding uit dezelfde metrics-formule. Meet
+    // de autofit een andere chip dan de builder tekent, dan hugt een
+    // badge-kolom te krap of te ruim.
     const chipLabel = measure(
       cell.badgeText,
-      { family: 'Inter', style: 'Regular' },
-      cell.fontSize,
+      { family: 'Inter', style: 'Medium' },
+      cell.fontSize * TABLE_BADGE_LABEL_EM,
     );
-    // ~1.6em chip-padding + gap naar de tekst (alleen als er tekst staat).
     width +=
       chipLabel +
-      Math.round(cell.fontSize * 1.6) +
-      (clean.length > 0 ? Math.round(cell.fontSize * 0.35) : 0);
+      tableBadgeChipPadX(cell.fontSize) +
+      (clean.length > 0 ? Math.round(cell.fontSize * TABLE_VALUE_GAP_EM) : 0);
   }
   return width;
 }

@@ -14,6 +14,8 @@ import type { TableRowModel, TableColumnSummary } from '../../../shared/types';
 import { tableWidthForSurface } from '../../../shared/constants';
 import type { CellSpec } from './column-autofit';
 import type { TableLayoutMetrics } from './metrics';
+import { TABLE_VALUE_GAP_EM } from './metrics';
+import { CELL_VALUE_NAME } from './build-rows';
 import { footerCanvasText } from './footer';
 
 export function tableCellBudget(
@@ -73,11 +75,11 @@ export function buildColumnSpecs(
       }
       const spec: CellSpec = { text: text, font: font, fontSize: fontSize };
       // Vinkje/badge nemen ruimte op de waarderegel in — meet ze mee, in
-      // lockstep met buildCell (icoon = 1em + 0.35em gap; chip meet zijn
+      // lockstep met buildCell (icoon = 1em + TABLE_VALUE_GAP_EM gap; chip meet zijn
       // label + padding in cellContribution).
       if (!isHeader && cell !== null) {
         if (cell.check === true || cell.check === false) {
-          spec.leadWidth = Math.round(fontSize) + Math.round(fontSize * 0.35);
+          spec.leadWidth = Math.round(fontSize) + Math.round(fontSize * TABLE_VALUE_GAP_EM);
         }
         if (typeof cell.badge === 'string' && cell.badge.trim() !== '') {
           spec.badgeText = cell.badge.trim();
@@ -153,9 +155,19 @@ export function applyBodyTruncation(bodyRows: FrameNode[]): void {
       // Delta-cellen (VERTICAL waarde+badge-stack) HUGen al; overslaan.
       if (cellFrame.getPluginData('delta') !== '') continue;
 
+      // Bij naam, niet "eerste TEXT": de badge-chip (vóór de waarde in de
+      // cel) draagt zijn eigen BadgeLabel-TEXT — een naamloze first-match
+      // zou DIE op FILL zetten en de chip over de cel uitsmeren. Fallback
+      // op eerste TEXT voor cellen van vóór de CellValue-naamgeving (die
+      // hebben geen chips).
       var t = cellFrame.findOne(function (n: SceneNode): boolean {
-        return n.type === 'TEXT';
+        return n.type === 'TEXT' && n.name === CELL_VALUE_NAME;
       });
+      if (t === null) {
+        t = cellFrame.findOne(function (n: SceneNode): boolean {
+          return n.type === 'TEXT';
+        });
+      }
       if (t === null || t.type !== 'TEXT') continue;
 
       var textNode = t as TextNode;

@@ -43,7 +43,6 @@ import {
 } from '../../../shared/table-calculations';
 import { findEnclosingSurface } from '../../slide-machine';
 import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from '../_shared/accent-vars';
-import { findDeltaBadgeTemplate } from '../_shared/delta-badge-node';
 import { computeColumnWidths } from './column-autofit';
 import { createTextMeasurer } from './measure';
 import { fitBodyFontSize, HARD_MIN_BODY } from './fit';
@@ -209,10 +208,6 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
   const surface = findEnclosingSurface(slot);
   const surfaceName = surface !== null ? surface.name : null;
   const targetWidth = resolveTableRenderWidth(slot, surfaceName, columnCount);
-  // Badge-template één keer per apply zoeken (zelfde bron als de chart
-  // delta-badge); cellen met een delta clonen dit voor de styled pill.
-  const badgeTemplate = surface !== null ? findDeltaBadgeTemplate(surface) : null;
-
   if (vars.text !== null && vars.dimmer !== null) {
     const textRGB = resolveColor(vars.text, slot, { r: 1, g: 0.957, b: 0.918 });
     const dimmerRGB = resolveColor(vars.dimmer, slot, TEXT_DIMMER_RGB);
@@ -441,7 +436,6 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
           rowPadding,
           rightAlignColumns,
           metrics,
-          badgeTemplate,
           colWidths,
         );
         applyColumnSizing(rowFrame, colWidths);
@@ -509,11 +503,22 @@ export async function applyTable(slot: SlotNode, desired: TableWrapModel): Promi
       const remaining = slot.height - actualContent;
       if (remaining > 2) {
         const addPerSide = Math.floor(remaining / bodyRows.length / 2);
-        if (addPerSide > 0) {
-          for (let i = 0; i < bodyRows.length; i++) {
-            bodyRows[i].paddingTop += addPerSide;
-            bodyRows[i].paddingBottom += addPerSide;
-          }
+        for (let i = 0; i < bodyRows.length; i++) {
+          bodyRows[i].paddingTop += addPerSide;
+          bodyRows[i].paddingBottom += addPerSide;
+        }
+        // De floor hierboven gooit de rest weg, en dat verlies schaalt mee met
+        // het rijaantal: bij 19 rijen blijft tot ~2px per rij liggen en bij
+        // minder slack dan 2×rijaantal wordt er zelfs NIETS toegevoegd. Dat is
+        // precies de bodemstrook die overblijft — de ~10% marge die de fit
+        // bewust vrijhoudt en die deze pass hoort terug te geven. Rest uitdelen
+        // als hele 1px-PAREN (boven én onder) zodat de optische centrering per
+        // rij intact blijft; een eenzijdige px zou de tekst zichtbaar kantelen.
+        let leftover = remaining - addPerSide * 2 * bodyRows.length;
+        for (let i = 0; i < bodyRows.length && leftover >= 2; i++) {
+          bodyRows[i].paddingTop += 1;
+          bodyRows[i].paddingBottom += 1;
+          leftover -= 2;
         }
       } else if (remaining < -2 && sizes.body <= HARD_MIN_BODY) {
         // Content overflows AND the fit already shrank to the minimum font —

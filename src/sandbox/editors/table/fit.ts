@@ -13,7 +13,8 @@
 
 import type { TableRowModel } from '../../../shared/types';
 import { parseBullets } from '../../../shared/table-bullets';
-import { TABLE_ROW_PAD_EM } from './metrics';
+import { tableDeltaDisplay } from '../../../shared/table-delta';
+import { TABLE_ROW_PAD_EM, tableBadgeHeight } from './metrics';
 import type { MeasureTextHeight } from './measure';
 
 // Approximate hanging-indent a Figma UNORDERED list reserves for the bullet
@@ -63,20 +64,48 @@ function bodyRowHeightAt(
     const cell = j < row.cells.length ? row.cells[j] : null;
     if (cell === null) continue;
     const colWidth = j < colWidths.length ? colWidths[j] : 0;
+    const emphasized = cell.emphasis === true;
+    const valueSize = emphasized ? emphasisSize : body;
+
     // Mirror build-rows: bulleted lines are stripped to bare text. The bullet
     // glyph hangs an indent, narrowing the text column — measure at a slightly
     // smaller width so wrap-lines (and thus height) aren't underestimated.
     const parsed = parseBullets(cell.value);
     const text = parsed.text;
-    if (text.length === 0) continue;
-    const width = parsed.ranges.length > 0 ? colWidth - BULLET_INDENT : colWidth;
-    const emphasized = cell.emphasis === true;
-    const font: FontName = emphasized
-      ? { family: 'Instrument Sans', style: 'SemiBold' }
-      : { family: 'Inter', style: 'Regular' };
-    const size = emphasized ? emphasisSize : body;
-    const h = measureHeight(text, font, size, width > 0 ? width : colWidth);
-    if (h > tallest) tallest = h;
+    let lineH = 0;
+    if (text.length > 0) {
+      const width = parsed.ranges.length > 0 ? colWidth - BULLET_INDENT : colWidth;
+      const font: FontName = emphasized
+        ? { family: 'Instrument Sans', style: 'SemiBold' }
+        : { family: 'Inter', style: 'Regular' };
+      lineH = measureHeight(text, font, valueSize, width > 0 ? width : colWidth);
+    }
+
+    // Vinkje en nummer-badge staan ÍN de waarderegel (build-rows bouwt een
+    // horizontale value-row met counterAxisAlignItems CENTER), dus de regel is
+    // zo hoog als zijn HOOGSTE deel — niet als de tekst. Dat verschil is groot:
+    // de cap-height-trim maakt het tekst-vak ~0.7em terwijl de badge-clone naar
+    // ~1.4em schaalt. Rekende de fit alleen met tekst, dan onderschatte hij elke
+    // badge-rij met ~0.7em en liep een verder passende tabel onderaan over.
+    if (cell.check === true || cell.check === false) {
+      const checkH = Math.round(valueSize);
+      if (checkH > lineH) lineH = checkH;
+    }
+    const badgeLabel = typeof cell.badge === 'string' ? cell.badge.trim() : '';
+    if (badgeLabel !== '') {
+      // build-rows geeft de nummer-badge labelSize = sizes.body (niet valueSize).
+      const badgeH = tableBadgeHeight(body);
+      if (badgeH > lineH) lineH = badgeH;
+    }
+
+    // De delta stapelt als enige ONDER de waarderegel (VERTICAL + itemSpacing),
+    // dus die hoogte komt erbij i.p.v. mee te doen in de max.
+    let cellH = lineH;
+    if (tableDeltaDisplay(cell.delta) !== null) {
+      cellH += 2 + Math.round(valueSize * TABLE_ROW_PAD_EM) + tableBadgeHeight(body);
+    }
+
+    if (cellH > tallest) tallest = cellH;
   }
   // Zelfde padding-formule als de renderer: basis + font-proportionele lucht.
   // Doordat de lucht meegroeit met het kandidaat-korps kiest de zoek niet

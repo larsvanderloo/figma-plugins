@@ -86,6 +86,44 @@ export function getFontSizes(
 export const TABLE_ROW_PAD_EM = 0.25;
 
 /**
+ * Gap op de waarderegel tussen vinkje, badge-chip en tekst, als factor van het
+ * korps. Gedeeld met de kolom-autofit (sizing.ts leadWidth + column-autofit
+ * chip-bijdrage): meet de autofit een andere gap dan de renderer tekent, dan
+ * hugt de kolom te krap of te ruim — dezelfde lockstep-eis als de badge-maten.
+ */
+export const TABLE_VALUE_GAP_EM = 0.75;
+
+// ============================================================
+// Badge-chip-geometrie (nummer-badge én delta-chip in tabellen).
+//
+// De chip is een KALE frame+tekst — bewust géén clone van het library-
+// Badge-component. De clone-route (clone + setProperties + rescale ×36
+// chips per render) maakte elke full render ~1s traag én liet Figma de
+// instance-sublayers regenereren, waar scans overheen struikelden
+// ("node does not exist"). Een pill-frame met een TEXT erin heeft geen
+// van beide problemen en de geometrie is exact voorspelbaar voor de fit.
+// Factoren t.o.v. het body-korps; fit, autofit en builder delen ze zodat
+// schatting en render niet uiteen kunnen lopen.
+// ============================================================
+
+/** Chip-label-korps als factor van het body-korps. */
+export const TABLE_BADGE_LABEL_EM = 0.85;
+/** Chip-hoogte als factor van het body-korps (vaste hoogte, pill). */
+export const TABLE_BADGE_HEIGHT_EM = 1.35;
+/** Horizontale chip-padding per kant, als factor van het LABEL-korps. */
+export const TABLE_BADGE_PAD_X_EM = 1.0;
+
+/** Chip-hoogte in px bij een gegeven body-korps (builder én fit). */
+export function tableBadgeHeight(body: number): number {
+  return Math.round(body * TABLE_BADGE_HEIGHT_EM);
+}
+
+/** Totale horizontale chip-padding in px (kolom-autofit én builder). */
+export function tableBadgeChipPadX(body: number): number {
+  return Math.round(body * TABLE_BADGE_LABEL_EM * TABLE_BADGE_PAD_X_EM) * 2;
+}
+
+/**
  * Responsive row-padding-BASIS op basis van bodyRowCount; het
  * font-proportionele deel (TABLE_ROW_PAD_EM × bodyFont) komt er per kant bij.
  * Bij weinig rijen: ruime padding voor breathing room. Bij veel rijen:

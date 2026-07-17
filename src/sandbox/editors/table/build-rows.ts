@@ -12,12 +12,87 @@
 import type { TableRowModel, TableCellModel } from '../../../shared/types';
 import { tableDeltaDisplay } from '../../../shared/table-delta';
 import { parseBullets } from '../../../shared/table-bullets';
-import { buildDeltaBadgeNode } from '../_shared/delta-badge-node';
-import type { DeltaBadgeOptions } from '../_shared/delta-badge-node';
 import type { TableLayoutMetrics } from './metrics';
+import {
+  TABLE_VALUE_GAP_EM,
+  TABLE_BADGE_LABEL_EM,
+  tableBadgeHeight,
+  tableBadgeChipPadX,
+} from './metrics';
 
 /** Naam van de waarde-TEXT binnen een cell-FRAME (scan + truncation pakken deze). */
 export const CELL_VALUE_NAME = 'CellValue';
+
+/**
+ * Bouwt een badge-chip als kale pill: FRAME met vaste hoogte, 1px
+ * Text-Dimmer-rand en een Inter-Medium-label erin. Bewust géén clone van
+ * het library-Badge-component — de clone-route (clone + setProperties +
+ * rescale, ×2 per cel) maakte een full render met veel badges ~1s traag
+ * én liet Figma de instance-sublayers regenereren, waar de scan overheen
+ * struikelde. Een platte frame+tekst heeft geen instance-internals, dus
+ * niets om over te struikelen, en de hoogte is exact tableBadgeHeight —
+ * de fit rekent met precies dezelfde formule.
+ */
+function buildBadgeChip(
+  label: string,
+  bodySize: number,
+  dimmerVar: Variable,
+  dimmerRGB: RGB,
+  maxW: number | null,
+): FrameNode {
+  const chip = figma.createFrame();
+  chip.name = 'CellBadgeChip';
+  chip.layoutMode = 'HORIZONTAL';
+  chip.primaryAxisSizingMode = 'AUTO';
+  chip.counterAxisSizingMode = 'FIXED';
+  chip.primaryAxisAlignItems = 'CENTER';
+  chip.counterAxisAlignItems = 'CENTER';
+  const padX = Math.round(tableBadgeChipPadX(bodySize) / 2);
+  chip.paddingLeft = padX;
+  chip.paddingRight = padX;
+  chip.paddingTop = 0;
+  chip.paddingBottom = 0;
+  chip.fills = [];
+  chip.clipsContent = false;
+  const dimmerPaint = figma.variables.setBoundVariableForPaint(
+    { type: 'SOLID', color: dimmerRGB },
+    'color',
+    dimmerVar,
+  );
+  chip.strokes = [dimmerPaint];
+  chip.strokeWeight = 1;
+  const h = tableBadgeHeight(bodySize);
+  chip.cornerRadius = Math.ceil(h / 2);
+
+  const t = figma.createText();
+  t.name = 'BadgeLabel';
+  t.fontName = { family: 'Inter', style: 'Medium' };
+  t.fontSize = Math.max(10, Math.round(bodySize * TABLE_BADGE_LABEL_EM));
+  t.characters = label;
+  t.textAutoResize = 'WIDTH_AND_HEIGHT';
+  t.fills = [dimmerPaint];
+  chip.appendChild(t);
+
+  // Vaste hoogte NA appendChild (auto-layout past maten pas toe op een
+  // geparente node); breedte blijft HUG rond label + padding.
+  try {
+    chip.resize(chip.width, h);
+  } catch (_e) {
+    /* silent */
+  }
+  // Kolom-budget: label trunceren i.p.v. de buurkolom overschilderen.
+  if (maxW !== null && maxW > 0 && chip.width > maxW) {
+    try {
+      t.textTruncation = 'ENDING';
+      t.maxLines = 1;
+      t.textAutoResize = 'HEIGHT';
+      t.resize(Math.max(8, maxW - padX * 2), t.height);
+    } catch (_e) {
+      /* silent */
+    }
+  }
+  return chip;
+}
 
 // Lucide circle / circle-check, hard ge-embed: de sandbox-bundel draagt de
 // grote SVG-map niet (die is UI-only) en het vinkje kent maar twee vormen.
@@ -133,7 +208,6 @@ function buildCell(
   dimmerVar: Variable,
   dimmerRGB: RGB,
   rightAlign: boolean,
-  badgeTemplate: InstanceNode | null,
   cellWidth: number | null,
 ): FrameNode {
   const deltaLabel = tableDeltaDisplay(cell.delta);
@@ -161,7 +235,7 @@ function buildCell(
   } else if (hasCheck || badgeLabel !== null) {
     // Horizontale cel met vinkje en/of badge: gap tussen de delen, optisch
     // gecentreerd tegen het cap-getrimde tekst-vak.
-    cellFrame.itemSpacing = Math.round(valueSize * 0.35);
+    cellFrame.itemSpacing = Math.round(valueSize * TABLE_VALUE_GAP_EM);
     cellFrame.counterAxisAlignItems = 'CENTER';
   }
   cellFrame.fills = [];
@@ -216,8 +290,10 @@ function buildCell(
     figma.variables.setBoundVariableForPaint({ type: 'SOLID', color: textRGB }, 'color', textVar),
   ];
 
-  // Waarderegel: [vinkje] [tekst] [nummer-badge] — het vinkje links, de
-  // badge rechts van de tekst, alles op één regel (zoals in de grid-UI).
+  // Waarderegel: [vinkje] [nummer-badge] [tekst] — vinkje en badge staan vóór
+  // de tekst, alles op één regel. De tekst FILLt de rest van de regel, dus de
+  // badge houdt een vaste kolom-positie i.p.v. mee te schuiven met de
+  // tekstlengte; alleen de delta blijft eronder gestapeld.
   // In een gestapelde cel (delta eronder) krijgt de regel een eigen
   // horizontale 'CellValueRow' zodat de verticale stack intact blijft; in
   // een platte cel is de (horizontale) cel zelf de regel. Scan en fast-path
@@ -227,18 +303,7 @@ function buildCell(
     : null;
   let badgeNode: SceneNode | null = null;
   if (badgeLabel !== null) {
-    // Zelfde Badge-clone als de delta (consistent chip-beeld), maar met een
-    // vrij (nummer-)label zonder richtingpijl.
-    const numOpts: DeltaBadgeOptions = {
-      template: badgeTemplate,
-      label: badgeLabel,
-      index: j,
-      labelSize: sizes.body,
-      dimmerVar: dimmerVar,
-      dimmerRGB: dimmerRGB,
-    };
-    if (cellWidth !== null && cellWidth > 0) numOpts.maxW = cellWidth;
-    badgeNode = buildDeltaBadgeNode(numOpts);
+    badgeNode = buildBadgeChip(badgeLabel, sizes.body, dimmerVar, dimmerRGB, cellWidth);
     badgeNode.name = 'CellNumberBadge';
   }
 
@@ -250,7 +315,7 @@ function buildCell(
     valueRow.primaryAxisSizingMode = 'FIXED';
     valueRow.counterAxisSizingMode = 'AUTO';
     valueRow.counterAxisAlignItems = 'CENTER';
-    valueRow.itemSpacing = Math.round(valueSize * 0.35);
+    valueRow.itemSpacing = Math.round(valueSize * TABLE_VALUE_GAP_EM);
     valueRow.fills = [];
     valueRow.clipsContent = false;
     cellFrame.appendChild(valueRow);
@@ -262,17 +327,12 @@ function buildCell(
     valueHost = valueRow;
   }
   if (checkIcon !== null) valueHost.appendChild(checkIcon);
-  valueHost.appendChild(t);
   if (badgeNode !== null) {
+    // Chip houdt zijn eigen vaste hoogte (buildBadgeChip); geen HUG-override
+    // nodig — de waarderegel centreert hem verticaal.
     valueHost.appendChild(badgeNode);
-    if ('layoutSizingVertical' in badgeNode) {
-      try {
-        (badgeNode as InstanceNode | TextNode).layoutSizingVertical = 'HUG';
-      } catch (_e) {
-        /* silent */
-      }
-    }
   }
+  valueHost.appendChild(t);
   try {
     t.layoutSizingHorizontal = 'FILL';
   } catch (_e) {
@@ -285,30 +345,12 @@ function buildCell(
   }
 
   if (deltaLabel !== null) {
-    // Styled Badge-clone (zelfde component als de chart delta-badge), met
-    // tekst-fallback wanneer de slide geen Badge-template heeft. De node
-    // meet zichzelf (HUG); de cel-counterAxisAlignItems verzorgt links/rechts.
-    // maxW = kolombreedte: de cel clipt niet meer (clipsContent=false), dus
-    // zonder budget zou een te brede badge over de buurkolom heen schilderen —
-    // met budget degradeert delta-badge-node zelf naar getruncate'te tekst.
-    const badgeOpts: DeltaBadgeOptions = {
-      template: badgeTemplate,
-      label: deltaLabel,
-      index: j,
-      labelSize: sizes.body,
-      dimmerVar: dimmerVar,
-      dimmerRGB: dimmerRGB,
-    };
-    if (cellWidth !== null && cellWidth > 0) badgeOpts.maxW = cellWidth;
-    const d = buildDeltaBadgeNode(badgeOpts);
+    // Zelfde kale chip als de nummer-badge (▲/▼ zit al in het label);
+    // maxW = kolombreedte zodat een brede delta trunceert i.p.v. de
+    // buurkolom te overschilderen (de cel clipt niet meer).
+    const d = buildBadgeChip(deltaLabel, sizes.body, dimmerVar, dimmerRGB, cellWidth);
+    d.name = 'CellDeltaBadge';
     cellFrame.appendChild(d);
-    if ('layoutSizingVertical' in d) {
-      try {
-        (d as InstanceNode | TextNode).layoutSizingVertical = 'HUG';
-      } catch (_e) {
-        /* silent */
-      }
-    }
   }
   return cellFrame;
 }
@@ -328,7 +370,6 @@ export function buildRow(
   rowPadding: number,
   rightAlignColumns: readonly boolean[],
   metrics: TableLayoutMetrics,
-  badgeTemplate: InstanceNode | null,
   colWidths: readonly number[],
 ): FrameNode {
   const rowFrame = figma.createFrame();
@@ -339,10 +380,16 @@ export function buildRow(
   // Geen clip: leadingTrim-descenders hangen buiten cel én rij (in de
   // rij-padding); de container bewaakt de tabel-overflow.
   rowFrame.clipsContent = false;
-  // Cellen top-aligned: in een rij met ongelijk-hoge (wrappende) cellen blijft
-  // de tekst aan de bovenkant uitgelijnd i.p.v. verticaal gecentreerd. Door de
-  // cap-height-trim vallen de cap-toppen van buurcellen hiermee exact gelijk.
-  rowFrame.counterAxisAlignItems = 'MIN';
+  // Cellen verticaal gecentreerd. Top-align liet vroeger de cap-toppen van
+  // buurcellen exact samenvallen — die vlieger gaat niet meer op zodra één cel
+  // een vinkje of badge draagt: die cel is zo hoog als de chip (~2× de tekst)
+  // en centreert zijn tekst daarbinnen, terwijl een kale buurcel zijn tekst op
+  // y=0 houdt. Top-align zette de twee dan zichtbaar uit elkaar (~een halve
+  // chip-hoogte). CENTER lijnt ze wél uit: elke cel centreert in de rij, dus de
+  // optische midden van kale tekst, chip-tekst en badge vallen samen. Prijs:
+  // in een rij met een wrappende cel zweeft een korte buur nu op het midden
+  // i.p.v. bij de eerste regel — met chips klopte die uitlijning toch al niet.
+  rowFrame.counterAxisAlignItems = 'CENTER';
   rowFrame.itemSpacing = metrics.rowGap;
   rowFrame.paddingTop = rowPadding;
   rowFrame.paddingBottom = rowPadding;
@@ -382,7 +429,6 @@ export function buildRow(
       dimmerVar,
       dimmerRGB,
       rightAlign,
-      badgeTemplate,
       cellWidth,
     );
     rowFrame.appendChild(cellFrame);
