@@ -50,8 +50,11 @@ export function getFontSizes(
   if (safeRowCount >= 7) {
     headingRatio = 0.26;
     bodyRatio = 0.22;
-    headingMax = 24;
-    bodyMax = 18;
+    headingMax = 26;
+    // Plafond, niet de gekozen maat: fit.ts groeit tot de grootste maat die
+    // écht past. Op 18 stond dit plafond een slot-vullende tabel in de weg —
+    // een volle tabel besteedde de vrije hoogte aan rij-padding i.p.v. korps.
+    bodyMax = 20;
   } else if (safeRowCount >= 4) {
     headingRatio = 0.3;
     bodyRatio = 0.24;
@@ -91,8 +94,14 @@ export const TABLE_ROW_PAD_EM = 0.25;
 export function computeRowPadding(rowCount: number): number {
   if (rowCount <= 3) return 24;
   if (rowCount <= 6) return 14;
-  if (rowCount <= 9) return 10;
-  return 6; // 10-15 rijen
+  if (rowCount <= 9) return 8;
+  // 10 rijen en meer. Dit is een BODEM, geen eindwaarde: de post-build
+  // slack-pass deelt de resterende slot-hoogte alsnog als extra rij-padding
+  // uit. Een hoge bodem kost dus rechtstreeks korps — bij een volle tabel ging
+  // ~45% van de rijhoogte naar padding, waardoor de fit op een kleiner korps
+  // bleef steken. Laag houden laat de fit eerst groeien; wat hij niet opmaakt,
+  // geeft de slack-pass als lucht terug.
+  return 3;
 }
 
 export interface TableLayoutMetrics {

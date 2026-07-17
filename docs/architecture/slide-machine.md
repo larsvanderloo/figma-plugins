@@ -153,7 +153,7 @@ Each wrapper: how it's detected, what's read, what's written, where the code is.
   Content is in a `SLOT` (`findSlotInWrap`).
 - **Apply:** `applyTable` in `editors/table/renderer.ts` — full-state PUT (clear
   + rebuild inside the Slot).
-- **Limits:** `TABLE_MAX_ROWS = 15`, flat `TABLE_MAX_COLS = 6` (one column limit,
+- **Limits:** `TABLE_MAX_ROWS = 20`, flat `TABLE_MAX_COLS = 6` (one column limit,
   not per-width tiers).
 - **Width:** resolved from the actual **Slot width** at render time
   (`sizing.ts`), with surface fallbacks only for invalid slots

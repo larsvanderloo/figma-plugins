@@ -138,7 +138,7 @@ export const SURFACE_SIGNATURES: ReadonlyArray<SurfaceSignature> = [
 // ============================================================
 
 /** Maximum aantal rijen per TableWrap (inclusief header-rij). */
-export const TABLE_MAX_ROWS = 15;
+export const TABLE_MAX_ROWS = 20;
 
 // computeCellMaxChars en TABLE_CELL_MAX_CHARS verwijderd. Input-niveau
 // capping bleek niet werkbaar — de echte rendering-bound is afhankelijk
