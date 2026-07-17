@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import type {
   TableColumnCalculationSetting,
   TableColumnSummary,
@@ -224,6 +224,25 @@ function cellBadgeValue(row: number, col: number): string {
 function updateCellBadge(value: unknown, row: number, col: number): void {
   emit('cell-badge', row, col, String(value ?? ''));
 }
+// De input is v-if'd op "heeft een badge" (zelfde presence-model als
+// hierboven), maar die waarde verandert op ELKE toetsaanslag. Backspace'te
+// je 'm leeg om opnieuw te typen, dan flipte v-if instant naar false en
+// unmountte Vue de input MIDDEN in het typen — de invoer verdween onder je
+// vingers vandaan. Zolang de input focus heeft, blijft hij zichtbaar ook al
+// is de waarde tijdelijk leeg; pas bij blur telt "leeg" echt als verwijderd.
+const editingBadgeCells = ref<Set<string>>(new Set());
+function badgeCellKey(row: number, col: number): string {
+  return row + ':' + col;
+}
+function showBadgeInput(row: number, col: number): boolean {
+  return cellBadgeValue(row, col) !== '' || editingBadgeCells.value.has(badgeCellKey(row, col));
+}
+function onBadgeFocus(row: number, col: number): void {
+  editingBadgeCells.value.add(badgeCellKey(row, col));
+}
+function onBadgeBlur(row: number, col: number): void {
+  editingBadgeCells.value.delete(badgeCellKey(row, col));
+}
 // Chip-gevoel: de badge-input hugt zijn inhoud (ch-breedte, geklemd) in
 // plaats van een vaste smalle kolom — vrije tekst paste daar niet in.
 function badgeInputStyle(row: number, col: number): Record<string, string> {
@@ -358,6 +377,21 @@ const footerLabelUi = {
                 :title="cellCheckState(rowIdx, colIdx) === true ? 'Uitvinken' : 'Aanvinken'"
                 @click.stop="toggleCellCheck(rowIdx, colIdx)"
               />
+              <UInput
+                v-if="isBodyCell(rowIdx) && showBadgeInput(rowIdx, colIdx)"
+                :model-value="cellBadgeValue(rowIdx, colIdx)"
+                placeholder="#"
+                size="xs"
+                variant="soft"
+                color="neutral"
+                class="ml-1 mt-1 shrink-0"
+                :style="badgeInputStyle(rowIdx, colIdx)"
+                :ui="{ base: 'rounded-full px-2 py-0.5 text-center text-xs text-dimmed' }"
+                :aria-label="'Badge voor ' + cellLabel(rowIdx, colIdx)"
+                @update:model-value="(value: string | number) => updateCellBadge(value, rowIdx, colIdx)"
+                @focus="onBadgeFocus(rowIdx, colIdx)"
+                @blur="onBadgeBlur(rowIdx, colIdx)"
+              />
               <UTextarea
                 :ref="(el) => setInputRef(el, rowIdx, colIdx)"
                 :model-value="cell.value"
@@ -374,19 +408,6 @@ const footerLabelUi = {
                 wrap="soft"
                 @update:model-value="(value: string) => updateCellValue(value, rowIdx, colIdx)"
                 @keydown="(event: KeyboardEvent) => onKeydown(event, rowIdx, colIdx)"
-              />
-              <UInput
-                v-if="isBodyCell(rowIdx) && cellBadgeValue(rowIdx, colIdx) !== ''"
-                :model-value="cellBadgeValue(rowIdx, colIdx)"
-                placeholder="#"
-                size="xs"
-                variant="soft"
-                color="neutral"
-                class="mr-7 mt-1 shrink-0"
-                :style="badgeInputStyle(rowIdx, colIdx)"
-                :ui="{ base: 'rounded-full px-2 py-0.5 text-center text-xs text-dimmed' }"
-                :aria-label="'Badge voor ' + cellLabel(rowIdx, colIdx)"
-                @update:model-value="(value: string | number) => updateCellBadge(value, rowIdx, colIdx)"
               />
               <UDropdownMenu
                 :items="cellMenuItems(rowIdx, colIdx)"
