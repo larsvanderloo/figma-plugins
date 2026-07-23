@@ -49,10 +49,41 @@ function onThemeChange(modeId: string | null): void {
   settings.setTheme(id, modeId);
 }
 
-function onConfidentialChange(show: boolean): void {
+// Variant items come straight from the ConfidentalBadge component set (via
+// the scan) — no hardcoded labels, so a designer adding a variant just makes
+// it appear. NB: geen 'uit'-item met lege value in deze lijst stoppen — Reka
+// UI (onder USelect) laat items met value '' stilletjes vallen; on/off leeft
+// daarom op de switch, niet in de dropdown.
+const confidentialItems = computed<Array<{ label: string; value: string }>>(() => {
+  const conf = view.state.general?.confidential;
+  if (!conf) return [];
+  return conf.variantOptions.map((v) => ({ label: v, value: v }));
+});
+// Current variant for the picker; falls back to the first option so the
+// select never renders empty while the badge is on.
+const confidentialVariant = computed<string>(() => {
+  const conf = view.state.general?.confidential;
+  if (!conf) return '';
+  return conf.variant ?? conf.variantOptions[0] ?? '';
+});
+const showConfidentialVariant = computed<boolean>(() => {
+  const conf = view.state.general?.confidential;
+  return !!conf && conf.show && conf.variantOptions.length > 0;
+});
+
+function onConfidentialToggle(show: boolean): void {
   const id = view.state.currentSlideId;
   if (id === null) return;
-  settings.setConfidential(id, show);
+  // Send the displayed variant along when switching on, so the canvas badge
+  // is guaranteed to match what the picker shows.
+  const variant = show && confidentialVariant.value !== '' ? confidentialVariant.value : undefined;
+  settings.setConfidential(id, show, variant);
+}
+
+function onConfidentialVariantChange(value: string): void {
+  const id = view.state.currentSlideId;
+  if (id === null) return;
+  settings.setConfidential(id, true, value);
 }
 </script>
 
@@ -80,10 +111,24 @@ function onConfidentialChange(show: boolean): void {
         <USwitch
           v-if="showConfidentialSection"
           :model-value="view.state.general!.confidential!.show"
-          label="Vertrouwelijk"
+          label="Vertrouwelijkheidslabel tonen"
           :ui="{ root: 'flex-row-reverse justify-between w-full', wrapper: 'ms-0' }"
-          @update:model-value="onConfidentialChange"
+          @update:model-value="onConfidentialToggle"
         />
+        <div
+          v-if="showConfidentialVariant"
+          class="flex items-center justify-between gap-3"
+        >
+          <span class="text-sm text-muted">Soort</span>
+          <USelect
+            :model-value="confidentialVariant"
+            :items="confidentialItems"
+            value-key="value"
+            class="min-w-44"
+            aria-label="Soort vertrouwelijkheidslabel"
+            @update:model-value="onConfidentialVariantChange"
+          />
+        </div>
       </WCard>
     </EditorWrapper>
 

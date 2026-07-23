@@ -120,21 +120,27 @@ export function useSlideSettings() {
   }
 
   /**
-   * Toggle the slide's "Show Confidental" boolean component property (shows/
-   * hides the ConfidentalBadgeWrap). Optimistically flips the local switch;
-   * the sandbox confirms via `target-updated` and does not re-emit. No-op
-   * when the slide's component has no such property (UI hides the toggle).
+   * Set the slide's confidentiality badge: `show` drives the Slide's
+   * "Show Confidental" boolean (badge on/off); `variant`, when given, also
+   * switches the nested ConfidentalBadge's `Variant` (Vertrouwelijk/Intern).
+   * Optimistically updates the local store; the sandbox confirms via
+   * `target-updated` and does not re-emit. No-op when the slide's component
+   * has no such property (UI hides the control).
    */
   let confidentialSeq = 0;
-  function setConfidential(slideId: string, show: boolean): void {
+  function setConfidential(slideId: string, show: boolean, variant?: string): void {
     const confidential = view.state.general?.confidential;
-    if (confidential) confidential.show = show;
+    if (confidential) {
+      confidential.show = show;
+      if (typeof variant === 'string') confidential.variant = variant;
+    }
     confidentialSeq += 1;
     bridge.post({
       type: 'set-slide-confidential',
       slideId: slideId,
       requestId: 'confidential-' + confidentialSeq,
       show: show,
+      ...(typeof variant === 'string' ? { variant: variant } : {}),
     });
   }
 
