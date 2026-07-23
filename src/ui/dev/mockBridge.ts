@@ -55,7 +55,7 @@ export function installMockBridge(): void {
           imageHash: null,
         },
         theme: null,
-        confidential: { show: false },
+        confidential: { show: false, variant: 'Vertrouwelijk', variantOptions: ['Vertrouwelijk', 'Intern'] },
       },
       content: {
         cardWrapId: 'wrap-1',

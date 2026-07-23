@@ -186,6 +186,12 @@ export type UIToPluginMessage =
       requestId?: string;
       /** New value for the Slide's "Show Confidental" boolean property. */
       show: boolean;
+      /**
+       * When set, also switch the nested ConfidentalBadge's `Variant` (e.g.
+       * 'Vertrouwelijk', 'Intern'). Omitted on a plain show/hide toggle so
+       * the badge keeps whatever variant it already has.
+       */
+      variant?: string;
     }
   | {
       /**

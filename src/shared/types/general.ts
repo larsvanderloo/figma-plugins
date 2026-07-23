@@ -121,10 +121,18 @@ export interface GeneralSections {
    */
   theme: ThemeSection | null;
   /**
-   * Slide-level "Show Confidental" toggle — the Slide component's boolean
-   * component property that shows/hides the ConfidentalBadgeWrap. Null when
-   * the slide's component has no such property (older variants); the editor
-   * then hides the toggle. `show` is the current property value.
+   * Confidentiality badge state. Two Figma surfaces drive it:
+   *  - `show`    — the Slide's "Show Confidental" BOOLEAN component property
+   *                (shows/hides the ConfidentalBadgeWrap).
+   *  - `variant` — the `Variant` VARIANT property on the nested
+   *                ConfidentalBadge instance (which text is shown). Null when
+   *                no badge/variant could be read.
+   *  - `variantOptions` — the badge's available variant values, read from the
+   *                component set so the editor's dropdown reflects whatever the
+   *                designer defines (no hardcoded labels).
+   * Null when the slide's component has no "Show Confidental" property (older
+   * variants); the editor then hides the whole control. The UI presents this
+   * as one dropdown: "off" (show=false) + one entry per variant.
    */
-  confidential: { show: boolean } | null;
+  confidential: { show: boolean; variant: string | null; variantOptions: string[] } | null;
 }
