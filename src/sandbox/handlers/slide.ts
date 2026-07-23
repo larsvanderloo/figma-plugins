@@ -13,7 +13,7 @@ import { refreshChartsOnSlide } from '../scan/graphs';
 import { findSlideById, summaryForSlide } from '../slides';
 import { setLastSentSummarySignature } from '../session';
 import { findThemeCollectionsForSlide } from '../scan/theme';
-import { setInstanceProperty } from '../slide-machine';
+import { setInstanceProperty, findConfidentalBadge } from '../slide-machine';
 import { scanSlide } from '../scan/slide-scan';
 import type { UIToPluginMessage } from '../../shared/types';
 
@@ -169,7 +169,7 @@ export async function handleSetSlideConfidential(
   }
   figma.commitUndo();
   markSelfWrite();
-  // "Show Confidental" BOOLEAN property on the Slide instance (controls the
+  // Visibility: "Show Confidental" BOOLEAN on the Slide instance (controls the
   // ConfidentalBadgeWrap). Try the library spelling first, then the corrected
   // one. setInstanceProperty returns false when the property is absent.
   let applied = setInstanceProperty(slide, 'Show Confidental', msg.show);
@@ -185,7 +185,22 @@ export async function handleSetSlideConfidential(
     });
     return;
   }
-  // No re-scan: the iframe flips its switch optimistically before posting;
+  // Variant lives on the nested ConfidentalBadge instance (not exposed on the
+  // Slide). Only touched when the UI sends one (variant picker); a plain
+  // show/hide toggle leaves it alone. Non-fatal on failure: visibility is the
+  // primary gate, and setProperties throws on an unknown variant value — a
+  // stale option from the UI must not blow up the whole toggle.
+  if (typeof msg.variant === 'string' && msg.variant !== '') {
+    const badge = findConfidentalBadge(slide);
+    if (badge !== null) {
+      try {
+        setInstanceProperty(badge, 'Variant', msg.variant);
+      } catch (eVariant) {
+        console.log('[welder-slide-editor] set confidential variant failed:', eVariant);
+      }
+    }
+  }
+  // No re-scan: the iframe flips its dropdown optimistically before posting;
   // markSelfWrite() suppresses the documentchange re-scan window. Same
   // pattern as set-slide-skipped / set-slide-theme.
   postToUI({

@@ -57,11 +57,24 @@ PageNode
 
 The exported finders are exactly: `findCopyWrap`, `findBadge`, `findImageWrap`,
 `findCardWrap` / `findAllCardWraps`, `findChartWrap` / `findAllChartWraps`,
-`findTableWrap` / `findAllTableWraps`, `findTimelineWrap`, the slot helper
-`findSlotInWrap` (locates the SLOT inside any wrap), plus the surface helpers
-`findEnclosingSurface` /
+`findTableWrap` / `findAllTableWraps`, `findTimelineWrap`,
+`findConfidentalBadge` (the nested badge inside `ConfidentalBadgeWrap`; no
+visibility gate, since the instance exists while the wrap is hidden), the slot
+helper `findSlotInWrap` (locates the SLOT inside any wrap), plus the surface
+helpers `findEnclosingSurface` /
 `findEnclosingSurfaceName` and the generic `findEnclosingInstanceByName` /
 `findSlotInWrap`.
+
+### ConfidentalBadge — slide-level confidentiality marker
+
+- **Visibility:** the Slide instance's `Show Confidental` BOOLEAN component
+  property (library spelling; the corrected `Show Confidential` is read/written
+  as fallback) shows/hides the `ConfidentalBadgeWrap` frame at the slide bottom.
+- **Variant:** the nested `ConfidentalBadge` INSTANCE carries a `Variant`
+  VARIANT property (`Vertrouwelijk` / `Intern`) selecting the badge text. The
+  variant is **not** exposed on the Slide instance — reads and writes go
+  through `findConfidentalBadge`. Available options are read from the badge's
+  component set so the editor mirrors whatever the library defines.
 
 > **Not present:** there is no `TimelineSlotWrap`, no `JourneyWrap` /
 > `JourneyItem`, and no `editors/timeline/` or `editors/journey/` directory.

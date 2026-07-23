@@ -12,6 +12,7 @@ import {
   findCopyWrap,
   findBadge,
   findImageWrap,
+  findConfidentalBadge,
   readBooleanProperty,
 } from '../slide-machine';
 import { GeneralSections } from '../../shared/types';
@@ -225,8 +226,47 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
   if (confidentialProp === null) {
     confidentialProp = readBooleanProperty(slide, 'Show Confidential');
   }
-  const confidentialSection: GeneralSections['confidential'] =
-    confidentialProp === null ? null : { show: confidentialProp };
+  // Variant lives on the nested ConfidentalBadge instance (NOT exposed on the
+  // Slide instance — confirmed via runtime: the slide only exposes the
+  // `Show Confidental` boolean). Read the current variant + the available
+  // options so the editor dropdown reflects whatever the designer defines.
+  let confidentialSection: GeneralSections['confidential'] = null;
+  if (confidentialProp !== null) {
+    let variant: string | null = null;
+    let variantOptions: string[] = [];
+    const badge = findConfidentalBadge(slide);
+    if (badge !== null) {
+      const bp = badge.componentProperties;
+      if (bp !== null && bp !== undefined) {
+        const entry = bp['Variant'];
+        if (entry !== undefined && entry !== null && typeof entry.value === 'string') {
+          variant = entry.value;
+        }
+      }
+      // Options come from the component set definition, not the instance.
+      // getMainComponentAsync is the dynamic-page-safe path; guarded so a
+      // failure just leaves options empty (the dropdown falls back to the
+      // current value below).
+      try {
+        const main = await badge.getMainComponentAsync();
+        if (main !== null && main.parent !== null && main.parent.type === 'COMPONENT_SET') {
+          const defs = (main.parent as ComponentSetNode).componentPropertyDefinitions;
+          if (defs !== null && defs !== undefined) {
+            const def = defs['Variant'];
+            if (def !== undefined && def !== null && def.variantOptions !== undefined) {
+              variantOptions = def.variantOptions;
+            }
+          }
+        }
+      } catch (eOpts) {
+        console.log('[welder-slide-editor] confidential variant options read failed:', eOpts);
+      }
+    }
+    // Fallback so the dropdown always has the current value even if the option
+    // list couldn't be read.
+    if (variantOptions.length === 0 && variant !== null) variantOptions = [variant];
+    confidentialSection = { show: confidentialProp, variant: variant, variantOptions: variantOptions };
+  }
 
   if (
     titleDescription === null &&

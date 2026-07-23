@@ -259,6 +259,22 @@ export function findBadge(slide: InstanceNode): InstanceNode | null {
 }
 
 /**
+ * ConfidentalBadge: het genestte badge-INSTANCE (binnen ConfidentalBadgeWrap)
+ * dat de `Variant`-property draagt (Vertrouwelijk / Intern). Naam exact
+ * 'ConfidentalBadge' — NIET prefix-match, anders vangt hij ook 'ConfidentalBadgeWrap'.
+ * De correcte spelling 'ConfidentialBadge' is een fallback voor een toekomstige
+ * master-rename (spiegelt de 'Show Confidental'/'Show Confidential'-fallback).
+ * Geen visibility-gate: het instance bestaat óók wanneer de wrap verborgen is
+ * (Show Confidental=false) — MCP-bevestigd — zodat de variant leesbaar/zetbaar
+ * blijft ongeacht show-state.
+ */
+export function findConfidentalBadge(slide: InstanceNode): InstanceNode | null {
+  const exact = findFirstInstance(slide, (n) => n.name === 'ConfidentalBadge');
+  if (exact !== null) return exact;
+  return findFirstInstance(slide, (n) => n.name === 'ConfidentialBadge');
+}
+
+/**
  * ImageWrap: INSTANCE met name 'ImageWrap' (exact match), MAAR alleen
  * de slide-level wrap — niet ImageWraps die binnen een Card of CardWrap
  * leven (die zijn eigendom van die card en verschijnen in de Content-
