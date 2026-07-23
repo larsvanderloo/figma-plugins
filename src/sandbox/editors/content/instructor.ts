@@ -1,20 +1,6 @@
-// ============================================================
-// editors/content/instructor.ts
-//
-// Scan-helpers + main-thread mutator voor InstructorCards — de
-// Instructor-variant van de Card-slot binnen CardWrap. De component-set
-// exposeert een `Instructor` VARIANT (één variant per persoon, bv.
-// Gijs/Myra); foto + naam zijn designer-beheerd en volgen de variant.
-// De plugin:
-//   1. Switcht de `Instructor` VARIANT-property (picker in de UI).
-//   2. Muteert de list-item-teksten (descendant TEXT-nodes binnen het
-//      `list`-frame, in document-volgorde).
-//
-// FIG-FONT-01: text-mutaties gaan via setTextCharactersSafe.
-// FIG-GUARD-01: type-checks vóór property-access; silent skip wanneer
-// de card of target-nodes ontbreken.
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// InstructorCard: the Instructor variant of the Card slot inside CardWrap. Photo and
+// name are designer-managed and follow the `Instructor` VARIANT property; the plugin
+// only switches that variant and edits the TEXT nodes inside the `list` frame.
 
 import { getPropertyKey, setInstanceProperty } from '../../slide-machine';
 import { setTextCharactersSafe } from '../_shared/fonts';
@@ -24,12 +10,8 @@ export const INSTRUCTOR_CARD_NODE_NAME = 'InstructorCard';
 const INSTRUCTOR_PROPERTY_NAME = 'Instructor';
 const LIST_FRAME_NAME = 'list';
 
-/**
- * De bewerkbare TEXT-nodes van een InstructorCard, in document-volgorde.
- * Bounded tot het `list`-frame zodat de variant-gedreven naam-text
- * buiten schot blijft. Werkt op zowel instances als component-masters
- * (de master levert de default-teksten bij een instructor-switch).
- */
+// Scoped to the `list` frame so the variant-driven name text stays untouched.
+// Also works on component masters — they supply the defaults on an instructor switch.
 export function findInstructorListTexts(card: InstanceNode | ComponentNode): TextNode[] {
   if (!('findOne' in card)) return [];
   const list = card.findOne(function (n: SceneNode) {
@@ -46,7 +28,6 @@ export function findInstructorListTexts(card: InstanceNode | ComponentNode): Tex
   return out;
 }
 
-/** Huidige `Instructor` VARIANT-waarde, of null wanneer de property ontbreekt. */
 export function readInstructorVariant(card: InstanceNode): string | null {
   const key = getPropertyKey(card, INSTRUCTOR_PROPERTY_NAME);
   if (key === null) return null;
@@ -59,9 +40,8 @@ export function readInstructorVariant(card: InstanceNode): string | null {
   return entry.value;
 }
 
-// De InstructorCard-component-set, gecachet na de eerste resolve.
-// Eén set per design system; de cache maakt switches en re-scans na de
-// eerste keer volledig synchroon (geen getMainComponentAsync meer).
+// One InstructorCard set per design system; caching it makes later switches and
+// re-scans fully synchronous (no getMainComponentAsync after the first resolve).
 let cachedInstructorSet: ComponentSetNode | null = null;
 
 async function resolveInstructorSet(card: InstanceNode): Promise<ComponentSetNode | null> {
@@ -78,12 +58,7 @@ async function resolveInstructorSet(card: InstanceNode): Promise<ComponentSetNod
   return cachedInstructorSet;
 }
 
-/**
- * Beschikbare `Instructor`-variant-opties uit de component-set van de
- * card. Lege array wanneer de set onbereikbaar is (library niet geladen)
- * — de UI toont de picker dan disabled in plaats van een lege dropdown
- * te crashen.
- */
+/** Empty array when the set is unreachable (library not loaded) — the UI then shows the picker disabled. */
 export async function readInstructorOptions(card: InstanceNode): Promise<string[]> {
   const set = await resolveInstructorSet(card);
   if (set === null) return [];
@@ -100,12 +75,8 @@ export async function readInstructorOptions(card: InstanceNode): Promise<string[
   return [];
 }
 
-/**
- * Default-list-teksten van de variant-master voor `instructor`, sync
- * gelezen uit de (gecachete) component-set. Variant-children heten
- * 'Instructor=<waarde>' (segment-exact gematcht op komma-gescheiden
- * property-paren).
- */
+// Variant children are named 'Instructor=<value>' among comma-separated property
+// pairs; matched segment-exact.
 function defaultItemsForVariant(set: ComponentSetNode, instructor: string): string[] | null {
   const wanted = INSTRUCTOR_PROPERTY_NAME + '=' + instructor;
   for (let i = 0; i < set.children.length; i++) {
@@ -133,20 +104,15 @@ function defaultItemsForVariant(set: ComponentSetNode, instructor: string): stri
 export interface InstructorCardPayload {
   cardNodeId: string;
   instructor?: string;
-  /** Volledige list in document-volgorde; ongewijzigde teksten worden geskipt. */
+  /** Full list in document order; unchanged texts are skipped. */
   items?: string[];
-  /** Card-zichtbaarheid — hidden collapst uit de CardWrap-auto-layout. */
+  /** Hidden cards collapse out of the CardWrap auto-layout. */
   visible?: boolean;
 }
 
 /**
- * Past een InstructorCardPayload toe op de aangewezen InstructorCard.
- * Resolveert zonder error wanneer de card ontbreekt (silent skip,
- * FIG-GUARD-01).
- *
- * Retourneert de list-teksten ná een instructor-switch (gereset naar de
- * defaults van de nieuwe variant), of null wanneer er geen switch
- * plaatsvond — de caller post die gericht naar de iframe.
+ * Returns the list texts after an instructor switch (reset to the new variant's
+ * defaults) so the caller can post them to the iframe; null when no switch happened.
  */
 export async function applyInstructorCard(
   slide: InstanceNode,
@@ -179,13 +145,9 @@ export async function applyInstructorCard(
       } catch (e) {
         console.log('[instructor] setProperties Instructor failed: ' + String(e));
       }
-      // Reset de list-teksten naar de defaults van de NIEUWE variant —
-      // Figma bewaart text-overrides over een variant-switch heen.
-      // NIET via resetOverrides: de InstructorCard zit zelf als
-      // instance-swap-override in de CardWrap-slot, dus een volledige
-      // reset zou de swap terugdraaien naar een gewone Card. De defaults
-      // komen sync uit de gecachete component-set; de fonts zijn na de
-      // eerste write al geladen — de switch blijft daarmee vlot.
+      // Figma keeps text overrides across a variant switch, so reset the list to the
+      // NEW variant's defaults manually. Not via resetOverrides: the card is itself an
+      // instance-swap override in the CardWrap slot, and a full reset would undo the swap.
       try {
         const set = await resolveInstructorSet(card);
         if (set !== null) {

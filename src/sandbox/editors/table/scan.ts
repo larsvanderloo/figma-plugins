@@ -1,12 +1,6 @@
-// ============================================================
-// editors/table/scan.ts
-//
-// Scan — lees huidige Slot-content in een TableWrapModel.
-// Canvas is leading: rij/cel-structuur komt uit de FRAMEs in de Slot,
-// header/calculation-flags uit pluginData (via `./plugin-data`).
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Canvas is leading: row/cell structure comes from the FRAMEs in the Slot,
+// header/calculation flags from pluginData. Legacy `textSize` pluginData is
+// ignored — applyTable derives fontSize from slot.height + rows.length.
 
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
 import { CELL_VALUE_NAME } from './build-rows';
@@ -19,17 +13,8 @@ import {
   readColumnCalculationLabel,
 } from './plugin-data';
 
-/**
- * Lees de huidige Slot-inhoud. Row-FRAMEs heten `TableRow-*`,
- * cell-FRAMEs `TableItem-*`; overige kinderen worden overgeslagen.
- *
- * Legacy `textSize`-pluginData wordt niet meer gelezen — fontSize
- * wordt door applyTable afgeleid uit slot.height + rows.length.
- */
-// True wanneer de tekst-range [start,end) een UNORDERED-lijst is. Per regel
-// bevraagd zodat gemengde bullet/prosa-cellen kloppen. getRangeListOptions kan
-// figma.mixed teruggeven; dat telt niet als bullet. FIG-GUARD-01: type-check
-// vóór property-access.
+// Queried per line so mixed bullet/prose cells scan correctly.
+// getRangeListOptions can return figma.mixed; that does not count as a bullet.
 function rangeIsUnordered(text: TextNode, start: number, end: number): boolean {
   if (end <= start) return false;
   try {
@@ -41,10 +26,8 @@ function rangeIsUnordered(text: TextNode, start: number, end: number): boolean {
   }
 }
 
-// Reconstrueer de markers-in-de-string representatie uit een TEXT-node: per
-// regel een `- ` prefix wanneer die regel een UNORDERED-lijstregel is. Zo
-// blijft de bullet-state (per regel) bewaard over de scan → iframe →
-// re-apply round-trip, inclusief gemengde bullet/prosa-cellen.
+// Rebuild the markers-in-the-string form (`- ` prefix per UNORDERED line) so
+// per-line bullet state survives the scan → iframe → re-apply round-trip.
 function reconstructBulletMarkers(text: TextNode): string {
   const chars = text.characters;
   const lines = chars.split('\n');
@@ -54,17 +37,15 @@ function reconstructBulletMarkers(text: TextNode): string {
     const line = lines[i];
     const bullet = line.length > 0 && rangeIsUnordered(text, offset, offset + line.length);
     out.push(bullet ? '- ' + line : line);
-    offset += line.length + 1; // +1 voor de '\n'
+    offset += line.length + 1;
   }
   return out.join('\n');
 }
 
 export function scanTableSlot(slot: SlotNode): TableWrapModel {
-  // Legacy-detection: oude v0.1.x slides hadden pluginData op de
-  // TableWrap-INSTANCE met `kind='welder-table'` + `v='2'`; nu zit de
-  // canonieke marker op de Slot zelf als `kind='welder-tablewrap'` + `v='3'`.
-  // Als we een oude marker zien, log het en ga door met canvas-truth
-  // (geen data-mapping, de canvas is leading).
+  // Older slides carried the marker as `kind='welder-table'` + `v='2'`; the
+  // canonical marker is now `kind='welder-tablewrap'` + `v='3'` on the Slot.
+  // On a legacy marker just log and continue — canvas is leading, no migration.
   const legacyKind = slot.getPluginData('kind');
   const legacyV = slot.getPluginData('v');
   if (legacyKind === 'welder-table' && legacyV === '2') {
@@ -73,9 +54,8 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
     );
   }
 
-  // Rows kunnen ofwel direct in de Slot staan (legacy layout, geen outer
-  // wrapper) of genest in een `WelderTableContent`-container (huidige layout
-  // met border+padding). Zoek eerst de container; fallback op slot.children.
+  // Rows sit either directly in the Slot (legacy layout, no outer wrapper) or
+  // inside a `WelderTableContent` container (current layout, border+padding).
   let rowParent: SlotNode | FrameNode = slot;
   for (let i = 0; i < slot.children.length; i++) {
     const child = slot.children[i];
@@ -89,7 +69,7 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
   for (let i = 0; i < rowParent.children.length; i++) {
     const rowNode = rowParent.children[i];
     if (rowNode.type !== 'FRAME') continue;
-    // Matcht óók TableHeaderRow zodat re-edit de header-rij niet verliest.
+    // Also match TableHeaderRow so a re-edit does not drop the header row.
     if (rowNode.name.indexOf('TableRow') !== 0 && rowNode.name.indexOf('TableHeaderRow') !== 0)
       continue;
     const rowFrame = rowNode as FrameNode;
@@ -98,7 +78,6 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
     for (let j = 0; j < rowFrame.children.length; j++) {
       const cellNode = rowFrame.children[j];
       if (cellNode.type !== 'FRAME') continue;
-      // Matcht óók TableHeaderItem (header-cells).
       if (
         cellNode.name.indexOf('TableItem') !== 0 &&
         cellNode.name.indexOf('TableHeaderItem') !== 0
@@ -106,19 +85,14 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
         continue;
       const cellFrame = cellNode as FrameNode;
 
-      // Waarde-TEXT bij naam (delta-cellen dragen een tweede 'CellDelta'-TEXT);
-      // fallback op de eerste TEXT voor cellen die vóór de naamgeving zijn gebouwd.
+      // Look up the value TEXT by name — delta cells carry a second 'CellDelta'
+      // TEXT; fall back to the first TEXT for cells built before the naming.
       let textNode = cellFrame.findOne(
         (n: SceneNode) => n.type === 'TEXT' && n.name === CELL_VALUE_NAME,
       );
       if (textNode === null) {
         textNode = cellFrame.findOne((n: SceneNode) => n.type === 'TEXT');
       }
-      // Canvas stript de bullet-markers en zet UNORDERED list-styling per
-      // bullet-regel (zie build-rows). Het model is leading op de
-      // markers-in-de-string representatie, dus reconstrueren we de `- `
-      // prefixes per regel uit de list-options. Zo blijft de (per-regel)
-      // bullet-state bewaard over de scan → iframe → re-apply round-trip.
       let value = '';
       if (textNode !== null && textNode.type === 'TEXT') {
         value = reconstructBulletMarkers(textNode as TextNode);
@@ -127,8 +101,7 @@ export function scanTableSlot(slot: SlotNode): TableWrapModel {
       const delta = cellFrame.getPluginData('delta');
       const cellModel: TableCellModel = { cellNodeId: cellFrame.id, value: value, emphasis: emphasis };
       if (delta !== '') cellModel.delta = delta;
-      // Vinkje/nummer-badge: zelfde pluginData-round-trip als delta, zodat
-      // een re-apply van het gescande model de cel identiek terugbouwt.
+      // 'check' is tri-state: '1'/'0'/unset — unset must stay undefined, not false.
       const check = cellFrame.getPluginData('check');
       if (check === '1') cellModel.check = true;
       else if (check === '0') cellModel.check = false;

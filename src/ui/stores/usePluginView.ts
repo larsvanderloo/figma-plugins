@@ -1,15 +1,6 @@
-// ============================================================
-// usePluginView — central UI store for the iframe.
-//
-// Pinia setup-store. State lives in one `reactive()` under `state`.
-// Derived state (noSlide, isSkipped, hasX, allEmpty) is exposed as
-// getters so consumers don't repeat the same booleans.
-//
-// The sandbox owns slide selection: it watches `selectionchange` and
-// drives `currentSummary` + payload via `slide-loaded` / `slide-summary`
-// / `slide-deselected`. The iframe never asks "switch to slide X" — the
-// user picks slides by clicking them on the Figma canvas.
-// ============================================================
+// The sandbox owns slide selection: it watches `selectionchange` and pushes
+// `slide-loaded` / `slide-summary` / `slide-deselected`. The iframe never asks
+// to switch slides — the user picks them on the Figma canvas.
 
 import { reactive, computed } from 'vue';
 import { defineStore } from 'pinia';
@@ -22,9 +13,7 @@ import type {
 } from '../../shared/types';
 
 export interface PluginViewState {
-  /** Runtime metadata posted by the sandbox during init. */
   runtime: PluginRuntimeInfo | null;
-  /** Current slide summary; null when no slide is selected on the canvas. */
   currentSummary: SlideSummary | null;
   /** Mirrors currentSummary.id for the editor composables that read it. */
   currentSlideId: string | null;
@@ -54,7 +43,6 @@ export const usePluginView = defineStore('pluginView', () => {
   });
   const skipOverrides = new Map<string, SkipOverride>();
 
-  // ── Getters ────────────────────────────────────────────────────────────
   const noSlide = computed<boolean>(() => state.currentSlideId === null);
 
   const currentSummary = computed<SlideSummary | null>(() => state.currentSummary);
@@ -75,7 +63,6 @@ export const usePluginView = defineStore('pluginView', () => {
       state.graphs === null,
   );
 
-  // ── Actions ────────────────────────────────────────────────────────────
   function setRuntime(runtime: PluginRuntimeInfo): void {
     state.runtime = runtime;
   }
@@ -131,7 +118,6 @@ export const usePluginView = defineStore('pluginView', () => {
     }, SKIP_OVERRIDE_HOLD_MS);
   }
 
-  /** Apply a full slide-loaded payload from the sandbox. */
   function setSlideLoaded(
     summary: SlideSummary,
     general: GeneralSections | null,
@@ -146,14 +132,12 @@ export const usePluginView = defineStore('pluginView', () => {
     state.graphs = graphs;
   }
 
-  /** Apply a summary-only update (slide renamed or skip-toggled). */
   function setSummary(summary: SlideSummary): void {
     const nextSummary = applySkipOverride(summary);
     state.currentSummary = nextSummary;
     state.currentSlideId = nextSummary.id;
   }
 
-  /** Selection cleared on the canvas — drop slide state entirely. */
   function clearSlide(): void {
     state.currentSummary = null;
     state.currentSlideId = null;
@@ -164,7 +148,6 @@ export const usePluginView = defineStore('pluginView', () => {
 
   return {
     state,
-    // getters
     noSlide,
     currentSummary,
     isSkipped,
@@ -172,7 +155,6 @@ export const usePluginView = defineStore('pluginView', () => {
     hasContent,
     hasGraphs,
     allEmpty,
-    // actions
     setRuntime,
     setSkipOverride,
     settleSkipOverride,

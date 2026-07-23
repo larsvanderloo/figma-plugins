@@ -1,52 +1,22 @@
-// ============================================================
-// usePluginBridge — UI-iframe <-> plugin-main postMessage-bridge.
-//
-// Generieke, type-safe wrapper rond het Figma plugin <-> iframe
-// postMessage-protocol (FIG-MSG-01):
-//
-//   UI → plugin:   parent.postMessage({ pluginMessage: msg }, '*')
-//   Plugin → UI:   window message event, payload in event.data.pluginMessage
-//
-// In tegenstelling tot de per-handler-API van welder-table's
-// usePluginBridge biedt deze compose-laag een bewust smalle, uniforme
-// `post(msg)` + `onMessage(handler)` API — handlers worden in de
-// store-laag (usePluginView) gedispatcht op msg.type. Dit past
-// beter bij de grotere discriminated-union (4 inbound / 7 outbound
-// types) zonder N callback-slots te hoeven bijhouden.
-//
-// Inbound messages are handled by one window-level listener and fanned out
-// to composable subscribers. This keeps debug logging and message unwrapping
-// O(1) per plugin message even when several stores/editors subscribe.
-//
-// Auto-unsubscribe: wanneer de composable binnen een Vue `setup()` wordt
-// aangeroepen registreert elke `onMessage` zich automatisch in `onUnmounted`.
-// Buiten een setup-context (bv. unit-test) retourneert onMessage de
-// unsubscribe-fn die de caller zelf aanroept.
-// ============================================================
+// Deliberately a narrow post/onMessage API (unlike welder-table's per-handler
+// bridge): stores dispatch on msg.type themselves, so the larger message union
+// needs no per-type callback slots. One window listener unwraps once and fans out.
 
 import { computed, getCurrentInstance, onUnmounted, ref, type ComputedRef } from 'vue';
 import { debugLog, debugMessage, isPluginDebugEnabled } from '../../shared/debug';
 import type { PluginToUIMessage, UIToPluginMessage } from '../../shared/types';
 
-/** Handler voor een inkomend plugin-bericht. */
 type PluginMessageHandler = (msg: PluginToUIMessage) => void;
 
-/** Opruim-functie die de listener weer afmeldt. */
 type Unsubscribe = () => void;
 
-/** Envelope die Figma om elk iframe-bericht plaatst. */
 interface PluginMessageEnvelope {
   pluginMessage?: unknown;
 }
 
 export interface PluginBridge {
-  /** Stuur een typed bericht naar de plugin-main-thread. */
   post: (msg: UIToPluginMessage) => void;
-  /**
-   * Registreer een handler voor inkomende plugin-berichten.
-   * Retourneert een unsubscribe-fn; wanneer we binnen een Vue setup
-   * draaien wordt die ook automatisch in onUnmounted aangeroepen.
-   */
+  /** Returns an unsubscribe fn; inside a Vue setup it also runs automatically on unmount. */
   onMessage: (handler: PluginMessageHandler) => Unsubscribe;
 }
 
@@ -175,8 +145,7 @@ function settleBridgeRoundtrip(msg: PluginToUIMessage): void {
 }
 
 function unwrapPluginMessage(event: MessageEvent): PluginToUIMessage | null {
-  // Edge-case: Vite HMR en andere iframe-messages hebben geen
-  // pluginMessage-envelope. Stil negeren, niet throwen.
+  // Vite HMR and other iframe messages carry no pluginMessage envelope; ignore silently.
   const envelope = event.data as PluginMessageEnvelope | undefined;
   if (envelope === undefined || envelope === null) return null;
   const raw = envelope.pluginMessage;
@@ -213,15 +182,9 @@ function post(msg: UIToPluginMessage): void {
 }
 
 /**
- * Tracks in-flight writes for a single editor. `register()` increments a
- * counter (called when posting a mutating message); the next
- * `target-updated` decrements it. `pending` is true while the counter > 0.
- *
- * Correlation is approximate — a target-updated from another in-flight
- * editor's write will decrement this counter instead. For typical
- * sequential UX (user edits one field at a time) the approximation is
- * invisible. Acceptable for spinner/disabled-during-save UX without
- * touching the sandbox-side message contract.
+ * Correlation is approximate: a target-updated from another editor's in-flight write
+ * may decrement this counter instead. Invisible for sequential edits, and good enough
+ * for spinner UX without touching the sandbox-side message contract.
  */
 export interface BridgePendingTracker {
   pending: ComputedRef<boolean>;
@@ -244,9 +207,8 @@ export function useBridgePending(bridge: PluginBridge): BridgePendingTracker {
 }
 
 export function usePluginBridge(): PluginBridge {
-  // getCurrentInstance is null wanneer usePluginBridge buiten een Vue
-  // component-setup wordt aangeroepen (bv. vanuit een Pinia-store die
-  // pas later mount of vanuit tests). Dan slaan we onUnmounted over.
+  // getCurrentInstance() is null outside component setup (Pinia store, tests);
+  // calling onUnmounted there would warn, so skip auto-cleanup.
   const inSetup = getCurrentInstance() !== null;
 
   function onMessage(handler: PluginMessageHandler): Unsubscribe {

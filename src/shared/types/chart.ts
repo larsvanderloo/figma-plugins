@@ -1,84 +1,53 @@
-// ============================================================
-// Chart-editor types — Slot-based ChartWrap
-//
-// De plugin bouwt zelf FRAMEs/ELLIPSEs/VECTORs binnen de SlotNode van
-// een ChartWrap-INSTANCE. Het model is multi-series: `categories` zijn
-// de labels (slices/bars/x-as), elke serie levert één waarde per
-// categorie.
-//
-// Anders dan de tabel (canvas-truth scan) is het chart-model
-// pluginData-truth: de geometrie (arcs, bars, paths) is niet
-// betrouwbaar terug te lezen, dus applyChart persisteert het model
-// als JSON op de Slot en scanChartSlot leest het daar terug.
-// ============================================================
+// Chart geometry (arcs, bars, paths) cannot be reliably read back from the
+// canvas, so unlike the table (canvas-truth scan) this model is pluginData-truth:
+// applyChart persists it as JSON on the Slot and scanChartSlot reads it back.
 
-/** Ondersteunde chart-types; per instance switchbaar in de editor. */
 export type ChartType = 'donut' | 'pie' | 'bar' | 'progress' | 'line' | 'matrix';
 
-/** Eén data-serie: naam + één waarde per categorie. */
 export interface ChartSeriesModel {
   name: string;
-  /** Eén waarde per categorie; index-aligned met `categories`. */
+  /** One value per category; index-aligned with `categories`. */
   values: number[];
-  /**
-   * Per-waarde nadruk ("Cel benadrukken", zelfde concept als de tabel):
-   * een benadrukt datapunt rendert z'n waarde/label in Instrument Sans
-   * SemiBold. Index-aligned met `values`; afwezig = geen nadruk.
-   */
+  /** Per-value emphasis (renders SemiBold); index-aligned with `values`, absent = none. */
   emphasis?: boolean[];
-  /** Waarde-labels van deze serie als percentage ('41' → '41%'). */
+  /** Render this series' value labels as percentages ('41' → '41%'). */
   percent?: boolean;
 }
 
 /**
- * Top-level model voor een bewerkbare ChartWrap-instance.
- * `slotId` verwijst naar de SlotNode binnen de ChartWrap-INSTANCE.
- *
- * Single-series chart-types (donut/pie/progress) renderen serie 0;
- * bar groepeert bars per categorie over alle series; line tekent één
- * lijn per serie.
+ * Donut/pie/progress render series 0 only; bar groups bars per category
+ * across all series; line draws one line per series.
  */
 export interface ChartWrapModel {
-  /** Figma SlotNode ID binnen de ChartWrap-INSTANCE. */
+  /** Figma SlotNode ID inside the ChartWrap instance. */
   slotId: string;
   chartType: ChartType;
-  /** Categorie-labels (slices / bars / x-as-punten). */
+  /** Category labels (slices / bars / x-axis points). */
   categories: string[];
-  /**
-   * Per-categorie nadruk ("Cel benadrukken" op de categoriekolom):
-   * een benadrukte categorie rendert z'n categorie-label in Instrument
-   * Sans SemiBold. Index-aligned met `categories`; afwezig = geen nadruk.
-   */
+  /** Per-category label emphasis (renders SemiBold); index-aligned with `categories`, absent = none. */
   categoryEmphasis?: boolean[];
-  /** Data-series; lengte >= 1. */
+  /** At least one series. */
   series: ChartSeriesModel[];
-  /** Legenda tonen (rechts van donut/pie, boven bar/line). */
   showLegend: boolean;
-  /** Waarde-labels tonen op segmenten/bars/punten. */
   showValues: boolean;
   /**
-   * Per-categorie delta-override (serie 0). Index-aligned met
-   * `categories`. Lege string = auto (chartDeltaLabel vs vorige
-   * categorie); niet-lege string = letterlijke badge-tekst.
+   * Per-category delta override for series 0, index-aligned with `categories`.
+   * Empty string = auto (delta vs previous category); non-empty = literal badge text.
    */
   deltaOverrides?: string[];
-  /**
-   * Vaste referentieschaal voor progress-bars. null/afwezig =
-   * auto: max(100, hoogste waarde). Alleen waarden > 0 zijn geldig.
-   */
+  /** Fixed scale for progress bars; null/absent = auto: max(100, highest value). Only values > 0 are valid. */
   progressMax?: number | null;
-  /** Donut center-totaal override; lege string = auto (som serie 0). */
+  /** Donut center-total override; empty string = auto (sum of series 0). */
   donutTotalOverride?: string;
-  /** Onderschrift onder het center-totaal; default 'totaal'. */
+  /** Caption under the center total; default 'totaal'. */
   donutTotalLabel?: string;
-  /** Nadruk op het center-totaal (SemiBold); default true. */
+  /** SemiBold center total; absent = true. */
   donutTotalEmphasis?: boolean;
-  /** Nadruk op het onderschrift (SemiBold); default false. */
+  /** SemiBold caption; absent = false. */
   donutTotalLabelEmphasis?: boolean;
   /**
-   * Delta-badges tonen: per categorie de verandering t.o.v. de
-   * vorige categorie in serie 0 (▲ +12% / ▼ −5%). Optioneel zodat
-   * bestaande gepersisteerde modellen geldig blijven; default false.
+   * Delta badges: per-category change vs the previous category in series 0.
+   * Optional so existing persisted models stay valid; default false.
    */
   showDelta?: boolean;
 }

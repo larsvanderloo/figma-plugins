@@ -1,45 +1,16 @@
-// ============================================================
-// editors/_shared/icon-slot.ts
-//
-// Slot-based icon-swap (gedeeld door Card / Badge).
-//
-// Welder-componenten declareren een `SlotNode` met name `icon-slot`
-// op de positie waar het Lucide-icon moet komen. SlotNodes accepteren
-// child-mutaties binnen een instance zonder de instance te detachen
-// — property-overrides zijn beperkt binnen instances, slot-children
-// niet. Dat maakt deze route fundamenteel sneller en library-onafhankelijk
-// dan INSTANCE_SWAP + importComponentByKeyAsync.
-//
-// Geometrie + stroke-properties van de uitgaande icon worden gelezen
-// uit de huidige slot-child (eerste VECTOR-descendant) en opnieuw
-// toegepast op de nieuwe SVG-content, zodat:
-//   - de variable-binding op stroke-paint behouden blijft (theme-color)
-//   - stroke-weight, stroke-align, stroke-cap, stroke-join niet
-//     terugvallen op Lucide-defaults (2 / CENTER / ROUND / ROUND).
-//   - de nieuwe icon dezelfde footprint krijgt als de oude (anders
-//     krijg je een 24×24 mini-icon in een 68×68 slot).
-//
-// FIG-GUARD-01: silent skip wanneer geen slot, geen createNodeFromSvg.
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Slot-based icon swap (shared by Card / Badge). SlotNodes accept child
+// mutations inside an instance without detaching it, which makes this faster
+// and library-independent vs INSTANCE_SWAP + importComponentByKeyAsync.
 
 import { debugLog } from '../../../shared/debug';
 
 const SLOT_NAME = 'icon-slot';
 
 /**
- * Card masters can hold multiple `icon-slot` SlotNodes — one positioned
- * for the top variant, one wrapped in `icon-border-wrap` for the side
- * variant — with the inactive variant's structural pieces hidden via
- * `.visible = false` on either the slot itself or an ancestor. `findOne`
- * picks the FIRST tree-order match, which on side variants lands on the
- * hidden top slot, so subsequent mutations silently target the wrong
- * node and the user sees nothing change.
- *
- * Returns the first slot whose entire ancestor chain (up to `root`) is
- * visible. Falls back to the first slot encountered when none qualify so
- * callers still get a sensible default (e.g. when both slots are hidden
- * during a transient state).
+ * Card masters hold one `icon-slot` per variant, the inactive one hidden via
+ * `.visible = false` on the slot or an ancestor — `findOne` would return that
+ * hidden slot first in tree order and mutations would silently target the
+ * wrong node. Pick the first slot whose whole ancestor chain is visible.
  */
 function findActiveIconSlot(root: InstanceNode): SlotNode | null {
   if (!('findAll' in root)) return null;
@@ -73,25 +44,18 @@ function findActiveIconSlot(root: InstanceNode): SlotNode | null {
     );
     if (visible) return candidate as SlotNode;
   }
-  // Fallback: take the first slot even if hidden, so callers can still
-  // apply a fresh icon when no variant currently exposes one.
+  // A hidden slot beats none: callers can still stage a fresh icon.
   debugLog('icon-slot', 'no visible slot — falling back to slot #0');
   const first = all[0];
   return first.type === 'SLOT' ? (first as SlotNode) : null;
 }
 
 /**
- * Vervangt de inhoud van het `icon-slot` SlotNode binnen `host` met
- * de SVG-render van het gekozen Lucide-icon. Returns true bij succes,
- * false wanneer geen slot gevonden wordt — caller kan dan fallbacken
- * op legacy INSTANCE_SWAP.
- *
- * `forceRefresh` — wanneer true wordt de override-content éérst verwijderd
- * zodat de slot terugvalt op de variant-master defaults, en daar wordt de
- * stroke-paint van afgelezen. Nodig na een variant-toggle: elke variant
- * bindt de stroke aan een andere theme-variable (Default → background,
- * Outline → text); zonder force zou de read vanuit de oude SVG-override
- * de OUDE variant-binding doorzetten en de icon wordt onzichtbaar.
+ * Returns false when no slot is found, so the caller can fall back to legacy
+ * INSTANCE_SWAP. `forceRefresh` clears the override before reading the stroke
+ * paint so it comes from the variant-master defaults: each variant binds the
+ * stroke to a different theme variable, and reading the old override after a
+ * variant toggle would carry the stale binding and render the icon invisible.
  */
 export function replaceIconViaSlot(
   host: InstanceNode,
@@ -106,12 +70,9 @@ export function replaceIconViaSlot(
     return false;
   }
 
-  // ── Pre-snapshot stroke geometry from current override (forceRefresh) ─
-  // Stroke weight + cap/join/align rarely change between variants — only
-  // the paint binding does. Snapshot them before we wipe the override so
-  // we have a fallback to use when the variant master has no stroked
-  // vector to read from. The snapshot preserves any manual adjustments
-  // the user made to the icon in Figma.
+  // Snapshot stroke geometry before the forceRefresh wipe: the variant master
+  // may have no stroked vector to read from, and the snapshot preserves any
+  // manual stroke adjustments the user made to the icon.
   let preStrokeWeight: number | null = null;
   let preStrokeAlign: 'CENTER' | 'INSIDE' | 'OUTSIDE' | null = null;
   let preStrokeCap: VectorNode['strokeCap'] | null = null;
@@ -134,12 +95,9 @@ export function replaceIconViaSlot(
     }
   }
 
-  // ── Optioneel: clear override BEFORE capture ───────────────────────
-  // Bij forceRefresh wordt de override-content éérst verwijderd zodat
-  // slotNode.children terugvalt op de variant-master defaults — daar zit
-  // de variant-correcte stroke-binding in. Zonder force lezen we eerst en
-  // verwijderen we daarna (zelfde resultaat voor normale picks: het eerste
-  // child IS de huidige slot-content, geen variant-switch nodig).
+  // forceRefresh: clear the override BEFORE capture so slotNode.children
+  // falls back to the variant-master defaults, which carry the variant-correct
+  // stroke binding. Normal picks read first and remove later.
   if (forceRefresh === true) {
     const cleared: SceneNode[] = [];
     for (let i = 0; i < slotNode.children.length; i++) cleared.push(slotNode.children[i]);
@@ -147,12 +105,11 @@ export function replaceIconViaSlot(
       try {
         cleared[i].remove();
       } catch (_e) {
-        /* silent — master-level children may be non-removable */
+        /* master-level children may be non-removable */
       }
     }
   }
 
-  // ── Capture stroke + size from current slot content ─────────────────
   let strokePaint: Paint | null = null;
   let strokeWeight: number | null = null;
   let strokeAlign: 'CENTER' | 'INSIDE' | 'OUTSIDE' | null = null;
@@ -185,22 +142,14 @@ export function replaceIconViaSlot(
   if (targetWidth === 0 && slotNode.width > 0) targetWidth = slotNode.width;
   if (targetHeight === 0 && slotNode.height > 0) targetHeight = slotNode.height;
 
-  // ── Fallback stroke geometry from pre-remove snapshot ──────────────
-  // When the variant master had no stroked vector to copy from, fall back
-  // to the values we snapshotted off the previous override before clearing.
-  // This preserves the user's icon weight/style across variant toggles.
   if (strokeWeight === null && preStrokeWeight !== null) strokeWeight = preStrokeWeight;
   if (strokeAlign === null && preStrokeAlign !== null) strokeAlign = preStrokeAlign;
   if (strokeCap === null && preStrokeCap !== null) strokeCap = preStrokeCap;
   if (strokeJoin === null && preStrokeJoin !== null) strokeJoin = preStrokeJoin;
 
-  // ── Fallback paint: heading-text fill ──────────────────────────────
-  // When the slot master has no stroked vector to copy from (typical
-  // when the designer leaves the slot empty), read the host's first
-  // TEXT-node fill instead. The heading is bound to the same `text`
-  // theme variable that the icon should match — variant-aware automatically
-  // (Default mode → cream; Outline mode → orange). Keeps the icon visible
-  // and on-brand without requiring designer-side per-variant placeholders.
+  // No stroked vector to copy from (designer left the slot empty): use the
+  // host's first TEXT fill — the heading binds to the same `text` theme
+  // variable the icon should match, so the paint stays variant-aware.
   if (strokePaint === null && 'findOne' in host) {
     const txt = (host as InstanceNode).findOne(function (n: SceneNode) {
       return n.type === 'TEXT';
@@ -213,7 +162,6 @@ export function replaceIconViaSlot(
     }
   }
 
-  // ── Render new SVG ─────────────────────────────────────────────────
   let temp: FrameNode;
   try {
     temp = figma.createNodeFromSvg(svgString);
@@ -222,14 +170,14 @@ export function replaceIconViaSlot(
     return false;
   }
 
-  // ── Clear slot (idempotent — already done above when forceRefresh) ─
+  // Idempotent — already emptied above when forceRefresh.
   const snapshot: SceneNode[] = [];
   for (let i = 0; i < slotNode.children.length; i++) snapshot.push(slotNode.children[i]);
   for (let i = 0; i < snapshot.length; i++) {
     try {
       snapshot[i].remove();
     } catch (_e) {
-      /* silent */
+      /* master-level children may be non-removable */
     }
   }
 
@@ -242,22 +190,20 @@ export function replaceIconViaSlot(
     return false;
   }
 
-  // ── Match footprint ────────────────────────────────────────────────
+  // Match the outgoing icon's footprint — otherwise a raw 24×24 Lucide
+  // render sits tiny inside e.g. a 68×68 slot.
   if (targetWidth > 0 && targetHeight > 0) {
     try {
       temp.resize(targetWidth, targetHeight);
     } catch (_e) {
-      /* silent — slot kan auto-layout-locked zijn */
+      /* slot may be auto-layout-locked */
     }
   }
 
-  // ── Centreer in slots zonder auto-layout ───────────────────────────
-  // Auto-layout-slots (Badge, Card-top) centreren hun children zelf en
-  // negeren x/y. De side-variant slot (in `icon-border-wrap`) heeft GEEN
-  // auto-layout: een vers geappende node blijft dan op (0,0) linksboven
-  // hangen terwijl de master-default gecentreerd staat (bv. 58×58 in een
-  // 68×68 slot op (5,5)). Expliciet centreren i.p.v. de oude positie
-  // overnemen: dat herstelt ook overrides die eerder al scheef zijn gezet.
+  // Auto-layout slots center children and ignore x/y, but the side-variant
+  // slot (inside `icon-border-wrap`) has no auto-layout: a freshly appended
+  // node sits at (0,0). Center explicitly rather than copying the old
+  // position — that also repairs overrides that were already skewed.
   try {
     const slotFrame = slotNode as unknown as { layoutMode?: string };
     if (slotFrame.layoutMode === undefined || slotFrame.layoutMode === 'NONE') {
@@ -265,10 +211,11 @@ export function replaceIconViaSlot(
       temp.y = (slotNode.height - temp.height) / 2;
     }
   } catch (_e) {
-    /* silent — positie is cosmetisch, mag de swap nooit laten falen */
+    /* position is cosmetic — must never fail the swap */
   }
 
-  // ── Re-apply captured stroke properties to all child vectors ───────
+  // Reapply the captured paint (its theme-variable binding rides along) so
+  // the new vectors don't fall back to Lucide's stroke defaults.
   const vectors = temp.findAll(function (n: SceneNode) {
     return n.type === 'VECTOR';
   }) as VectorNode[];

@@ -1,5 +1,3 @@
-// useGridDragging — row/column drag-and-drop reorder state + handlers for TableGrid.
-
 import { ref, type ComputedRef } from 'vue';
 import type { TableRowModel } from '../../../../shared/types';
 

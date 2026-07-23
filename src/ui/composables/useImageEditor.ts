@@ -1,7 +1,3 @@
-// useImageEditor — binds the General → Image section to the store + bridge,
-// and manages the sandbox-driven preview bytes that arrive via
-// `image-preview` messages.
-
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
@@ -26,8 +22,7 @@ export function useImageEditor() {
 
   const unsubscribe = bridge.onMessage((msg) => {
     if (msg.type !== 'image-preview') return;
-    // Scope-guard: only accept if imageWrapId matches the active section
-    // (prevents a stale preview from clobbering a freshly-switched slide).
+    // A stale preview can arrive after a slide switch; only accept it for the active imageWrap.
     const img = view.state.general?.image;
     if (img === null || img === undefined) return;
     if (msg.imageWrapId !== img.imageWrapId) return;

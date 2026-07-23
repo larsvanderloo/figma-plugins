@@ -28,12 +28,8 @@ function onVisibleToggle(value: boolean): void {
   emitWith({ visible: value });
 }
 
-// Live meetypen voor de puntenlijst. Eén debounce-kanaal volstaat: er kan
-// maar één punt tegelijk focus hebben, en bij het verlaten van een veld
-// cancel()t de blur-commit het lopende timertje voordat een verouderde
-// waarde zou posten. Het items-array wordt pas bij het vuren opgebouwd,
-// zodat de overige punten hun actuele store-waarde houden; de delta-guard
-// in useInstructorEditor vangt eventuele no-op-posts af.
+// One debounce channel is enough: only one item has focus at a time, and the blur commit
+// cancel()s the pending timer first. Items are copied at fire time so untouched entries stay current.
 let liveItemIndex = -1;
 let liveItemValue = '';
 const liveItems = useLiveText(() => {

@@ -1,40 +1,21 @@
-// ============================================================
-// Runtime- en slide-level types — slide-overzicht (spec §3.1),
-// overkoepelende PluginView-state (spec §3.2) en runtime-info.
-// ============================================================
-
 import type { GeneralSections } from './general';
 import type { ContentItems } from './content';
 import type { GraphItems } from './graphs';
 
-// ============================================================
-// Slide-overzicht (spec §3.1)
-// ============================================================
-
 export interface SlideSummary {
-  /** Figma node-id van de Slide-instance (stabiel binnen een sessie). */
+  /** Figma node id of the Slide instance; stable only within a session. */
   id: string;
-  /** 1-based volgnummer — gesorteerd op findAll-volgorde op currentPage. */
+  /** 1-based position, in findAll order on the current page. */
   number: number;
-  /** Display-naam, bv. "Slide 3 — Customer Journey". */
   name: string;
-  /**
-   * Wordt deze slide overgeslagen bij presenteren?
-   * `true`  → SlideNode.isSkippedSlide === true (skip-mode aan).
-   * `false` → SlideNode.isSkippedSlide === false (normale slide).
-   * `null`  → geen SlideNode-parent (Figma Design-editor); skip niet ondersteund op dit surface.
-   */
+  /** Mirrors SlideNode.isSkippedSlide; null = no SlideNode parent (Figma Design editor), where skip is unsupported. */
   isSkipped: boolean | null;
 }
 
-// ============================================================
-// Overkoepelende PluginView-state (spec §3.2)
-// ============================================================
-
 export interface PluginView {
-  /** Current slide summary (id, number, name, isSkipped); null when no slide selected. */
+  /** null while no slide is selected. */
   currentSummary: SlideSummary | null;
-  /** null tot er een slide is gekozen óf als de slide deze wrapper niet heeft. */
+  /** null until a slide is chosen, or when the slide lacks this wrapper. */
   general: GeneralSections | null;
   content: ContentItems | null;
   graphs: GraphItems | null;

@@ -1,14 +1,4 @@
-// ============================================================
-// editors/chart/matrix.ts
-//
-// Grid-box / 9-box performance-matrix: rijen = categorieën,
-// kolommen = series; elke cel toont de waarde op dat snijpunt en wordt
-// getint van licht → accent o.b.v. de relatieve waarde (9-box talent-
-// grid, veralgemeniseerd naar elke N×M). Auto-layout, dus responsief
-// binnen de kaart; kolom-koppen (serienamen) boven, rij-labels links.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// 9-box talent grid, generalized to any N×M; cells tint light → accent by relative value.
 
 import type { ChartWrapModel } from '../../../shared/types';
 import {
@@ -29,8 +19,8 @@ export function buildMatrix(
   theme: ChartTheme,
   labelSize: number,
 ): FrameNode {
-  const rows = model.categories.length; // rijen
-  const cols = model.series.length; // kolommen
+  const rows = model.categories.length;
+  const cols = model.series.length;
   const max = Math.max(1, chartMaxValue(model));
 
   const root = figma.createFrame();
@@ -42,7 +32,6 @@ export function buildMatrix(
   root.fills = [];
   root.resize(contentW, contentH);
 
-  // Label-kolom links (rij-labels) en kop-rij boven (serienamen).
   const rowLabelW = Math.round(contentW * 0.2);
   const headerH = Math.round(labelSize * 1.6);
   const gap = Math.max(4, Math.round(labelSize * 0.4));
@@ -52,7 +41,6 @@ export function buildMatrix(
   const cellH = rows > 0 ? Math.floor((gridH - gap * (rows - 1)) / rows) : gridH;
   const cellRadius = Math.min(14, Math.round(Math.min(cellW, cellH) * 0.1));
 
-  // ── Kop-rij: lege hoek + serienamen ──
   const header = figma.createFrame();
   header.name = 'MatrixHeader';
   header.layoutMode = 'HORIZONTAL';
@@ -98,17 +86,15 @@ export function buildMatrix(
     try {
       t.layoutSizingHorizontal = 'FILL';
     } catch (_e) {
-      /* silent */
+      /* layoutSizing throws if the parent is not auto-layout */
     }
   }
   root.appendChild(header);
   try {
     header.layoutSizingHorizontal = 'FILL';
   } catch (_e) {
-    /* silent */
   }
 
-  // ── Data-rijen: rij-label + cellen ──
   for (let r = 0; r < rows; r++) {
     const row = figma.createFrame();
     row.name = 'MatrixRow-' + String(r);
@@ -154,14 +140,11 @@ export function buildMatrix(
       cell.resize(cellW, cellH);
 
       if (model.showValues) {
-        // Tekst in-theme: donkere accent-tekst op lichte cellen,
-        // wit op verzadigde cellen. Kies o.b.v. luminantie-AFSTAND zodat
-        // mid-tone cellen niet de verkeerde (te bleke = grijs ogende)
-        // kleur krijgen.
+        // Pick label color by luminance DISTANCE (white vs darkened accent) so
+        // mid-tone cells don't get a washed-out, grey-looking label.
         const lum = 0.299 * tint.r + 0.587 * tint.g + 0.114 * tint.b;
         const darkAccent = { r: accent.r * 0.45, g: accent.g * 0.45, b: accent.b * 0.45 };
         const darkLum = 0.299 * darkAccent.r + 0.587 * darkAccent.g + 0.114 * darkAccent.b;
-        // wit (lum 1) vs darkAccent: kies de grootste luminantie-afstand.
         const textColor = 1 - lum > lum - darkLum ? { r: 1, g: 1, b: 1 } : darkAccent;
         const emphasized = isPointEmphasized(model.series[c], r);
         const vText = figma.createText();

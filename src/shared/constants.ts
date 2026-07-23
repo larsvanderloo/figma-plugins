@@ -1,19 +1,6 @@
-// ============================================================
-// Welder Slide Editor — Brand Tokens en Constanten
-//
-// Gedeeld tussen main-thread en UI-iframe.
-// Alle waarden zijn statisch analyseerbaar (geen runtime-imports,
-// geen dynamische expressies) zodat tree-shaking en esbuild's
-// constant-folding zonder verrassingen werken.
-//
-// Theme-palet en font-mapping 1-op-1 gelijk aan chart-builder en
-// welder-table, zodat slide-output visueel consistent blijft tussen
-// oude widget-instances en de nieuwe plugin-renderers.
-// ============================================================
-
-// ============================================================
-// Theme-tokens
-// ============================================================
+// Values must stay statically analyzable (no runtime imports or dynamic expressions)
+// so esbuild constant-folding and tree-shaking work predictably. Theme palette and
+// fonts mirror chart-builder and welder-table 1:1 for visual consistency with legacy widgets.
 
 export type ThemeId = 'orange' | 'blue';
 
@@ -23,7 +10,7 @@ export interface ThemeTokens {
   accent: string;
   gridLine: string;
   mutedText: string;
-  /** Distincte kleuren voor pie/donut-segmenten en bar-staven. */
+  /** Distinct series colors for pie/donut segments and bars. */
   palette: string[];
 }
 
@@ -35,12 +22,12 @@ export const THEMES: Record<ThemeId, ThemeTokens> = {
     gridLine: '#FFB665',
     mutedText: '#FF7700',
     palette: [
-      '#FF7700', // oranje
-      '#FFA557', // licht oranje
-      '#DD5F00', // donker oranje
-      '#FF9233', // amber
-      '#BB4F00', // bruin-oranje
-      '#FFC688', // perzik
+      '#FF7700',
+      '#FFA557',
+      '#DD5F00',
+      '#FF9233',
+      '#BB4F00',
+      '#FFC688',
     ],
   },
   blue: {
@@ -50,26 +37,17 @@ export const THEMES: Record<ThemeId, ThemeTokens> = {
     gridLine: '#C7D6EE',
     mutedText: '#2B7FFF',
     palette: [
-      '#2B7FFF', // blauw
-      '#609FFF', // licht blauw
-      '#1B5EC9', // donker blauw
-      '#87B7FF', // luchtig blauw
-      '#10479F', // marine
-      '#AFCEFF', // bleek blauw
+      '#2B7FFF',
+      '#609FFF',
+      '#1B5EC9',
+      '#87B7FF',
+      '#10479F',
+      '#AFCEFF',
     ],
   },
 };
 
-/** Fallback-tokens wanneer een onbekende theme-id wordt gelezen. */
 export const FALLBACK_THEME: ThemeTokens = THEMES.orange;
-
-// ============================================================
-// Fonts — Figma FontName-tuples (family + style)
-//
-// Gebruikt door zowel editors/** (main-thread loadFontAsync-calls)
-// als UI (label-weergave). Alle mutaties op text-nodes vereisen eerst
-// figma.loadFontAsync(fontName) — zie FIG-FONT-01.
-// ============================================================
 
 export const FONTS = {
   title: { family: 'Instrument Sans', style: 'SemiBold' },
@@ -79,31 +57,15 @@ export const FONTS = {
   dataLabel: { family: 'Inter', style: 'Regular' },
 } as const;
 
-/**
- * Alle font-combinaties die de plugin bij init preload — main-thread
- * roept `Promise.all(REQUIRED_FONTS.map(figma.loadFontAsync))` voor
- * de eerste text-mutatie zodat latere debounced updates direct door
- * kunnen.
- */
+/** Preloaded at init so debounced text writes never wait on a font load. */
 export const REQUIRED_FONTS: ReadonlyArray<{ family: string; style: string }> = [
   { family: 'Inter', style: 'Regular' },
   { family: 'Inter', style: 'Medium' },
   { family: 'Instrument Sans', style: 'SemiBold' },
 ];
 
-// ============================================================
-// Slide-detectie constanten
-//
-// De plugin herkent twee bewerkbare "surfaces", elk een vaste-grootte
-// INSTANCE met een eigen naam:
-//   - Slide       1920×1080 (Slide Machine, landscape presentatie)
-//   - Whitepaper  1240×1754 (A4 portret @150 DPI)
-// Beide gebruiken dezelfde wrapper-instances (CopyWrap / Badge /
-// ImageWrap / CardWrap / TableWrap / TimelineWrap) en dezelfde editors.
-// Deze constanten worden door slide-machine.ts gebruikt zodat ze niet
-// verstrooid in de codebase staan.
-// ============================================================
-
+// Two editable surfaces (Slide 1920×1080, Whitepaper = A4 portrait @150 DPI);
+// both share the same wrapper instances and editors.
 export const SLIDE_NODE_NAME = 'Slide';
 export const SLIDE_WIDTH = 1920;
 export const SLIDE_HEIGHT = 1080;
@@ -112,11 +74,7 @@ export const WHITEPAPER_NODE_NAME = 'Whitepaper';
 export const WHITEPAPER_WIDTH = 1240;
 export const WHITEPAPER_HEIGHT = 1754;
 
-/**
- * Alle herkende surface-signatures (naam + exacte afmetingen). `isSlide`
- * matcht een INSTANCE tegen deze lijst; een nieuwe format toevoegen is
- * één extra entry hier — geen wijziging aan de detectie-logica.
- */
+/** isSlide matches against this list; a new format is one extra entry, no logic change. */
 export interface SurfaceSignature {
   name: string;
   width: number;
@@ -128,29 +86,15 @@ export const SURFACE_SIGNATURES: ReadonlyArray<SurfaceSignature> = [
   { name: WHITEPAPER_NODE_NAME, width: WHITEPAPER_WIDTH, height: WHITEPAPER_HEIGHT },
 ];
 
-// ============================================================
-// Table-constanten (Slot-based TableWrap)
-//
-// Validatie-grenzen + layout-presets voor de Slot-based
-// TableWrap-renderer. Constants zijn de single-source-of-truth voor
-// zowel main-thread (editors/table/renderer.ts) als UI-iframe
-// (TableEditor.vue — toon N/MAX-indicator).
-// ============================================================
+// Table limits are the single source of truth for both the sandbox renderer
+// and the UI's N/MAX indicator.
 
-/** Maximum aantal rijen per TableWrap (inclusief header-rij). */
+/** Maximum rows per TableWrap, including the header row. */
 export const TABLE_MAX_ROWS = 15;
 
-// computeCellMaxChars en TABLE_CELL_MAX_CHARS verwijderd. Input-niveau
-// capping bleek niet werkbaar — de echte rendering-bound is afhankelijk
-// van de actuele row-FILL-share-height die alleen na layout bekend is.
-// Truncation gebeurt nu rendertime in renderer.ts via
-// maxLines+textTruncation, berekend per cell uit de werkelijke
-// row.height.
-
-/** Flat maximum — de eerdere per-breedte-preset-koppeling is weg. */
 export const TABLE_MAX_COLS = 6;
 
-/** Fallback tabel-breedte per surface wanneer een Slot geen bruikbare width heeft. */
+/** Fallback table width per surface when a Slot has no usable width. */
 export const TABLE_MAX_WIDTH_SLIDE = 1728;
 export const TABLE_MAX_WIDTH_WHITEPAPER = 1116;
 
@@ -166,6 +110,3 @@ export const TABLE_AUTOFIT_MAX_COL_FRACTION = 0.62;
 export function tableWidthForSurface(surfaceName: string | null, _columnCount: number): number {
   return surfaceName === WHITEPAPER_NODE_NAME ? TABLE_MAX_WIDTH_WHITEPAPER : TABLE_MAX_WIDTH_SLIDE;
 }
-
-// Geen TABLE_TEXT_SIZES-presets meer: fontSize wordt in renderer.ts
-// afgeleid via getFontSizes(slotHeight, rowCount) — formula-based met clamps.

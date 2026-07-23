@@ -1,28 +1,17 @@
-// ============================================================
-// scan/previews.ts
-//
-// Preview-prefetch: post image-preview en card-visual-preview bytes
-// naar de iframe tijdens de ui-ready handshake en na pick-slide.
-// Errors zijn silent — een ontbrekende thumbnail valt terug op de
-// "no preview"-state in de iframe.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Prefetch errors are intentionally silent: a missing thumbnail falls back
+// to the iframe's "no preview" state.
 
 import { findImageSlot } from '../editors/_shared/node-finders';
 import { postToUI } from '../bridge';
 import { SlideScan } from './slide-scan';
 
-// Module-level: last-sent imageHash per imageWrapId — voorkomt re-posts op
-// ongerelateerde documentchanges. Gedeeld met de upload-image handler in
-// handlers/image.ts.
+// Last-sent imageHash per imageWrapId — prevents re-posts on unrelated
+// documentchanges. Shared with the upload-image handler in handlers/image.ts.
 export var lastSentPreviewHash: Map<string, string> = new Map();
 
 /**
- * Posts the initial slide's image-preview + card-visual-preview bytes
- * during the ui-ready handshake. Mirrors the fire-and-forget IIFEs in
- * the pick-slide handler so the splash screen window can pre-fetch
- * thumbnails too.
+ * Mirrors the fire-and-forget prefetch in the pick-slide handler so the
+ * splash-screen window can pre-fetch thumbnails too.
  */
 export async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideScan): Promise<void> {
   if (scan.general !== null && scan.general.image !== null && scan.general.image.imageHash !== null) {
@@ -47,7 +36,7 @@ export async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideS
             }
           }
         } catch (_e) {
-          // fallback: 0/0 → iframe falls back to fixed-height preview
+          // leave 0/0 — the iframe falls back to a fixed-height preview
         }
         const bytes = await img.getBytesAsync();
         postToUI({
@@ -60,15 +49,12 @@ export async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideS
         lastSentPreviewHash.set(imageWrapId, imageHash);
       }
     } catch (_e) {
-      // silent — slide-level image preview is non-essential
     }
   }
 
   if (scan.content !== null) {
-    // Card-visual prefetch: each card has two awaits (getNodeByIdAsync
-    // → getBytesAsync). Run all cards concurrently — a slide with 8
-    // cards would otherwise serialize 16 round-trips before any
-    // preview rendered.
+    // Each card awaits twice (getNodeByIdAsync → getBytesAsync); run cards
+    // concurrently or 8 cards serialize 16 round-trips before any preview.
     await Promise.all(
       scan.content.cards.map(async function (ci) {
         if (typeof ci.visualHash !== 'string') return;
@@ -108,7 +94,6 @@ export async function postInitialSlidePreviews(slide: InstanceNode, scan: SlideS
             fillH: fillH,
           });
         } catch (_e) {
-          // per-card silent
         }
       }),
     );

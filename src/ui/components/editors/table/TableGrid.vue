@@ -159,10 +159,8 @@ function rowMenuLabel(row: number): string {
   return 'Rij ' + String(displayRow) + ' opties';
 }
 
-// Number columns are right-aligned across header, body and footer —
-// mirrors the canvas renderer's Notion/Excel number-column style. The
-// detection is content-driven ('45' counts, '45 mensen' does not),
-// independent of the sum toggle.
+// Right-align numeric columns to mirror the canvas renderer's Notion/Excel style.
+// Detection is content-driven ('45' counts, '45 mensen' does not), independent of the sum toggle.
 const numericColumns = computed<boolean[]>(() =>
   computeNumericColumns(props.rows, props.hasColumnHeader, columnCount.value),
 );
@@ -177,7 +175,7 @@ function cellTextareaUi(row: number, col: number): { root: string; base: string 
     root: 'min-w-0 flex-1',
     base:
       'block min-h-9 w-full resize-none rounded-none border-0 bg-transparent px-2 py-1.5 pr-8 leading-5 text-default outline-none ring-0 placeholder:text-dimmed focus:bg-transparent focus:ring-0 focus-visible:outline-none ' +
-      // Koprij iets groter + semibold (mirror van Instrument Sans SemiBold 20 op canvas).
+      // Header row mirrors Instrument Sans SemiBold 20 on canvas.
       (isHeaderRow ? 'text-base font-semibold ' : 'text-sm ') +
       (isRightAlignedColumn(col) ? 'text-right ' : '') +
       (emphasized ? 'font-semibold' : ''),
@@ -188,8 +186,7 @@ function updateCellValue(value: unknown, row: number, col: number): void {
   emit('cell-edit', row, col, String(value ?? ''));
 }
 
-// Delta-badge: body-cellen alleen (koprij draagt geen delta). De editor
-// typt een vrije waarde; een ▲/▼-prefix (via het cel-menu) bepaalt de richting.
+// Delta: body cells only. Free-typed value; a ▲/▼ prefix (set via the cell menu) encodes direction.
 function isBodyCell(row: number): boolean {
   return !(props.hasColumnHeader && row === 0);
 }
@@ -201,9 +198,8 @@ function updateCellDelta(value: unknown, row: number, col: number): void {
   emit('cell-delta', row, col, String(value ?? ''));
 }
 
-// Vinkje: tri-state (aangevinkt / uitgevinkt / geen). De toggle-knop in de
-// cel wisselt alleen tussen aan/uit; aan- en uitzetten van het vinkje zelf
-// loopt via het cel/rij/kolom-menu.
+// Check is tri-state (checked / unchecked / none). The in-cell button only flips
+// on/off; adding or removing the check itself goes through the cell/row/column menus.
 function cellCheckState(row: number, col: number): boolean | null {
   const cell = props.rows[row]?.cells[col];
   if (cell === undefined) return null;
@@ -215,8 +211,7 @@ function toggleCellCheck(row: number, col: number): void {
   emit('cell-check', row, col, !current);
 }
 
-// Badge: vrije tekst (nummers of woorden), zelfde presence-model als delta —
-// niet-lege string = badge, leegmaken van de input verwijdert hem.
+// Badge: free text, same presence model as delta — non-empty string means a badge; clearing removes it.
 function cellBadgeValue(row: number, col: number): string {
   const cell = props.rows[row]?.cells[col];
   return cell !== undefined && typeof cell.badge === 'string' ? cell.badge : '';
@@ -224,8 +219,7 @@ function cellBadgeValue(row: number, col: number): string {
 function updateCellBadge(value: unknown, row: number, col: number): void {
   emit('cell-badge', row, col, String(value ?? ''));
 }
-// Chip-gevoel: de badge-input hugt zijn inhoud (ch-breedte, geklemd) in
-// plaats van een vaste smalle kolom — vrije tekst paste daar niet in.
+// Badge input hugs its content (clamped ch width) rather than a fixed column — free text would not fit.
 function badgeInputStyle(row: number, col: number): Record<string, string> {
   const len = cellBadgeValue(row, col).length;
   const ch = Math.min(Math.max(len + 1, 3), 18);

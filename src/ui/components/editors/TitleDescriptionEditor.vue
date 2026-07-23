@@ -156,12 +156,9 @@ watch(
   (next) => hydrateDimWords(next),
 );
 
-// Herpositioneer accent-ranges over een tekst-edit heen in plaats van ze
-// te wissen (het oude gedrag — per blur nauwelijks zichtbaar, maar met
-// live typing verdween elke nadruk al bij het bijtypen van een woord).
-// Prefix/suffix-diff: ranges vóór de edit blijven staan, ranges erna
-// schuiven met het lengteverschil mee; alleen een range die de bewerkte
-// regio zelf raakt vervalt — dat woord is dan wezenlijk veranderd.
+// Remap accent ranges across a text edit instead of wiping them — a wipe erased
+// every accent mid-word once live typing landed. Prefix/suffix diff: only a
+// range touching the edited region is dropped; ranges after it shift by the delta.
 function remapDimRanges(
   oldText: string,
   newText: string,
@@ -201,8 +198,7 @@ function onHeadingCommit(value: string): void {
     headingDim: remapDimRanges(td.model.heading, value, td.model.headingDim ?? []),
     size: td.model.size,
   });
-  // Geen dimWords-wipe meer: de headingDim-watch hydrateert de chips
-  // opnieuw zodra de (geremapte) ranges in de store landen.
+  // No dimWords reset here: the headingDim watch re-hydrates the chips once the remapped ranges land.
 }
 
 function onParagraphCommit(value: string): void {
@@ -256,11 +252,9 @@ function onBadgeVisibilityToggle(next: boolean): void {
   bd.commitVisibility(next);
 }
 
-// Live meetypen op het canvas: elke aanslag komt via het `live`-event
-// binnen en gaat gedebounced (200ms, zie useLiveText) door exact dezelfde
-// commit-handler als blur/Enter — één write per typ-pauze, zelfde gevoel
-// als de tabel-grid. De commit-handlers cancel()en eerst de pending tick:
-// een commit post zelf direct, anders vuurt dezelfde waarde twee keer.
+// Live keystrokes reuse the same commit handlers as blur/Enter, debounced via
+// useLiveText. Commit handlers cancel() the pending tick first — a commit posts
+// directly, so without the cancel the same value would fire twice.
 let liveHeadingValue = '';
 const headingLive = useLiveText(() => onHeadingCommit(liveHeadingValue));
 function onHeadingLive(value: string): void {

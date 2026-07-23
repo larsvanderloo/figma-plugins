@@ -49,18 +49,14 @@ function onThemeChange(modeId: string | null): void {
   settings.setTheme(id, modeId);
 }
 
-// Variant items come straight from the ConfidentalBadge component set (via
-// the scan) — no hardcoded labels, so a designer adding a variant just makes
-// it appear. NB: geen 'uit'-item met lege value in deze lijst stoppen — Reka
-// UI (onder USelect) laat items met value '' stilletjes vallen; on/off leeft
-// daarom op de switch, niet in de dropdown.
+// No 'off' item with an empty value here: Reka UI (under USelect) silently
+// drops items whose value is '' — on/off lives on the switch, not the dropdown.
 const confidentialItems = computed<Array<{ label: string; value: string }>>(() => {
   const conf = view.state.general?.confidential;
   if (!conf) return [];
   return conf.variantOptions.map((v) => ({ label: v, value: v }));
 });
-// Current variant for the picker; falls back to the first option so the
-// select never renders empty while the badge is on.
+// Fall back to the first option so the select never renders empty while the badge is on.
 const confidentialVariant = computed<string>(() => {
   const conf = view.state.general?.confidential;
   if (!conf) return '';
@@ -74,8 +70,7 @@ const showConfidentialVariant = computed<boolean>(() => {
 function onConfidentialToggle(show: boolean): void {
   const id = view.state.currentSlideId;
   if (id === null) return;
-  // Send the displayed variant along when switching on, so the canvas badge
-  // is guaranteed to match what the picker shows.
+  // Send the displayed variant along when switching on so the canvas badge matches the picker.
   const variant = show && confidentialVariant.value !== '' ? confidentialVariant.value : undefined;
   settings.setConfidential(id, show, variant);
 }

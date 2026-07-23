@@ -1,42 +1,20 @@
-// ============================================================
-// editors/_shared/accent-vars.ts
-//
-// Gedeelde helpers voor library-variable-resolution (Text + Text Dimmer).
-// Extractie uit code.ts zodat zowel de accent-range-writer (heading
-// dim ranges) als de Slot-based table-renderer dezelfde
-// single-source-of-truth gebruiken.
-//
-// Variable-keys komen uit de "Templates Welder / Theme"-library; de
-// fallback-RGB voor Text Dimmer (#ffc78f in orange-mode) voedt
-// `resolveForConsumer` in het zeldzame geval waarin de library niet
-// bereikbaar is op de team-omgeving van de user.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing,
-// geen catch-without-binding (feedback_figma_runtime.md).
-// ============================================================
-
-/** Variable-keys in de "Templates Welder / Theme"-library. */
+/** Variable keys from the "Templates Welder / Theme" library. */
 export const TEXT_KEY = 'aaeec2f93a38b8a2e3af696972c4313eff529bc7';
 export const TEXT_DIMMER_KEY = 'cd3f59ce0c953ee93c4a30b738a96683035b3d72';
 
-/** RGB-waarde van `Text Dimmer` in orange-mode (#ffc78f). Tolerance per channel. */
+/** `Text Dimmer` in orange mode (#ffc78f); consumers compare per channel with tolerance. */
 export const TEXT_DIMMER_RGB = {
   r: 0xff / 255,
   g: 0xc7 / 255,
   b: 0x8f / 255,
 };
 
-/** Geresolvde variable-paar na library-import. Elk veld kan null zijn
- * wanneer de library onbereikbaar is (free team, offline). */
+/** Each field is null when the library import failed (free team, offline). */
 export interface AccentVars {
   text: Variable | null;
   dimmer: Variable | null;
 }
 
-/**
- * Promise-cache: eerste call start de parallel-import, volgende calls
- * hergebruiken de resolved Promise. ES2017-compat: geen `??=`.
- */
 let accentVarsPromise: Promise<AccentVars> | null = null;
 
 export function loadAccentVars(): Promise<AccentVars> {
@@ -59,16 +37,8 @@ export function loadAccentVars(): Promise<AccentVars> {
   return accentVarsPromise;
 }
 
-/**
- * Pre-resolve een Variable tegen de node's effectieve variable-modes.
- * Figma's glyph-renderer cached de fallback-RGB die we aan
- * `setBoundVariableForPaint` meegeven; wanneer die niet matcht met de
- * current-mode-waarde zien we stale kleuren tot een mode-switch de cache
- * invalideert. `resolveForConsumer(node)` levert de current-mode-waarde.
- *
- * `node` mag elk SceneNode zijn dat in Figma's variable-mode-boom valt
- * (TextNode voor dim-ranges, SlotNode voor table-renderer).
- */
+/** Figma's glyph renderer caches the fallback RGB passed to setBoundVariableForPaint;
+ * if it mismatches the current-mode value, colors stay stale until a mode switch. */
 export function resolveColor(v: Variable, node: SceneNode, fallback: RGB): RGB {
   try {
     const resolved = v.resolveForConsumer(node);
@@ -82,14 +52,9 @@ export function resolveColor(v: Variable, node: SceneNode, fallback: RGB): RGB {
   return fallback;
 }
 
-/**
- * Mode-getrouwe variable-resolutie: resolveForConsumer blijkt op
- * Slot/Frame/Instance-consumers de DEFAULT-mode van de collectie terug te
- * geven i.p.v. de slide-mode (MCP-geverifieerd 2026-06-12: blue-mode slide
- * resolvede Text als orange). Deze helper leest de mode van de node zelf
- * (resolvedVariableModes → explicitVariableModes → collection-default) en
- * pakt de waarde direct uit `valuesByMode`, met alias-chains tot 3 hops.
- */
+/** resolveForConsumer returns the collection's DEFAULT mode on Slot/Frame/Instance
+ * consumers instead of the slide's mode, so read the node's own mode and take the
+ * value straight from valuesByMode (following alias chains up to 3 hops). */
 export async function resolveColorInNodeMode(
   v: Variable,
   node: SceneNode,
@@ -126,7 +91,6 @@ export async function resolveColorInNodeMode(
   return fallback;
 }
 
-/** Waarde van `v` in de mode die `node` voor v's collectie voert. */
 async function valueInNodeMode(v: Variable, node: SceneNode): Promise<VariableValue | undefined> {
   const collId = v.variableCollectionId;
   let modeId: string | undefined;

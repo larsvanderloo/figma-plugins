@@ -1,12 +1,3 @@
-// ============================================================
-// sandbox/handlers/chart.ts
-//
-// Chart-messages: full-state PUT (update-chart) op een
-// ChartWrap-SlotNode. Zelfde patroon als handlers/table.ts.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideById, summaryForSlide } from '../slides';
 import { scanSlide } from '../scan/slide-scan';
@@ -14,22 +5,18 @@ import { applyChart } from '../editors/chart/renderer';
 import { importChartCSV } from '../editors/chart/csv';
 import type { UIToPluginMessage } from '../../shared/types';
 
-// Applies binnen dit domein serialiseren: main.ts dispatcht handlers
-// fire-and-forget en applyChart await tussen het clearen van de slot en
-// het appenden van de nieuwe kaart. Twee snel opeenvolgende updates
-// (typ-debounce ~200ms) kunnen dan interleaven — in het slechtste geval
-// twee gestapelde kaarten + stale pluginData. De ketting laat elke apply
-// pas starten als de vorige klaar is. Bewust per module, niet globaal:
-// een trage chart-render mag tabel- of accent-writes niet blokkeren.
+// Serialize applies: main.ts dispatches fire-and-forget and applyChart awaits
+// between clearing the slot and appending the new card, so rapid updates could
+// interleave (stacked cards, stale pluginData). Deliberately per module, not
+// global — a slow chart render must not block table or accent writes.
 let queue: Promise<void> = Promise.resolve();
 
 function noop(): void {}
 
 function enqueue(work: () => Promise<void>): Promise<void> {
   const run = queue.then(work);
-  // Een rejection mag de ketting niet vergiftigen — de volgende apply
-  // moet gewoon starten. De caller ziet de rejection alsnog via `run`
-  // (main.ts post daarop de error-ack).
+  // A rejection must not poison the chain; the caller still sees it via
+  // `run` (main.ts posts the error ack on it).
   queue = run.then(noop, noop);
   return run;
 }
@@ -64,17 +51,15 @@ async function runUpdateChart(
     return;
   }
   figma.commitUndo();
-  // Óók vóór de apply: applyChart heeft awaits na het clearen
-  // van de slot; een eerder-gedebouncede scan mag niet interleaven met
-  // half-verwijderde clone-sublayers.
+  // Also before the apply: applyChart has awaits after clearing the slot; an
+  // earlier-debounced scan must not interleave with half-removed clone sublayers.
   markSelfWrite();
   const rebuilt = await applyChart(slotNode as SlotNode, msg.desired);
   markSelfWrite();
   if (!rebuilt) {
-    // applyChart liet canvas én pluginData onaangeroerd (library-vars
-    // ontbreken). ok:false mét targetId, zodat de UI weet dat de
-    // optimistisch geschreven store en de canvas voor deze slot
-    // uiteenlopen en de duplicate-guard neutraliseert.
+    // applyChart left canvas and pluginData untouched (library vars missing).
+    // ok:false WITH targetId so the UI knows the optimistically written store
+    // and the canvas diverge for this slot, and neutralizes the duplicate guard.
     postToUI({
       type: 'target-updated',
       ok: false,
@@ -129,11 +114,9 @@ async function runImportChartCsv(
     ok: true,
     targetId: msg.slotId,
   });
-  // Re-sync de iframe-grid met de geïmporteerde data. De UI stuurde
-  // alleen ruwe CSV-tekst, dus kent het geparste model niet; de
-  // documentchange-route is bovendien onderdrukt door markSelfWrite().
-  // Expliciete scan + slide-loaded post — zelfde patroon als
-  // handleImportCsv in handlers/table.ts.
+  // The UI only sent raw CSV so it lacks the parsed model, and markSelfWrite()
+  // suppresses the documentchange route — re-sync the grid with an explicit
+  // scan + slide-loaded post.
   try {
     const scan = await scanSlide(slide);
     postToUI({

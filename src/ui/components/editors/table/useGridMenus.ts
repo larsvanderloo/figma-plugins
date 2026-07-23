@@ -1,5 +1,3 @@
-// useGridMenus — column/row/cell/footer dropdown-menu builders + their emit-and-refocus actions for TableGrid.
-
 import type { ComputedRef } from 'vue';
 import type { DropdownMenuItem } from '@nuxt/ui';
 import type { TableColumnCalculationSetting, TableRowModel } from '../../../../shared/types';
@@ -411,10 +409,8 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
     return cell !== undefined && typeof cell.value === 'string' ? cell.value : '';
   }
 
-  // Zet de cel op één lijst-type (bullet / vinkje / kruisje). Bestaande
-  // markers van een ander type worden vervangen, dus omschakelen is één
-  // actie. Bullets krijgen op canvas Figma's list-style; ✓/✗ blijven
-  // letterlijke glyphs in de tekst (Figma kent geen check-list-style).
+  // Replaces markers of any other type, so switching list type is one action. On canvas,
+  // bullets get Figma's list style; ✓/✗ stay literal glyphs (Figma has no check list style).
   function setCellMarkers(row: number, col: number, type: LineMarkerType): void {
     if (!canStyleCell(row)) return;
     emit('cell-edit', row, col, setLineMarkers(cellValue(row, col), type));
@@ -477,9 +473,7 @@ export function useGridMenus(props: GridMenusProps, emit: GridMenusEmit, deps: G
     emit('column-calculation-percent', col, percent);
   }
 
-  // Footer/sum cell exposes the emphasis toggle (mirroring the per-cell
-  // "Cel benadrukken" action) plus currency/percent toggles for the sum
-  // value (mutually exclusive, enforced in useTableMutations).
+  // Currency and percent are mutually exclusive; useTableMutations enforces that, not this menu.
   function footerMenuItems(col: number): DropdownMenuItem[][] {
     return [
       [

@@ -1,55 +1,30 @@
-// ============================================================
-// editors/chart/legend.ts
-//
-// Gedeelde legenda-builder: verticale kolom van swatch + label,
-// gebruikt door donut/pie (categorie-legenda) en bar/line
-// (serie-legenda). Swatches volgen de accent-ramp-tinten.
-//
-// Fit-discipline (harde invariant: nooit buiten de content-frame):
-//   * breedte-budget per rij: label single-line ellipsen (maxLines 1,
-//     geen wrap-groei), daarna delta-suffix laten vallen, daarna hard
-//     clampen — Highcharts' allowOverlap=false-gedachte: wat niet past
-//     verdwijnt vóór het clipt;
-//   * optioneel hoogte-budget met degradatie-ladder: korps verkleinen
-//     tot de 12px-vloer (ONS small-multiples), delta's droppen (de
-//     badge-hoogte domineert de rijhoogte en schaalt niet mee), rijen
-//     cappen met een '+N meer'-rij (paging-equivalent van Highcharts
-//     legend.maxHeight);
-//   * optionele WRAP-modus: horizontale rijen die binnen maxWidth
-//     wikkelen (Carbon: legenda horizontaal vóór verbergen) — gebruikt
-//     door de gestapelde donut/pie-layout.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Shared legend builder for donut/pie (category) and bar/line (series) legends.
+// Hard invariant: the legend never overflows the content frame — whatever does
+// not fit is degraded or dropped before it can clip.
 
 export interface LegendEntry {
   label: string;
   color: RGB;
-  /** Benadrukt datapunt: label in Instrument Sans SemiBold. */
   emphasis?: boolean;
-  /** Optionele delta-badge-node, ge-append na het label. */
   deltaNode?: SceneNode | null;
 }
 
-/** Theme-bundel: Variable + resolved RGB-hint, zoals de tabel-renderer. */
+/** Each color ships as Variable + resolved RGB: bound paints still need a concrete base color. */
 export interface ChartTheme {
   textVar: Variable;
   dimmerVar: Variable;
   textRGB: RGB;
   dimmerRGB: RGB;
-  /** Slide-level resolved accent (zelfde bron als de ramp). */
+  /** Slide-level resolved accent (same source as the swatch ramp). */
   accentRGB: RGB;
-  /** Contrast-kleur op de kaart: accent of light, wat het verst
-   * van de werkelijke kaart-kleur af ligt (mode-flip-proof). */
+  /** Accent or light, whichever sits farthest from the actual card color — survives mode flips. */
   onCardRGB: RGB;
 }
 
 /**
- * Single-line ellipsis op vaste breedte. maxLines=1 +
- * textAutoResize HEIGHT: de hoogte blijft het korps volgen (geen
- * wrap-groei zoals bij de oude HEIGHT-zonder-maxLines-route, die liet
- * lange labels naar meerdere regels wikkelen en blies zo het
- * verticale budget op).
+ * Single-line ellipsis at a fixed width. maxLines=1 is load-bearing: with plain
+ * HEIGHT auto-resize, long labels wrap into extra lines instead of truncating
+ * and blow the vertical budget.
  */
 export function truncateToWidth(t: TextNode, width: number): void {
   if (width < 8) width = 8;
@@ -60,9 +35,8 @@ export function truncateToWidth(t: TextNode, width: number): void {
 }
 
 /**
- * Breedte-budget per legenda-rij, in drie degradatie-stappen:
- * label ellipsen → delta-suffix droppen → harde clamp. Garandeert
- * row.width ≤ budget zolang budget > swatch + spacing + 8px.
+ * Width degradation ladder: ellipsize label, then drop the delta suffix, then
+ * hard-clamp. Guarantees row.width <= budget as long as budget > swatch + spacing + 8px.
  */
 function fitRowToWidth(
   row: FrameNode,
@@ -72,24 +46,20 @@ function fitRowToWidth(
   fontSize: number,
 ): void {
   if (!(budget > 0) || row.width <= budget) return;
-  // Stap 1 — label single-line ellipsen binnen het rest-budget.
   const minLabelW = Math.round(fontSize * 3);
   let target = budget - (row.width - label.width);
   if (target < minLabelW) target = minLabelW;
   if (target < label.width) truncateToWidth(label, target);
   if (row.width <= budget) return;
-  // Stap 2 — delta-suffix laten vallen: het waarde/delta-detail is
-  // expendabeler dan het categorie-label zelf (R1-drop-volgorde).
+  // Drop the delta suffix before the label: the value detail is more expendable than the category name.
   if (deltaNode !== null && deltaNode.parent !== null) deltaNode.remove();
   if (row.width <= budget) return;
-  // Stap 3 — harde clamp onder de minimum-labelbreedte: de invariant
-  // (geen overflow) gaat boven leesbaarheids-esthetiek.
+  // Clamp below the minimum label width: the no-overflow invariant beats readability.
   target = budget - (row.width - label.width);
   truncateToWidth(label, target);
 }
 
-/** Korps + afgeleide maten (swatch, spacings) in één keer zetten,
- * zodat de hoogte-ladder per stap consistent meet. */
+/** Font size and derived sizes (swatch, spacings) are set together so each height-ladder step measures a consistent state. */
 function applyLegendFont(
   legend: FrameNode,
   rows: FrameNode[],
@@ -121,8 +91,7 @@ export function buildLegend(
   maxHeight?: number,
   wrap?: boolean,
 ): FrameNode {
-  // WRAP-modus alleen met een geldig breedte-budget (de wikkel
-  // heeft een FIXED primary-as nodig).
+  // Wrap mode needs a width budget: layoutWrap requires a FIXED primary axis.
   const wrapWidth = wrap === true && typeof maxWidth === 'number' && maxWidth > 0 ? maxWidth : 0;
   const isWrap = wrapWidth > 0;
 
@@ -189,8 +158,6 @@ export function buildLegend(
       deltas.push(deltaNode);
     }
 
-    // Width-budget: lange labels (incl. waarde/delta-suffix)
-    // truncaten i.p.v. de kaart uitlopen.
     if (typeof maxWidth === 'number' && maxWidth > 0) {
       fitRowToWidth(row, t, deltaNode, maxWidth, fontSize);
     }
@@ -202,30 +169,24 @@ export function buildLegend(
   }
 
   if (isWrap) {
-    // FIXED primary-as: de wikkel-breedte vastzetten; hoogte hugt (AUTO).
     legend.resize(wrapWidth, Math.max(1, legend.height));
   }
 
-  // Hoogte-budget met degradatie-ladder (meet-dan-reserveer:
-  // de caller geeft de plot de rest, dus de legenda MOET ≤ maxHeight).
+  // Height budget: the caller hands the plot whatever is left, so the legend must end up <= maxHeight.
   if (typeof maxHeight === 'number' && maxHeight > 0 && legend.height > maxHeight) {
-    // Stap 1 — korps verkleinen tot de 12px-vloer (ONS: 12px is de
-    // ondergrens voor small-multiples-tekst; 14px de norm).
+    // Step 1: shrink the font, stopping at the 12px legibility floor.
     let f = fontSize;
     while (legend.height > maxHeight && f > 12) {
       f = f - 1;
       applyLegendFont(legend, rows, labels, swatches, f, isWrap);
     }
-    // Stap 2 — delta-suffixen droppen: de badge (±labelSize×1.4 hoog)
-    // schaalt niet mee met het korps en houdt de rijhoogte hoog.
+    // Step 2: drop delta badges — they do not scale with the font and dominate the row height.
     if (legend.height > maxHeight) {
       for (let d = 0; d < deltas.length; d++) {
         if (deltas[d].parent !== null) deltas[d].remove();
       }
     }
-    // Stap 3 — rijen cappen met een '+N meer'-indicator (paging-
-    // equivalent van Highcharts legend.maxHeight): liever expliciet
-    // samenvatten dan clippen. Minimaal één item blijft staan.
+    // Step 3: cap rows behind a '+N' summary row rather than clip; at least one item stays.
     if (legend.height > maxHeight && rows.length > 1) {
       const more = figma.createText();
       more.name = 'LegendMore';

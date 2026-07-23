@@ -1,5 +1,4 @@
-// Lightweight debug helpers shared by the Figma sandbox and iframe UI.
-// __PLUGIN_DEBUG__ is injected by Vite/esbuild and stays false in normal builds.
+// __PLUGIN_DEBUG__ and its siblings are injected by Vite/esbuild at build time; false/absent in normal builds.
 declare const __PLUGIN_DEBUG__: boolean;
 declare const __PLUGIN_DEBUG_SOURCE__: string;
 declare const __PLUGIN_DEBUG_LOG_ENDPOINT__: string;
@@ -125,8 +124,7 @@ function postDebugLog(scope: string, event: string, data: unknown, hasData: bool
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(payload),
   }).catch(function (_err: unknown) {
-    // Keep logging non-blocking. If the local collector is not running,
-    // Figma console logging should still work normally.
+    // Deliberate swallow: the local collector may not be running; console logging must stay unaffected.
   });
 }
 

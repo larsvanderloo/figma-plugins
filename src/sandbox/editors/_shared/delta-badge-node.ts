@@ -1,31 +1,11 @@
-// ============================================================
-// editors/_shared/delta-badge-node.ts
-//
-// Gedeelde delta-badge-bouwer voor charts én tabellen. Bouwt per delta
-// een node via een keten met nette degradatie:
-//
-//   1. library-Badge-CLONE — het Badge-template van de slide wordt per
-//      delta gecloond: hernoemen naar 'DeltaBadge-<i>' (VERPLICHT vóór al
-//      het andere; namen die met 'Badge' beginnen worden gekaapt door de
-//      Badge-editor en de startup-icon-reconciler), label-sync via de
-//      TEXT-component-property, BOOLEAN-icon-prop best-effort uit,
-//      Outline-variant, rescalen naar het label-korps.
-//   2. TEKST-fallback — geen template / geen TEXT-property / clone faalt /
-//      clone buiten budget → losse tekst-variant in Text Dimmer (▲/▼ zit
-//      al in het label).
-//
-// Builders zijn synchroon: GEEN async font-loads — daarom is de
-// TEXT-property-route de enige label-route op de clone, en moet de caller
-// Inter Medium vooraf laden voor de tekst-fallback.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Builders are synchronous — no async font loads. That makes the TEXT
+// component property the only label route on a clone, and the caller must
+// preload Inter Medium before the text fallback writes .characters.
 
 /**
- * Zoekt het Badge-template binnen een slide ZONDER visibility-gates:
- * de Badge_wrap staat op de meeste slides verborgen terwijl de instance
- * prima als clone-template dient (de clone krijgt zelf visible=true).
- * Eigen DeltaBadge-clones matchen niet (naam begint niet met 'Badge').
+ * No visibility gate on purpose: Badge_wrap is hidden on most slides but still
+ * works as a clone template (the clone sets visible=true itself). Our own
+ * DeltaBadge clones never match — their name doesn't start with 'Badge'.
  */
 export function findDeltaBadgeTemplate(slide: SceneNode): InstanceNode | null {
   if (slide.type !== 'INSTANCE') return null;
@@ -41,26 +21,17 @@ export function findDeltaBadgeTemplate(slide: SceneNode): InstanceNode | null {
 }
 
 export interface DeltaBadgeOptions {
-  /** Badge-template (één keer per apply gezocht); null → direct tekst-variant. */
   template: InstanceNode | null;
-  /** Volledige badge-tekst, incl. ▲/▼-prefix. */
+  /** Full badge text, including the ▲/▼ prefix. */
   label: string;
-  /** Index voor de unieke clone-naam 'DeltaBadge-<index>'. */
   index: number;
-  /** Korps waar de badge/tekst op schaalt (doelhoogte ~1.4× labelSize). */
   labelSize: number;
-  /** Text Dimmer-binding voor de tekst-fallback. */
   dimmerVar: Variable;
   dimmerRGB: RGB;
-  /** Optionele budgetten; een clone buiten budget degradeert naar tekst. */
   maxW?: number;
   maxH?: number;
 }
 
-/**
- * Bouwt de delta-node: badge-clone met tekst-fallback. Retourneert altijd
- * een node (de caller bepaalt of er überhaupt een delta is).
- */
 export function buildDeltaBadgeNode(opts: DeltaBadgeOptions): SceneNode {
   const widthCap =
     typeof opts.maxW === 'number' && isFinite(opts.maxW) && opts.maxW > 0 ? opts.maxW : null;
@@ -80,10 +51,7 @@ export function buildDeltaBadgeNode(opts: DeltaBadgeOptions): SceneNode {
   return buildDeltaBadgeText(opts.label, opts.labelSize, opts.dimmerVar, opts.dimmerRGB, widthCap);
 }
 
-/**
- * Clone-route: elke stap guarded; elke fout ruimt de partiële clone op en
- * retourneert null zodat de caller naar tekst degradeert.
- */
+/** Any failure removes the partial clone and returns null → caller falls back to text. */
 function buildDeltaBadgeClone(
   template: InstanceNode,
   label: string,
@@ -100,9 +68,8 @@ function buildDeltaBadgeClone(
     return null;
   }
   try {
-    // VERPLICHT vóór alles: nooit een 'Badge*'-naam laten bestaan —
-    // findBadge matcht name.indexOf('Badge') === 0 en de Badge-editor /
-    // icon-reconciler zouden de delta-node anders kapen.
+    // Rename FIRST: findBadge matches name.indexOf('Badge') === 0, so a
+    // 'Badge*' name would let the Badge editor / icon reconciler hijack this node.
     clone.name = 'DeltaBadge-' + String(i);
     clone.visible = true;
 
@@ -121,9 +88,8 @@ function buildDeltaBadgeClone(
         }
       }
       if (labelSet) {
-        // Best-effort, zonder async: BOOLEAN-property die naar het icon
-        // verwijst uitzetten; anders blijft het icon staan (▲/▼ zit al
-        // in het label, dus dat is acceptabel).
+        // Best-effort icon hide; if it fails the icon stays, which is
+        // acceptable — the ▲/▼ is already in the label.
         for (let b = 0; b < keys.length; b++) {
           const bKey = keys[b];
           if (props[bKey].type === 'BOOLEAN' && bKey.toLowerCase().indexOf('icon') !== -1) {
@@ -139,8 +105,7 @@ function buildDeltaBadgeClone(
         }
       }
       if (labelSet) {
-        // Outline-variant voor delta-badges (subtieler dan de gevulde
-        // default). Ongeldige waarde gooit en wordt geslikt.
+        // Outline is subtler than the filled default for deltas.
         for (let v = 0; v < keys.length; v++) {
           const vKey = keys[v];
           if (props[vKey].type === 'VARIANT') {
@@ -156,9 +121,9 @@ function buildDeltaBadgeClone(
         }
       }
       if (labelSet) {
-        // De Badge-master draagt een VERBORGEN 'Label'-node + zichtbare
-        // icon-slot — de clone erft dat en rendert dan icon-only.
-        // Visibility-overrides op instance-children zijn sync toegestaan.
+        // The Badge master hides its 'Label' text node and shows an icon slot,
+        // so an untouched clone renders icon-only. Visibility overrides on
+        // instance children are allowed synchronously.
         try {
           const labelNode = clone.findOne(function (n: SceneNode): boolean {
             return n.type === 'TEXT';
@@ -191,8 +156,7 @@ function buildDeltaBadgeClone(
       return null;
     }
 
-    // Rescale van slide-schaal naar het label-korps; doelhoogte ~1.4× het
-    // label-korps; factor is normaal ≪ 1, nooit opschalen.
+    // Target height ~1.4× the label size; factor is normally ≪ 1 — never upscale.
     const targetH = labelSize * 1.4;
     if (clone.height > 0) {
       const factor = targetH / clone.height;
@@ -205,9 +169,6 @@ function buildDeltaBadgeClone(
       }
     }
 
-    // Harde sanity-check NA rescale: een clone die breder is dan de cap,
-    // hoger dan het budget, of wild van de doelhoogte afwijkt wordt
-    // opgeruimd → tekst-fallback.
     const cloneH = clone.height;
     const cloneW = clone.width;
     const deviates = cloneH <= 0 || cloneH > targetH * 1.5 || cloneH < targetH * 0.5;
@@ -232,13 +193,12 @@ function buildDeltaBadgeClone(
     try {
       clone.remove();
     } catch (eRemove) {
-      /* clone kan al verwijderd/invalide zijn */
+      /* clone may already be removed/invalid */
     }
     return null;
   }
 }
 
-/** Tekst-variant: Inter Medium ~70% labelSize in Text Dimmer-binding. */
 function buildDeltaBadgeText(
   label: string,
   labelSize: number,
@@ -249,8 +209,8 @@ function buildDeltaBadgeText(
   const t = figma.createText();
   t.name = 'DeltaText';
   t.fontName = { family: 'Inter', style: 'Medium' };
-  // 10px-vloer: het korps kan op kleine kaarten al gekrompen zijn; 70%
-  // daarvan zou onder de praktische leesbaarheids-ondergrens duiken.
+  // 10px floor: labelSize may already be shrunk on small cards, and 70% of
+  // that would drop below practical readability.
   t.fontSize = Math.max(10, Math.round(labelSize * 0.7));
   t.characters = label;
   t.textAutoResize = 'WIDTH_AND_HEIGHT';

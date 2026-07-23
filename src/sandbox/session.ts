@@ -1,16 +1,3 @@
-// ============================================================
-// sandbox/session.ts
-//
-// Sessie-state van één plugin-run: welke slide de iframe toont, de
-// dedup-signatures en debounce-timers, plus de emit-helpers
-// (postSlideContent / postSlideSummary / emitSlideLoaded) die
-// canvas-state naar de iframe doorzetten. Gedeeld tussen de
-// figma.on-listeners in code.ts en de handlers onder
-// sandbox/handlers/.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { debugLog } from '../shared/debug';
 import { isDevModeRuntime } from './runtime';
 import { isWithinSelfWriteWindow, postToUI } from './bridge';
@@ -20,52 +7,14 @@ import { postInitialSlidePreviews } from './scan/previews';
 import { primeIconCache } from './editors/_shared/icon-swap';
 import { loadAccentVars } from './editors/_shared/accent-vars';
 
-// ============================================================
-// Live current-slide refresh — debounced content + summary posts
-// ============================================================
-
-/**
- * Iframe's currently-displayed slide id. Set on every `pick-slide`
- * message; consumed by `postSlideContent()` so the sandbox can re-emit
- * `slide-loaded` when the canvas mutates externally (native Cmd+Z,
- * documentchange, etc.). Without this the iframe's optimistic store
- * state survives undo and the pickers desync from the canvas.
- */
+// Slide the iframe currently shows; postSlideContent re-emits slide-loaded on
+// external mutations (native Cmd+Z) so the pickers don't hold stale optimistic state.
 export let lastDisplayedSlideId: string | null = null;
 
-/**
- * Debounced re-scan + slide-loaded re-emit for whatever slide the
- * iframe is currently showing. Mirrors the postSlideList shape — same
- * 200ms coalesce, same dedup-by-signature so a no-op documentchange
- * doesn't spam the bridge.
- */
+// 200ms debounce + signature dedup (mirrors postSlideList) so no-op
+// documentchanges (e.g. selection-only) don't spam the bridge.
 let pendingSlideContentUpdate: number | null = null;
 let lastSentSlideContentSignature: string = '';
-
-/**
- * Self-write echo suppression — timestamp window.
- *
- * Each iframe-driven `applyXxx` calls `markSelfWrite()` after the
- * mutation completes. `postSlideContent`'s debounced scan checks
- * whether we're still within `SELF_WRITE_WINDOW_MS` of the last
- * self-write; if so, skips the slide-loaded post.
- *
- * Why timestamps over the previous sig-pre-seed approach: pre-seed
- * required an async `scanSlide` per apply, and rapid emits could
- * complete out of order, leaving the seeded sig stale. The
- * timestamp comparison is atomic and order-independent — it
- * doesn't matter how many emits stack up; as long as the last one
- * was recent, the documentchange-driven scan stays suppressed.
- *
- * Tradeoff: native Cmd+Z within ~250ms of a plugin write also gets
- * suppressed (the iframe pickers won't update for that one undo).
- * The window is short enough that this is rare and self-correcting
- * — any subsequent documentchange (or pause + slide-pick) re-syncs.
- * Plugin-driven undo (`trigger-undo` handler) bypasses
- * `postSlideContent` entirely with its own explicit `slide-loaded`
- * post, so iframe-button-driven undo always works.
- */
-// Self-write window state + rationale: zie sandbox/bridge.ts.
 
 export function postSlideContent(): void {
   if (lastDisplayedSlideId === null) return;
@@ -76,9 +25,12 @@ export function postSlideContent(): void {
     pendingSlideContentUpdate = null;
     if (lastDisplayedSlideId === null) return;
     if (isWithinSelfWriteWindow()) {
-      // Inside the self-write window: this documentchange almost
-      // certainly came from our own apply path. Skip — the iframe
-      // already has the value it just emitted in its local refs.
+      // Echo of our own apply (markSelfWrite in bridge.ts) — the iframe already
+      // holds this value. A timestamp window beats the old signature pre-seed,
+      // which needed an async scan per apply and went stale when emits finished
+      // out of order. Tradeoff: a native Cmd+Z inside the window is skipped
+      // too; the next documentchange re-syncs. Plugin-driven undo bypasses
+      // this and posts slide-loaded explicitly.
       return;
     }
     void (async function () {
@@ -89,10 +41,6 @@ export function postSlideContent(): void {
         const scanStartedAt = Date.now();
         const scan = await scanSlide(slide);
         const scanMs = Date.now() - scanStartedAt;
-        // Cheap signature: stringify the general/content/graphs payload.
-        // If it matches the last sent, skip the post (avoids spamming
-        // the bridge on documentchanges that didn't actually change
-        // editable state — e.g. selection-only events).
         const signatureStartedAt = Date.now();
         const sig = JSON.stringify({
           g: scan.general,
@@ -143,23 +91,13 @@ export function postSlideContent(): void {
   }, 200) as unknown as number;
 }
 
-/**
- * Lightweight summary-only post for the currently-displayed slide.
- * Used by the documentchange handler when the slide's name (heading
- * text) or isSkipped flag changes — no need to rescan content.
- *
- * Debounced 200ms and signature-deduped against the last emit so a
- * burst of name-keystrokes doesn't spam the bridge.
- */
+// Summary-only (no content rescan) so slide-name keystroke bursts stay cheap;
+// same 200ms debounce + signature dedup as postSlideContent.
 let pendingSlideSummaryUpdate: number | null = null;
 let lastSentSummarySignature: string = '';
 
-/**
- * Overschrijf de summary-dedup-signature. Gebruikt door de
- * `set-slide-skipped` handler die de signature pre-seed zodat de
- * optimistische iframe-flip niet gevolgd wordt door een redundante
- * slide-summary-echo.
- */
+// The set-slide-skipped handler pre-seeds this so the optimistic iframe flip
+// isn't followed by a redundant slide-summary echo.
 export function setLastSentSummarySignature(sig: string): void {
   lastSentSummarySignature = sig;
 }
@@ -207,12 +145,6 @@ export function postSlideSummary(): void {
   }, 200) as unknown as number;
 }
 
-/**
- * Scan + post slide-loaded for the given slide. Wraps the scan, the
- * signature-cache update, the slide-loaded post, and the fire-and-forget
- * preview emissions. Called by ui-ready, selectionchange, and
- * currentpagechange.
- */
 export async function emitSlideLoaded(slide: InstanceNode): Promise<void> {
   const startedAt = Date.now();
   try {
@@ -263,9 +195,8 @@ export async function emitSlideLoaded(slide: InstanceNode): Promise<void> {
       void primeIconCacheForSlide(scan);
     }
     void preloadSlideFonts(slide);
-    // Pre-warm the Text/Text Dimmer variable imports so the first
-    // heading-accent edit doesn't pay the importVariableByKeyAsync cost.
-    // loadAccentVars is Promise-cached, so subsequent edits are free.
+    // Pre-warm accent-variable imports so the first heading-accent edit skips
+    // the importVariableByKeyAsync cost; loadAccentVars is Promise-cached.
     if (!isDevModeRuntime()) {
       void loadAccentVars();
     }
@@ -275,13 +206,8 @@ export async function emitSlideLoaded(slide: InstanceNode): Promise<void> {
   }
 }
 
-/**
- * Pre-load every unique font used by editable TEXT descendants of the
- * slide. Lets the per-keystroke setTextCharactersSafe call hit Figma's
- * font cache instead of paying loadFontAsync on the first edit. Run
- * fire-and-forget after slide-loaded; even on slow accounts it finishes
- * before the user finishes reading the slide.
- */
+// Preload every font on the slide so per-keystroke setTextCharactersSafe hits
+// Figma's font cache instead of paying loadFontAsync on the first edit.
 async function preloadSlideFonts(slide: InstanceNode): Promise<void> {
   try {
     const textNodes = slide.findAll((n: SceneNode) => n.type === 'TEXT') as TextNode[];
@@ -313,12 +239,8 @@ async function preloadSlideFonts(slide: InstanceNode): Promise<void> {
   }
 }
 
-/**
- * Prime the icon-swap cache using the first card or badge on the slide
- * so the IconPicker doesn't pay the import cost on first open. Posts
- * `icons-ready` when done (or immediately if no suitable node found) so
- * the picker UI can unlock.
- */
+// Prime the icon-swap cache off the first card so IconPicker's first open skips
+// the import cost; always posts icons-ready so the picker can unlock.
 async function primeIconCacheForSlide(scan: SlideScan): Promise<void> {
   const startedAt = Date.now();
   let cardNodeId: string | null = null;
@@ -370,10 +292,6 @@ export function clearDisplayedSlide(): void {
   postToUI({ type: 'slide-deselected' });
 }
 
-/**
- * Annuleer de pending debounce-timers. Aangeroepen vanuit de
- * figma.on('close')-hook in code.ts (FIG-CLOSE-01).
- */
 export function clearPendingSlideEmitTimers(): void {
   if (pendingSlideContentUpdate !== null) {
     clearTimeout(pendingSlideContentUpdate);

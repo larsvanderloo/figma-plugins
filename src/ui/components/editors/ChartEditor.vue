@@ -1,13 +1,7 @@
 <script setup lang="ts">
-// ============================================================
-// ChartEditor — bewerkt één ChartWrap-instance.
-//
-// Zelfde state-patroon als TableEditor: lokale mirror van het model,
-// prop-sync achter een echo-guard, debounced update:modelValue-emit.
-// Het datagrid leeft in chart/ChartGrid.vue en spiegelt de
-// TableGrid-interactie: rij/serie-menu's, cel-menu met
-// "Cel benadrukken", Enter-navigatie. Geen som — tabel-specifiek.
-// ============================================================
+// Same state pattern as TableEditor: local mirror of the model, prop-sync
+// behind an echo guard so our own debounced emit doesn't clobber in-progress
+// edits when it echoes back through props.
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type { ChartType, ChartWrapModel } from '../../../shared/types';
 import type { DropdownMenuItem } from '@nuxt/ui';
@@ -99,8 +93,6 @@ onBeforeUnmount(() => {
   if (echoResetTimer !== null) clearTimeout(echoResetTimer);
 });
 
-// --- type-switcher -------------------------------------------------
-
 const chartTypeItems = [
   { label: 'Donut', value: 'donut', icon: 'i-lucide-circle-dot' },
   { label: 'Cirkeldiagram', value: 'pie', icon: 'i-lucide-chart-pie' },
@@ -116,11 +108,9 @@ function setChartType(next: ChartType): void {
   scheduleEmit('chart-type');
 }
 
-// Donut/pie/progress renderen serie 0 — grid toont dan alleen serie 0
-// (display-gating; verborgen series blijven bewaard in het model).
+// Donut/pie/progress render only series 0; the grid hides the rest,
+// but hidden series stay preserved in the model.
 const singleSeriesType = computed<boolean>(() => isSingleSeriesChartType(local.value.chartType));
-
-// --- weergave ------------------------------------------------------
 
 function setShowLegend(v: boolean): void {
   local.value.showLegend = v;
@@ -132,19 +122,16 @@ function setShowValues(v: boolean): void {
   scheduleEmit('values-toggle');
 }
 
-// Delta-badges: verandering vs vorige categorie in serie 0.
 function setShowDelta(v: boolean): void {
   local.value.showDelta = v;
   scheduleEmit('delta-toggle');
 }
 
-// Procentteken per serie (kolom), zoals de tabel.
 function setSeriesPercent(s: number, v: boolean): void {
   local.value.series[s].percent = v;
   scheduleEmit('series-percent');
 }
 
-// Donut center-totaal: override, onderschrift en nadruk.
 const donutTotalPlaceholder = computed<string>(() => {
   if (local.value.series.length === 0) return '';
   const serie = local.value.series[0];
@@ -193,7 +180,7 @@ function donutLabelMenuItems(): DropdownMenuItem[][] {
   ];
 }
 
-// Per-cel delta-override; lege string = auto.
+// Per-cell delta override; empty string means auto.
 function ensureDeltaOverrides(): string[] {
   if (local.value.deltaOverrides === undefined) {
     local.value.deltaOverrides = local.value.categories.map(() => '');
@@ -206,7 +193,7 @@ function setDeltaOverride(i: number, value: string): void {
   scheduleEmit('delta-override');
 }
 
-// Vaste progress-referentie; leeg/ongeldig = auto (null).
+// Fixed progress reference; empty or invalid input means auto (null).
 function setProgressMax(raw: string | number): void {
   const parsed = typeof raw === 'number' ? raw : parseFloat(String(raw).replace(',', '.'));
   const next = isFinite(parsed) && parsed > 0 ? parsed : null;
@@ -215,12 +202,10 @@ function setProgressMax(raw: string | number): void {
   scheduleEmit('progress-max');
 }
 
-// Transponeren (Datawrapper/Flourish-conventie: expliciete actie,
-// nooit stille auto-rotatie): categorieën ↔ series wisselen. Cel-nadruk
-// hoort bij een waarde en transponeert dus mee met de waardenmatrix.
-// Rij/kolom-vlaggen resetten bewust — categorie-nadruk, delta-overrides
-// én procent-per-serie hebben geen coherente plek meer nadat series
-// categorieën worden (en vice versa).
+// Transpose is an explicit action, never silent auto-rotation (Datawrapper/
+// Flourish convention). Cell emphasis moves with the value matrix; category
+// emphasis, delta overrides and per-series percent reset deliberately — they
+// have no coherent place once series become categories.
 const canTranspose = computed<boolean>(
   () =>
     local.value.categories.length <= CHART_MAX_SERIES &&
@@ -242,8 +227,6 @@ function transpose(): void {
   local.value.series = oldCategories.map((cat, i) => ({
     name: cat !== '' ? cat : 'Serie ' + String(i + 1),
     values: oldSeries.map((sr) => sr.values[i]),
-    // Cel (serie s, categorie i) wordt cel (serie i, categorie s):
-    // dezelfde transpositie als de waarden zelf.
     emphasis: anyEmphasis
       ? oldSeries.map((sr) => sr.emphasis !== undefined && sr.emphasis[i] === true)
       : undefined,
@@ -254,8 +237,6 @@ function transpose(): void {
 }
 
 const csv = useChartCsvImport(props, (event: 'import-csv', text: string) => emit(event, text));
-
-// --- grid-mutaties (positioneel, zoals de tabel) --------------------
 
 function ensureEmphasis(s: number): boolean[] {
   const serie = local.value.series[s];

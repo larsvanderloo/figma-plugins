@@ -1,12 +1,5 @@
-// ============================================================
-// components/editors/chart/useChartCsvImport.ts
-//
-// CSV file-upload flow voor de chart-editor: lees het bestand,
-// valideer chart-vormig (koprij + max 12 datarijen × 4 waarde-
-// kolommen) via de gedeelde tokenizer, emit dan `import-csv` — de
-// sandbox doet de echte parse + applyChart. Spiegel van
-// table/useCsvImport.ts.
-// ============================================================
+// Validation here is only a UI pre-check; the sandbox does the authoritative
+// parse + applyChart on `import-csv`. Mirror of table/useCsvImport.ts.
 
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { CHART_MAX_CATEGORIES, CHART_MAX_SERIES } from '../../../../shared/chart-calculations';

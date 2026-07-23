@@ -62,7 +62,6 @@ const tooltipStyle = computed<Record<string, string>>(() => {
   const spaceBelow = vh - (rect.top + rect.height);
   const placeBelow = spaceBelow >= tooltipHeight.value + ANCHOR_GAP + 16;
 
-  // Horizontal: align tooltip's center with target's center, clamped to viewport.
   const targetCenterX = rect.left + rect.width / 2;
   let left = targetCenterX - TOOLTIP_WIDTH / 2;
   left = Math.max(VIEWPORT_PADDING, Math.min(left, vw - TOOLTIP_WIDTH - VIEWPORT_PADDING));
@@ -165,7 +164,6 @@ const isLast = computed<boolean>(() => onboarding.isLast);
 </script>
 
 <template>
-  <!-- Centered modal for steps without an anchor (welcome / done) -->
   <UModal
     :open="showModal"
     :title="onboarding.currentStep.title"
@@ -197,7 +195,6 @@ const isLast = computed<boolean>(() => onboarding.isLast);
     </template>
   </UModal>
 
-  <!-- Dark coach-mark tooltip anchored to a UI element -->
   <Transition
     enter-active-class="transition duration-200 ease-out"
     enter-from-class="opacity-0 scale-95"
@@ -205,14 +202,13 @@ const isLast = computed<boolean>(() => onboarding.isLast);
     leave-to-class="opacity-0 scale-95"
   >
     <Teleport v-if="showTooltip" to="body">
-      <!-- Spotlight: dimmed backdrop with a cut-out around the target + ring -->
+      <!-- The 9999px shadow spread dims the whole viewport, leaving a cut-out around the target. -->
       <div
         class="pointer-events-none fixed z-40 rounded-lg ring-2 ring-primary/80 shadow-[0_0_0_9999px_rgba(0,0,0,0.45)] transition-all duration-200"
         :style="spotlightStyle"
         aria-hidden="true"
       />
 
-      <!-- Connector dot at the anchor point -->
       <span
         class="pointer-events-none fixed z-50 block size-2 rounded-full bg-primary ring-2 ring-white/90"
         :style="connectorStyle"

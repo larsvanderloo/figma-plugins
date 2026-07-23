@@ -1,49 +1,32 @@
-// ============================================================
-// Graphs-tab — table-instance selector
-//
-// Eén Graphs-tab met instance-selector die alle TableWrap-instances op de
-// slide kan tonen. `selectedGraphId` verwijst naar het geselecteerde
-// wrapper-id wanneer er meerdere tables zijn.
-// ============================================================
-
 import type { TableWrapModel } from './table';
 import type { ChartWrapModel } from './chart';
 
-/**
- * Eén bewerkbaar TableWrap-instance binnen de Graphs-tab.
- *
- * `nodeId` is het Slot-id binnen de TableWrap-INSTANCE (het Slot-id wordt
- * direct gebruikt door `update-table` en `import-csv` bridge-messages).
- */
 export interface GraphInstance {
+  /** Slot-node id inside the TableWrap instance, not the wrapper id — used verbatim by the `update-table` / `import-csv` bridge messages. */
   nodeId: string;
-  /** Menselijk leesbare naam, bv. "Table 1". Samengesteld door main-thread. */
+  /** Human-readable name ("Table 1"), composed by the sandbox, not the UI. */
   label: string;
   /**
-   * Slot-based table-model. `null` wanneer de TableWrap geen Slot bevat
-   * (nieuwe variant zonder inhoud) óf wanneer de scan geen rijen vindt.
-   * Precies één van tableModel/chartModel is non-null per instance.
+   * `null` when the TableWrap has no Slot or the scan finds no rows.
+   * Exactly one of tableModel/chartModel is non-null per instance.
    */
   tableModel: TableWrapModel | null;
   /**
-   * Slot-based chart-model. `null` voor table-instances of wanneer
-   * de ChartWrap geen Slot bevat. Verse charts krijgen een default-model
-   * van de scan zodat de editor direct kan bewerken.
+   * `null` for table instances or when the ChartWrap has no Slot; fresh
+   * charts get a scan-provided default model so the editor can edit at once.
    */
   chartModel?: ChartWrapModel | null;
 }
 
 export interface GraphItems {
   /**
-   * Alle TableWrap-instances op de slide (op render-volgorde). Lengte >=1;
-   * wanneer de slide geen table-wrappers heeft is het omhullende
-   * `graphs`-veld in PluginView `null` i.p.v. deze lijst leeg.
+   * Render order, length >= 1 — a slide with no table wrappers is
+   * `graphs: null` in PluginView, never an empty list here.
    */
   instances: GraphInstance[];
   /**
-   * Geselecteerd instance-id — UI-state. Default: eerste instance. Mutatie
-   * verloopt client-side in usePluginView; main-thread hoeft niet te weten
-   * welke instance open staat.
+   * UI-only state, mutated client-side in usePluginView — the sandbox never
+   * needs to know which instance is open. Defaults to the first instance.
    */
   selectedGraphId: string;
 }

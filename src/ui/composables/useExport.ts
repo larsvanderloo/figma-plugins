@@ -1,5 +1,3 @@
-// useExport — PDF/PNG export dispatch.
-
 import { reactive } from 'vue';
 import { usePluginBridge } from './usePluginBridge';
 

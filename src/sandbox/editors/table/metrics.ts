@@ -1,35 +1,13 @@
-// ============================================================
-// editors/table/metrics.ts
-//
-// Pure layout-metrics voor de tabel-renderer: fontSize-afleiding uit
-// slot-hoogte + rowCount, responsive row-padding en de dense-table
-// layout-metrics (paddings/gaps) die rows, header en footer delen.
-//
-// Waarom een formule i.p.v. een discrete lookup-matrix (sm/md/lg × rowCount):
-// de matrix vereiste een textSize-picker en sprong zichtbaar tussen tiers bij
-// row-toevoeging; de continue formule schaalt vloeiend met de werkelijke
-// slot-hoogte en maakte de picker overbodig (zie getFontSizes hieronder).
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Font size is a continuous formula rather than a discrete sm/md/lg × rowCount
+// matrix: the matrix needed a textSize picker and jumped visibly between tiers
+// when rows were added; the formula scales smoothly with actual slot height.
 
 /**
- * Tekst-fontSize afgeleid van actual rowHeight.
- *
- * `rowHeight` is hier de OUTER row-height (= row's eigen FILL-share van de
- * container). Inner content-area per rij is rowHeight - 40 (rowFrame
- * paddingTop+paddingBottom = 20+20). De ratios 0.36/0.30 zijn empirisch
- * gekalibreerd op outer-rowHeight zodat heading + body comfortabel binnen
- * inner-area passen met line-height ~1.2.
- *
- * Formule:
- *   rowHeight = (slotHeight - 48) / rowCount        // container.padding 24+24
- *   heading/body ratios and max-clamps become smaller once the table has
- *   several body rows, so dense tables read as information tables rather
- *   than oversized presentation cards.
- *
- * De textSize-multiplier (sm/lg-branches) is weer verwijderd —
- * fontSize is volledig automatisch; de clamps zijn de eerdere 'md'-waardes.
+ * rowHeight is the OUTER row height (the row's FILL share; 48 = container
+ * padding 24+24). Inner content area is rowHeight - 40 (row frame padding
+ * 20+20); the ratios are calibrated against the outer height so heading + body
+ * fit the inner area at ~1.2 line-height. Ratios and clamps shrink for denser
+ * tables so they read as information tables, not oversized presentation cards.
  */
 export function getFontSizes(
   slotHeight: number,
@@ -39,10 +17,8 @@ export function getFontSizes(
   var rowHeight = (slotHeight - 48) / safeRowCount;
   if (rowHeight < 16) rowHeight = 16;
 
-  // Conservatieve initiële schatting (de floor). De renderer groeit hierna de
-  // body-fontSize via fit.ts naar de grootste maat die nog in de slot past, dus
-  // deze caps hoeven de slot niet zelf te vullen — alleen een veilige
-  // ondergrens te geven die nooit overflowt.
+  // Conservative floor only: fit.ts afterwards grows the body font to the
+  // largest size that still fits the slot, so these caps just must never overflow.
   var headingRatio = 0.36;
   var bodyRatio = 0.3;
   var headingMax = 32;
@@ -71,28 +47,20 @@ export function getFontSizes(
 }
 
 /**
- * Font-proportioneel deel van de verticale rij-padding (per kant, in em).
- * De cap-height-trim haalde de leading uit het tekst-vak — die leading gaf
- * vroeger impliciet de lucht rond de regel. Dit em-deel geeft die lucht
- * expliciet (en symmetrisch) terug bóvenop de rowCount-basis hieronder, en is
- * ≥ de font-descent (~0.24em) zodat descenders altijd binnen de padding
- * landen en nooit de rij-divider raken. De fit rekent met dezelfde formule,
- * dus groter korps kost vanzelf meer padding → de zoek balanceert korps
- * tegen lucht i.p.v. alle vrijgekomen ruimte aan tekst te besteden.
+ * Font-proportional vertical row padding (per side, in em). The cap-height trim
+ * removed the line's built-in leading; this restores that air explicitly and is
+ * >= the font descent (~0.24em) so descenders never touch the row divider.
+ * fit.ts uses the same formula, so bigger type costs more padding — the search
+ * balances type size against air instead of spending all free space on text.
  */
 export const TABLE_ROW_PAD_EM = 0.25;
 
-/**
- * Responsive row-padding-BASIS op basis van bodyRowCount; het
- * font-proportionele deel (TABLE_ROW_PAD_EM × bodyFont) komt er per kant bij.
- * Bij weinig rijen: ruime padding voor breathing room. Bij veel rijen:
- * compactere padding zodat text-area per rij voldoende blijft.
- */
+/** Base per-side padding; TABLE_ROW_PAD_EM × body font is added on top. */
 export function computeRowPadding(rowCount: number): number {
   if (rowCount <= 3) return 24;
   if (rowCount <= 6) return 14;
   if (rowCount <= 9) return 10;
-  return 6; // 10-15 rijen
+  return 6;
 }
 
 export interface TableLayoutMetrics {

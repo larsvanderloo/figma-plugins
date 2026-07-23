@@ -1,12 +1,5 @@
 <script setup lang="ts">
-// ============================================================
-// ChartGrid — categorieën × series datagrid.
-//
-// Zelfde interactiemodel als TableGrid: rij-gutter met rijmenu
-// (invoegen/verwijderen), serie-headers met seriemenu, per-cel
-// hover-menu met "Cel benadrukken" (datapunt-nadruk), en Enter
-// navigeert omlaag. Geen som — dat is tabel-specifiek.
-// ============================================================
+// Same interaction model as TableGrid; no sum row — that is table-specific.
 import { computed, nextTick, onBeforeUpdate } from 'vue';
 import type { DropdownMenuItem } from '@nuxt/ui';
 import type { ChartWrapModel } from '../../../../shared/types';
@@ -20,7 +13,7 @@ interface Props {
   model: ChartWrapModel;
   maxCategories: number;
   maxSeries: number;
-  /** Single-series chart-types tonen alleen serie 0 (display-gating). */
+  /** Single-series chart types show only series 0; hidden series stay in the model. */
   singleSeries: boolean;
 }
 
@@ -46,12 +39,10 @@ const canAddCategory = computed<boolean>(() => props.model.categories.length < p
 const canAddSeries = computed<boolean>(
   () => !props.singleSeries && props.model.series.length < props.maxSeries,
 );
-// Display-gating: verborgen series blijven in het model bewaard.
 const shownSeries = computed(() =>
   props.singleSeries ? props.model.series.slice(0, 1) : props.model.series,
 );
 const showDeltaColumn = computed<boolean>(() => props.model.showDelta === true);
-// Kolommen na de categorie: zichtbare series + optionele delta-kolom.
 const colCount = computed<number>(
   () => shownSeries.value.length + (showDeltaColumn.value ? 1 : 0),
 );
@@ -69,8 +60,7 @@ function deltaOverrideValue(i: number): string {
   return overrides !== undefined && i < overrides.length ? overrides[i] : '';
 }
 
-// Pijl-optie bij delta-bewerking: zet/verwijder ▲/▼ vooraan de
-// override. Zonder override wordt de auto-tekst als startpunt gebruikt.
+// With no override yet, the auto delta text is materialized as the override before the arrow is applied.
 function setDeltaArrow(i: number, arrow: string | null): void {
   let text = deltaOverrideValue(i).trim();
   if (text === '') {
@@ -92,13 +82,11 @@ function deltaArrowMenuItems(i: number): DropdownMenuItem[][] {
   ];
 }
 
-// Per-serie swatch (Pitch-patroon) — zelfde ramp-idee als de canvas-tinten.
+// Opacity ramp mirrors the per-series tints drawn on the canvas.
 const SWATCH_OPACITY = ['opacity-100', 'opacity-75', 'opacity-50', 'opacity-30'];
 function seriesSwatchClass(s: number): string {
   return 'inline-block size-3 shrink-0 rounded-sm bg-primary ' + SWATCH_OPACITY[s % SWATCH_OPACITY.length];
 }
-
-// --- menus (zelfde opbouw als TableGrid) ---------------------------
 
 const menuContent = { align: 'start', side: 'bottom', sideOffset: 4, collisionPadding: 80 } as const;
 const cellMenuContent = { align: 'end', side: 'bottom', sideOffset: 4, collisionPadding: 80 } as const;
@@ -139,8 +127,6 @@ function seriesMenuItems(s: number): DropdownMenuItem[][] {
     icon: 'i-lucide-percent',
     onSelect: () => emit('series-percent', s, !percentOn),
   };
-  // Single-series types: alleen het procent-item (insert/delete is daar
-  // verborgen — serie 0 is de enige zichtbare kolom).
   if (props.singleSeries) return [[percentItem]];
   return [
     [percentItem],
@@ -266,8 +252,6 @@ function cellMenuItems(s: number, i: number): DropdownMenuItem[][] {
     ],
   ];
 }
-
-// --- focus/keyboard (Enter → rij omlaag, zoals de tabel) ------------
 
 const inputRefs = new Map<string, HTMLInputElement>();
 onBeforeUpdate(() => {

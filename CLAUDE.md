@@ -103,17 +103,13 @@ The hook lives in `.husky/commit-msg`; rules in `commitlint.config.js`. A bad su
 
 ### Comments
 
-Same principle, one level down. A comment must justify itself by its own reasoning, never by citing an external doc, task-ID, or version:
-
-- Explain the **why** / the non-obvious gotcha / the Figma-API constraint — not what the next line plainly does.
-- **No dead citations.** Don't write `T39.1.1:` or `(v0.2.2)` — the spec is gone and version history lives in git. `npm run lint:comments` ([scripts/assert-no-spec-citations.mjs](scripts/assert-no-spec-citations.mjs)) fails the release gate on any new `T<n>` / `v0.x` citation in a comment.
-- **`FIG-XXX-01` codes are allowed** — they're a living invariant taxonomy (e.g. `FIG-GUARD-01` = type-check before property-access, `FIG-FONT-01` = preload fonts before live events), not dead refs.
+Default to none. Write a comment only when it is absolutely worth it: a non-obvious gotcha, a Figma-API constraint, or a why the code cannot express itself. English, short. Never restate what the code plainly does — the why of a change belongs in the commit body, not in a comment.
 
 ### The one architecture doc
 
 `docs/architecture/slide-machine.md` is a **timeless structural map** of what the plugin looks for in Figma (surfaces, wrapper finders, slots, variables) — not a changelog. It must never carry dates, commit references, or fix/status notes ("deferred", "Phase-N", "was a bug"); the *when* and *why* live in commit messages. `npm run lint:doc` ([scripts/assert-doc-fresh.mjs](scripts/assert-doc-fresh.mjs)) enforces this: it rejects time-bound tokens and checks that every `find<Name>` finder and variable key the doc names still exists in `src/`, so the doc can't silently describe code that's gone.
 
-Both guards run on **every commit** via the `pre-commit` hook (`npm run lint`) and again in `release:check`. To edit the doc: change the structural description to match the new code shape; put the rationale in the commit body.
+The guard runs on **every commit** via the `pre-commit` hook (`npm run lint`) and again in `release:check`. To edit the doc: change the structural description to match the new code shape; put the rationale in the commit body.
 
 ## Releases
 

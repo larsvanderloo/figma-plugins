@@ -1,17 +1,9 @@
-// ============================================================
-// editors/table/measure.ts
-//
-// Impure adapter seam for Figma text measurement. Figma plugins do not
-// have DOM/canvas measurement APIs, so we reuse one offscreen TextNode:
-//  - `measure`       reads the intrinsic (single-line) width  → column autofit
-//  - `measureHeight` reads the wrapped height at a fixed width → fit-to-slot
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Figma plugins have no DOM/canvas text measurement, so one offscreen TextNode
+// is reused: `measure` reads intrinsic single-line width (column autofit),
+// `measureHeight` reads wrapped height at a fixed width (fit-to-slot).
 
 import type { MeasureTextWidth } from './column-autofit';
 
-// Wrapped height of `text` at a fixed `width`, in the given font/size.
 export type MeasureTextHeight = (
   text: string,
   font: FontName,
@@ -41,13 +33,12 @@ export function createTextMeasurer(): TextMeasurer | null {
     node.x = -10000;
     node.y = -10000;
     node.textAutoResize = 'WIDTH_AND_HEIGHT';
-    // Zelfde cap-height-trim als de gerenderde cel-tekst (build-rows/footer),
-    // anders meet measureHeight de ongetrimde (hogere) line-box en schat de
-    // fit de content structureel te hoog in. Breedte-metingen raakt dit niet.
+    // Match the cap-height trim of the rendered cell text, or measureHeight
+    // reads the untrimmed (taller) line-box and overestimates the fit.
     try {
       node.leadingTrim = 'CAP_HEIGHT';
     } catch (_e) {
-      /* silent — oudere Figma API zonder leadingTrim */
+      /* older Figma API without leadingTrim */
     }
 
     const cache: { [key: string]: number } = {};
@@ -106,7 +97,7 @@ export function createTextMeasurer(): TextMeasurer | null {
         try {
           node.remove();
         } catch (_e) {
-          /* silent */
+          /* node may already be removed */
         }
       },
     };

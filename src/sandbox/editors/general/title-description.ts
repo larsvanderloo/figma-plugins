@@ -1,23 +1,6 @@
-// ============================================================
-// editors/general/title-description.ts
-//
-// Main-thread mutator voor de General → TitleDescription-sectie.
-// Zoekt binnen de slide de CopyWrap-instance (spec §7.2) en muteert
-// de descendant text-nodes `Heading` en `Paragraph` in-place.
-//
-// Beide velden zijn optioneel in de payload — alleen gezette velden
-// worden toegepast. Wanneer een target-text-node niet bestaat slaan
-// we die update stil over (FIG-GUARD-01) zodat een CopyWrap zonder
-// Paragraph geen harde error oplevert.
-//
-// FIG-FONT-01: elke text-mutatie gaat via `setTextCharactersSafe`
-// (editors/_shared/fonts.ts), die álle fonts in de bestaande styled-
-// range laadt vóór de write. REQUIRED_FONTS is al bij startup geladen
-// maar mixed-font nodes vereisen een volledige segment-scan — alleen
-// char-0's font laden truncate-t stil bij de eerste font-boundary.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// All text writes go through setTextCharactersSafe: mixed-font nodes need every
+// font in the existing styled range loaded before writing .characters — loading
+// only char-0's font silently truncates at the first font boundary.
 
 import { findCopyWrap, findEnclosingInstanceByName } from '../../slide-machine';
 import { applyAccentRanges } from '../_shared/accent-ranges';
@@ -27,11 +10,6 @@ import { debugLog } from '../../../shared/debug';
 
 import type { TitleDescriptionPayload } from '../../../shared/types';
 
-/**
- * Past een TitleDescription-payload toe op de CopyWrap van `slide`.
- * Resolveert zonder error wanneer de CopyWrap of target-nodes ontbreken
- * (silent skip, FIG-GUARD-01).
- */
 export async function applyTitleDescription(
   slide: InstanceNode,
   payload: TitleDescriptionPayload,
@@ -39,21 +17,17 @@ export async function applyTitleDescription(
   const copyWrap = findCopyWrap(slide);
   if (copyWrap === null) return;
 
-  // No-op-guards per text-node (zelfde patroon als editors/content/card.ts):
-  // live typing vuurt deze handler elke ~200ms met de volledige payload,
-  // ook wanneer maar één veld wijzigde. Zonder guard betekent dat een
-  // font-load + characters-write per pauze voor BEIDE nodes; met guard
-  // raakt alleen de daadwerkelijk gewijzigde node de canvas. Accent-ranges
-  // blijven buiten de guard — dim kan wijzigen zonder dat de tekst wijzigt.
+  // Live typing resends the full payload every ~200ms; skip unchanged nodes to
+  // avoid a font-load + write per pause. Accent ranges stay outside the guard —
+  // dim can change while the text does not.
   if (typeof payload.heading === 'string') {
     const headingNode = findTextByName(copyWrap, 'Heading');
     if (headingNode !== null) {
       if (headingNode.characters !== payload.heading) {
         await setTextCharactersSafe(headingNode, payload.heading);
       }
-      // Visibility is driven by the explicit `headingVisible` switch
-      // (see below). Keep the inner TEXT visible so the CopyWrap toggle
-      // never blanks the node itself.
+      // Visibility is owned by the `headingVisible` toggle below; keep the
+      // inner TEXT visible so that toggle never blanks the node itself.
       headingNode.visible = true;
       if (payload.headingDim !== undefined) {
         await applyAccentRanges(headingNode, payload.headingDim);
@@ -71,20 +45,15 @@ export async function applyTitleDescription(
     }
   }
 
-  // Explicit visibility toggles — decoupled from text content so the
-  // user can hide a section without losing what they typed. Heading
-  // toggles the whole CopyWrap because CopyWrap owns the fill/container;
-  // hiding only TypHeading leaves the container visible. Paragraph still
-  // routes through the `showParagraph` BOOLEAN component property on
-  // CopyWrap (canonical Welder mechanism — Slide Machine reflows the
-  // rest of the slide off this signal).
+  // Heading visibility toggles the whole CopyWrap — it owns the fill/container,
+  // so hiding only TypHeading would leave the container visible. Paragraph goes
+  // through the `showParagraph` BOOLEAN prop, which the slide machine reflows off.
   if (typeof payload.headingVisible === 'boolean') {
     copyWrap.visible = payload.headingVisible;
     const headingNode = findTextByName(copyWrap, 'Heading');
     if (payload.headingVisible === true && headingNode !== null) {
-      // Legacy cleanup: older builds hid TypHeading itself. When the
-      // CopyWrap comes back, make sure that nested state does not keep
-      // the title visually hidden.
+      // Older builds hid TypHeading directly; clear that nested state so a
+      // re-shown CopyWrap does not keep the title visually hidden.
       const wrapper = findEnclosingInstanceByName(headingNode, 'TypHeading', slide);
       if (wrapper !== null) {
         wrapper.visible = true;
@@ -119,9 +88,8 @@ export async function applyTitleDescription(
         console.log('[title-description] setProperties showParagraph failed: ' + String(e));
       }
       if (payload.paragraphVisible === true) {
-        // Legacy cleanup — mirror the heading path above: a TypParagraph
-        // that was hidden directly on the canvas (instead of via
-        // showParagraph) does not come back through the property alone.
+        // A TypParagraph hidden directly on canvas (older builds) does not
+        // come back through the property alone.
         const paragraphNode = findTextByName(copyWrap, 'Paragraph');
         if (paragraphNode !== null) {
           const wrapper = findEnclosingInstanceByName(paragraphNode, 'TypParagraph', slide);
@@ -132,7 +100,7 @@ export async function applyTitleDescription(
         }
       }
     } else {
-      // Legacy fallback: no BOOLEAN prop — toggle the wrapper instance.
+      // Older components lack the showParagraph prop; toggle the wrapper instead.
       const paragraphNode = findTextByName(copyWrap, 'Paragraph');
       if (paragraphNode !== null) {
         const wrapper = findEnclosingInstanceByName(paragraphNode, 'TypParagraph', slide);

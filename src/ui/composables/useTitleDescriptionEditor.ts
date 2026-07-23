@@ -1,8 +1,3 @@
-// useTitleDescriptionEditor — binds the General → Title & Description
-// section to the store + bridge. Exposes the v-model payload, the
-// debounced-text update handler, and the heading-accent update handler.
-// Consumers don't see the message-bus contract.
-
 import { computed, onUnmounted, reactive, ref, watch } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
@@ -56,10 +51,9 @@ export function useTitleDescriptionEditor() {
       !rangesEqual(td.headingDim, next.headingDim)
         ? next.headingDim
         : null;
-    // Een characters-write verstoort de range-fills op het canvas, dus bij
-    // een gewijzigde heading moeten de (geremapte) ranges ALTIJD mee in de
-    // payload zodat de sandbox ze ná de write opnieuw aanbrengt — ook
-    // wanneer de ranges zelf identiek bleven (bv. woord achteraan erbij).
+    // A characters write wipes the range fills on canvas, so a changed heading
+    // must always carry the (remapped) ranges for the sandbox to re-apply after
+    // the write — even when the ranges themselves are unchanged.
     const dimForPayload =
       nextHeadingDim !== null
         ? nextHeadingDim
@@ -67,10 +61,8 @@ export function useTitleDescriptionEditor() {
           ? next.headingDim
           : null;
 
-    // Live typing flushes through this same path on every pause, so the
-    // trailing blur/unmount commit often carries exactly the store values.
-    // Skip the post then — a redundant update-general still costs the
-    // sandbox a font-load + text write.
+    // Live typing already flushed on every pause, so the blur/unmount commit
+    // often matches the store; a redundant post costs a sandbox font-load + text write.
     if (
       next.heading === td.heading &&
       next.paragraph === td.paragraph &&
@@ -125,15 +117,13 @@ export function useTitleDescriptionEditor() {
     const td = view.state.general?.titleDescription;
     if (slideId === null || td === null || td === undefined) return;
 
-    // Optimistic — flip the store so the switch UI stays put while the
-    // sandbox round-trip happens. Same pattern as theme/skip/size.
+    // Optimistic flip so the switch doesn't snap back during the sandbox round-trip.
     if (field === 'heading') {
       if (td.headingVisible === next) return;
       td.headingVisible = next;
       postVisibility(slideId, 'heading', next);
-      // Invariant: paragraph implies heading. Turning the heading off
-      // cascades to paragraph so we never sit in a paragraph-only state
-      // — that always reads as a layout bug to the audience.
+      // Invariant: paragraph visible implies heading visible — a
+      // paragraph-only slide reads as a layout bug to the audience.
       if (next === false && td.paragraphVisible === true) {
         td.paragraphVisible = false;
         postVisibility(slideId, 'paragraph', false);
@@ -143,9 +133,8 @@ export function useTitleDescriptionEditor() {
       if (td.paragraphVisible === next) return;
       td.paragraphVisible = next;
       postVisibility(slideId, 'paragraph', next);
-      // Symmetric invariant: turning paragraph on requires heading on.
-      // The UI disables the paragraph toggle when heading is off so we
-      // shouldn't reach here, but be defensive — flip heading on too.
+      // Symmetric invariant; the UI disables this path when heading is off,
+      // but stay defensive and flip heading back on too.
       if (next === true && td.headingVisible === false) {
         td.headingVisible = true;
         postVisibility(slideId, 'heading', true);
@@ -160,9 +149,7 @@ export function useTitleDescriptionEditor() {
     if (td.size === null) return;
     if (td.size.current === next) return;
 
-    // Optimistic store-flip — slider keeps its position via the bridge
-    // round-trip even before the sandbox re-reads the slide. Same pattern
-    // as the theme/skip pickers.
+    // Optimistic flip so the slider holds its position during the round-trip.
     td.size = { current: next, options: td.size.options };
 
     tracker.register();
@@ -173,16 +160,11 @@ export function useTitleDescriptionEditor() {
     });
   }
 
-  // Trailing-debounce the bridge post — accent chips used to fire one
-  // update-accent message per click, each triggering a sandbox font-load
-  // + per-segment fill write. With a longer idle wait, rapid edits stay
-  // fully local and coalesce to one sandbox apply carrying the final set
-  // of ranges. Leaving the control or switching slides flushes the draft.
-  //
-  // `accentPending` stays true from the moment the user makes their
-  // first click in a burst until the sandbox acks the last apply. It
-  // surfaces a subtle "saving" dot in the UI so the user knows work is
-  // happening during the (sometimes 1-5s) bridge transport.
+  // Per-click update-accent posts each cost a sandbox font-load + per-segment
+  // fill write, so rapid edits coalesce locally into one apply; leaving the
+  // control or switching slides flushes the draft.
+  // `accentPending` holds from the first click of a burst until the sandbox
+  // acks the last apply — it drives the "saving" dot during 1-5s bridge transport.
   const ACCENT_DEBOUNCE_MS = 600;
   let accentTimer: ReturnType<typeof setTimeout> | null = null;
   let accentPendingPost: { slideId: string; ranges: Array<[number, number]> } | null = null;
@@ -289,9 +271,8 @@ export function useTitleDescriptionEditor() {
 
   onUnmounted(flushAccent);
 
-  // Clear the "saving" dot only for matching accent request ids. Other
-  // editors also emit target-updated, so generic acks are not reliable
-  // enough for the high-frequency accent marker.
+  // Other editors also emit target-updated, so only matching accent request
+  // ids may clear the "saving" dot.
   bridge.onMessage(function (msg) {
     if (msg.type !== 'target-updated') return;
     if (msg.requestId === undefined || !accentInFlightRequestIds.has(msg.requestId)) return;
@@ -320,9 +301,7 @@ export function useTitleDescriptionEditor() {
     }
   });
 
-  // reactive() wrapper unwraps `model` so `editor.model` returns the
-  // current value directly in both script and template — no `.value`
-  // dance at the call site.
+  // reactive() unwraps `model` so callers read editor.model without `.value`.
   return reactive({
     model,
     pending: tracker.pending,

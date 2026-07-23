@@ -39,13 +39,9 @@ function emitWith(patch: Partial<CardItem>): void {
   emit('update:modelValue', { ...props.modelValue, ...patch });
 }
 
-// Live meetypen op het canvas: elke aanslag komt binnen via het
-// `live`-event en gaat gedebounced (useLiveText) dezelfde emit-route op
-// als een commit — de delta-guard in useCardEditor blijft de dedupe-laag.
-// De waarde wordt bij het vuren pas gespreid over props.modelValue, zodat
-// tussentijdse wijzigingen aan andere velden niet worden teruggedraaid.
-// Commit (blur/Enter) cancel()t het lopende timertje eerst: anders zou de
-// debounce ná de commit nog een verouderde waarde posten.
+// Live keystrokes debounce onto the same emit path as commits. The value is read at
+// fire time and spread over props.modelValue so concurrent edits to other fields survive;
+// commit cancel()s the pending debounce first or it would post a stale value afterwards.
 let liveHeadingValue = '';
 const liveHeading = useLiveText(() => emitWith({ heading: liveHeadingValue }));
 function onHeadingLive(value: string): void {

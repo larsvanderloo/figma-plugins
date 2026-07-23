@@ -1,6 +1,5 @@
-// useInstructorEditor — binds the Content → InstructorCards to the store +
-// bridge. The instructor picker switches the design-system `Instructor`
-// VARIANT (photo + name follow the variant); the list items are free text.
+// The instructor picker switches the design-system `Instructor` variant
+// (photo + name follow the variant); the list items are free text.
 
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';

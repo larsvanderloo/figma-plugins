@@ -1,21 +1,6 @@
-// ============================================================
-// editors/chart/renderer.ts
-//
-// Slot-based chart-renderer voor ChartWrap-instances — zelfde
-// architectuur als de tabel: full-state PUT binnen de SlotNode, witte
-// kaart-container die de actuele Slot-afmetingen volgt, theming via
-// de library-variables (accent-ramp afgeleid van `Text`).
-//
-// Public API:
-//   - scanChartSlot(slot)       → ChartWrapModel (pluginData-truth)
-//   - applyChart(slot, desired) → full-state PUT (clear + rebuild)
-//
-// Per-type-builders leven in `./donut.ts`, `./bars.ts`,
-// `./progress.ts`, `./line.ts`; gedeelde stukken in `./palette.ts`,
-// `./legend.ts`, `./plugin-data.ts`.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Chart renderer for ChartWrap slots — same architecture as the table
+// editor: full-state PUT inside the SlotNode, with pluginData as the
+// persisted source of truth for scans.
 
 import type { ChartWrapModel } from '../../../shared/types';
 import { normalizeChartModel } from '../../../shared/chart-calculations';
@@ -40,14 +25,12 @@ import { buildMatrix } from './matrix';
 
 export { readChartModel } from './plugin-data';
 
-/** pluginData-truth scan: lees het gepersisteerde model van de Slot. */
 export function scanChartSlot(slot: SlotNode): ChartWrapModel {
   return readChartModel(slot);
 }
 
-/** Accent-kaart — zelfde taal als de InstructorCards (MCP-referentie
- * 2026-06-12): fill gebonden aan de `Text`-variable (saturated accent),
- * radius 55 (radius/rounded-4xl), geen border. */
+/** Styled to match the InstructorCards: fill bound to the `Text`
+ * variable, radius 55 = the radius/rounded-4xl token. */
 function buildChartCard(cardPaint: SolidPaint): FrameNode {
   const card = figma.createFrame();
   card.name = 'WelderChartContent';
@@ -63,11 +46,9 @@ function buildChartCard(cardPaint: SolidPaint): FrameNode {
   return card;
 }
 
-/**
- * Vind de `Background`-variable via de fill-binding van een ancestor-node
- * (de Slide-instance bindt z'n achtergrond aan `Background`). Geen eigen
- * library-key nodig; faalt stil naar null (caller valt terug op RGB).
- */
+/** Finds the `Background` variable through the ancestor's fill binding
+ * (the Slide instance binds its background to it) — no library key
+ * needed. Returns null on failure; callers fall back to plain RGB. */
 async function findBackgroundVariable(node: SceneNode): Promise<Variable | null> {
   try {
     const fills = (node as MinimalFillsMixin).fills;
@@ -78,16 +59,12 @@ async function findBackgroundVariable(node: SceneNode): Promise<Variable | null>
       }
     }
   } catch (_e) {
-    /* silent */
   }
   return null;
 }
 
-/**
- * Klim van de Slot omhoog naar de buitenste INSTANCE-ancestor (de Slide):
- * dat is de node die de expliciete theme-variable-mode draagt, en dus de
- * juiste consumer voor resolveForConsumer.
- */
+/** The outermost INSTANCE ancestor (the Slide) carries the explicit
+ * theme-variable mode, so it is the right consumer for resolveForConsumer. */
 function findSlideAncestor(slot: SlotNode): SceneNode {
   let node: BaseNode | null = slot;
   let lastInstance: SceneNode = slot;
@@ -98,9 +75,8 @@ function findSlideAncestor(slot: SlotNode): SceneNode {
   return lastInstance;
 }
 
-/** Label-fontSize geschaald op slot-hoogte (zelfde gedachte als de
- * tabel-formule): klein genoeg voor dense charts, presentatie-groot
- * op volledige slides. */
+/** Scales with slot height (same idea as the table formula): small for
+ * dense charts, presentation-size on full slides. */
 function chartLabelSize(slotH: number): number {
   let size = Math.round(slotH * 0.034);
   if (size < 16) size = 16;
@@ -108,17 +84,14 @@ function chartLabelSize(slotH: number): number {
   return size;
 }
 
-/** Fallback-aspect voor legacy/invalid slots zonder hoogte: de bekende
- * slide-slot is 1728×759 → hoogte ≈ 0.44 × breedte. */
+/** Aspect for legacy/invalid slots without a height: the standard slide slot is 1728×759. */
 const CHART_FALLBACK_ASPECT = 759 / 1728;
 
 /**
- * Full-state PUT: clear alle Slot-children en bouw opnieuw uit
- * `desired`. Persisteert het genormaliseerde model als pluginData
- * (source of truth voor de volgende scan). Retourneert false wanneer
- * de library-vars ontbreken en de rebuild is overgeslagen: dan wordt
- * er niets gecleard én niets gepersisteerd, zodat canvas en
- * pluginData consistent de oude staat houden.
+ * Full-state PUT: clears the slot and rebuilds from `desired`, then
+ * persists the normalized model as pluginData. Returns false when the
+ * library vars are missing — nothing is cleared or persisted then, so
+ * canvas and pluginData consistently keep the old state.
  */
 export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promise<boolean> {
   await Promise.all([
@@ -129,31 +102,27 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
   const vars = await loadAccentVars();
   const model = normalizeChartModel(desired);
 
-  // Vars éérst resolven, vóór het clearen: zonder Text/Dimmer valt er
-  // geen kaart te bouwen, en een clear zou de slot leeg achterlaten
-  // terwijl pluginData al het nieuwe model claimt. Abort hier met de
-  // oude canvas intact.
+  // Bail before clearing: without Text/Dimmer no card can be built, and
+  // clearing first would leave an empty slot out of sync with pluginData.
   if (vars.text === null || vars.dimmer === null) {
     console.log('[welder-slide-editor] applyChart: library-vars missing, skipping rebuild');
     return false;
   }
 
-  // Clear bestaande children (toegestaan binnen SlotNode).
+  // Removing children is allowed inside a SlotNode.
   const snapshot: SceneNode[] = [];
   for (let i = 0; i < slot.children.length; i++) snapshot.push(slot.children[i]);
   for (let i = 0; i < snapshot.length; i++) {
     try {
       snapshot[i].remove();
     } catch (_e) {
-      /* silent */
     }
   }
 
-  // MCP-geverifieerd (2026-06-12): resolveForConsumer op de Slot/kaart
-  // resolved in de DEFAULT-mode van de Theme-collectie, niet in de mode
-  // van de slide (gebonden paints volgen de slide-mode wél). Resolve
-  // daarom tegen de omsluitende Slide-INSTANCE; fallback = orange-mode
-  // accent (#ff7700).
+  // resolveForConsumer on the slot/card resolves in the Theme collection's
+  // DEFAULT mode, not the slide's mode (bound paints DO follow the slide
+  // mode) — so resolve against the enclosing Slide instance instead.
+  // Fallback is the orange-mode accent (#ff7700).
   const modeContext = findSlideAncestor(slot);
   const dimmerRGB = await resolveColorInNodeMode(vars.dimmer, modeContext, TEXT_DIMMER_RGB);
   const accentRGB = await resolveColorInNodeMode(vars.text, modeContext, {
@@ -161,8 +130,7 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
     g: 0.467,
     b: 0,
   });
-  // Kaart-paint één keer bouwen: hergebruikt voor de kaart-fill én als
-  // segment-separator-stroke in de donut/pie.
+  // Built once: reused for the card fill and as the donut/pie separator stroke.
   const cardPaint = figma.variables.setBoundVariableForPaint(
     { type: 'SOLID', color: accentRGB },
     'color',
@@ -171,32 +139,29 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
   const card = buildChartCard(cardPaint);
   slot.appendChild(card);
 
-  // Pin de kaart op (0,0) binnen de Slot. Een auto-layout-Slot (met
-  // padding) plaatst appended children anders op (padX,padY) terwijl de
-  // kaart full-slot gesized wordt → overflow rechts/onder. ABSOLUTE haalt
-  // de kaart uit de slot-layout; x/y=0 dekt ook layout-NONE slots.
+  // An auto-layout slot with padding places appended children at
+  // (padX,padY) while the card is sized full-slot → overflow. ABSOLUTE
+  // lifts the card out of the slot layout; x/y=0 also covers layout-NONE slots.
   try {
     if (slot.layoutMode !== 'NONE') {
       card.layoutPositioning = 'ABSOLUTE';
     }
   } catch (_e) {
-    /* silent — parent zonder auto-layout accepteert geen ABSOLUTE */
+    /* parent without auto-layout rejects ABSOLUTE */
   }
   card.x = 0;
   card.y = 0;
-  // Content op de accent-kaart is licht: bind aan de `Background`-
-  // variable (gevonden via de slide-fill-binding), fallback cream.
+  // On-card content is light: bound to the `Background` variable, cream fallback.
   const backgroundVar = await findBackgroundVariable(modeContext);
   const lightRGB =
     backgroundVar !== null
       ? await resolveColorInNodeMode(backgroundVar, modeContext, { r: 1, g: 0.957, b: 0.918 })
       : { r: 1, g: 0.957, b: 0.918 };
   const labelVar = backgroundVar !== null ? backgroundVar : vars.dimmer;
-  // De wrap kan een geflipte theme-mode voeren: de kaart-fill
-  // (Text-binding) rendert dan in een ANDERE kleur dan accentRGB op
-  // slide-niveau. Resolve Text in de kaart-mode (de kaart hangt nu in
-  // de tree) en kies als on-card-tekstkleur de variant met het meeste
-  // kanaal-contrast t.o.v. de werkelijke kaartkleur.
+  // The wrap may carry a flipped theme mode: the card fill then renders in
+  // a different color than accentRGB. Resolve Text in the card's own mode
+  // (possible now the card is in the tree) and pick the on-card text color
+  // with the most channel contrast against the actual card color.
   const cardRGB = await resolveColorInNodeMode(vars.text, card, accentRGB);
   const distAccent =
     Math.abs(cardRGB.r - accentRGB.r) +
@@ -215,10 +180,9 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
     accentRGB: accentRGB,
     onCardRGB: onCardRGB,
   };
-  // Zelfde als de tabel: SlotNode host geen FILL-children —
-  // expliciete resize naar de actuele slot-afmetingen, zodat de kaart
-  // toekomstige smallere/kortere slot-varianten automatisch volgt.
-  // Surface-preset is alleen fallback voor legacy/invalid slots.
+  // A SlotNode hosts no FILL children, so resize the card explicitly to
+  // the live slot size; the surface preset is only a fallback for
+  // legacy/invalid slots.
   const surfaceName = findEnclosingSurfaceName(slot);
   const fallbackW = tableWidthForSurface(surfaceName, 1);
   const targetW = slot.width > 0 ? slot.width : fallbackW;
@@ -226,21 +190,16 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
   try {
     card.resize(targetW, targetH);
   } catch (_e) {
-    /* silent — slot/card kan resize-locked zijn */
+    /* slot/card may be resize-locked */
   }
 
-  // Inner padding volledig proportioneel met de kaart (4.5% breedte,
-  // 9% hoogte), met een 16px-floor zodat kleine slot-varianten geen
-  // rand-rakende content krijgen. Bij 800×400: padX=36, padY=36 →
-  // content 728×328.
+  // 16px padding floor keeps content from touching the edge on small slot variants.
   const padX = Math.max(16, Math.round(targetW * 0.045));
   const padY = Math.max(16, Math.round(targetH * 0.09));
   const contentW = Math.max(1, targetW - padX * 2);
   const contentH = Math.max(1, targetH - padY * 2);
   const labelSize = chartLabelSize(targetH);
 
-  // Donut/pie kleuren per categorie; bar/line/progress per serie —
-  // ramp-lengte volgt de variant met de meeste tinten nodig.
   const rampCount =
     model.chartType === 'donut' || model.chartType === 'pie' || model.chartType === 'progress'
       ? model.categories.length
@@ -266,7 +225,6 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
     content.layoutSizingHorizontal = 'FIXED';
     content.layoutSizingVertical = 'FIXED';
   } catch (_e) {
-    /* silent */
   }
 
   debugLog('chart', 'apply', {
@@ -277,8 +235,8 @@ export async function applyChart(slot: SlotNode, desired: ChartWrapModel): Promi
     slotH: slot.height,
   });
 
-  // Pas persisteren nu de rebuild daadwerkelijk gebeurd is: pluginData
-  // is de scan-truth en mag geen staat claimen die de canvas niet toont.
+  // Persist only after the rebuild happened: pluginData is the scan truth
+  // and must not claim state the canvas does not show.
   writeChartModel(slot, model);
   return true;
 }

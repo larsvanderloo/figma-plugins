@@ -1,12 +1,3 @@
-// ============================================================
-// scan/graphs.ts
-//
-// Graphs-tab scan: TableWrap/Slot-detectie + table-model, plus de
-// refresh-helper die tables re-rendert na layout-verstorende mutaties.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { markSelfWrite } from '../bridge';
 import {
   findAllChartWraps,
@@ -18,9 +9,8 @@ import { applyTable, scanTableSlot } from '../editors/table/renderer';
 import { applyChart, scanChartSlot } from '../editors/chart/renderer';
 
 export function scanGraphs(slide: InstanceNode): GraphItems | null {
-  // Slides/whitepapers kunnen MEERDERE wrappers dragen; elke
-  // TableWrap/ChartWrap wordt een eigen instance in de Graphs-tab
-  // (instance-selector verschijnt vanaf 2).
+  // A slide can carry several wraps; each becomes its own Graphs-tab
+  // instance (the UI's instance selector appears from 2, hence the numbering).
   const instances: GraphItems['instances'] = [];
 
   const tableWraps = findAllTableWraps(slide);
@@ -55,16 +45,9 @@ export function scanGraphs(slide: InstanceNode): GraphItems | null {
 }
 
 /**
- * Re-render TableWraps op een slide na een mutatie die de slide-
- * layout heeft kunnen veranderen (bv. CopyWrap-tekst korter/langer).
- *
- * Container.resize bevriest slot.height op het moment van applyTable.
- * Als de slot daarna reflowt, blijft de container op de oude snapshot.
- * Deze helper scant + re-applyt de TableWrap-slot op de slide zodat
- * fontSize + container-hoogte de actuele slot.height pakken.
- *
- * Geen-op als de slide geen TableWrap/Slot heeft of het model leeg is.
- * Errors worden stilletjes gelogd; mag de caller-flow niet meeslepen.
+ * Re-render TableWraps after a mutation that may have reflowed the slide
+ * (e.g. CopyWrap text changing length): applyTable freezes the container
+ * on the slot dimensions at apply time, so a later reflow leaves it stale.
  */
 export async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
   const wraps = findAllTableWraps(slide);
@@ -76,14 +59,10 @@ export async function refreshTablesOnSlide(slide: InstanceNode): Promise<void> {
 async function refreshTableSlot(wrap: InstanceNode): Promise<void> {
   const slot = findSlotInWrap(wrap);
   if (slot === null) return;
-  // Alleen re-renderen wanneer de slot-afmetingen écht zijn veranderd
-  // (zelfde guard als refreshChartSlot): deze refresh draait op elke
-  // CopyWrap-keystroke en applyTable is een full clear+rebuild die
-  // zichtbaar flitst. applyTable bevriest de container op de slot-
-  // afmetingen op apply-moment (resolveTableRenderWidth → slot.width,
-  // resize → slot.height), dus gelijke afgeronde afmetingen = geen
-  // reflow, niets te doen. Geen force-pad zoals bij charts: tabel-
-  // kleuren zijn variable-bound en volgen theme-switches vanzelf.
+  // Runs on every CopyWrap keystroke and applyTable is a visibly flashing
+  // clear+rebuild, so skip while the frozen container still matches the slot.
+  // Unlike charts there is no force path: table colors are variable-bound
+  // and follow theme switches on their own.
   try {
     if (slot.children.length > 0) {
       const container = slot.children[0];
@@ -96,7 +75,7 @@ async function refreshTableSlot(wrap: InstanceNode): Promise<void> {
       }
     }
   } catch (_e) {
-    /* stale node — gewoon doorgaan met re-apply */
+    /* stale node throws on property access — fall through to re-apply */
   }
   try {
     const model = scanTableSlot(slot);
@@ -108,9 +87,8 @@ async function refreshTableSlot(wrap: InstanceNode): Promise<void> {
 }
 
 /**
- * Re-render de ChartWrap-slot op een slide na layout-verstorende
- * mutaties (zelfde reden als refreshTablesOnSlide: de kaart bevriest de
- * slot-afmetingen op applyChart-moment).
+ * Same reason as refreshTablesOnSlide: applyChart freezes the card on the
+ * slot dimensions at apply time.
  */
 export async function refreshChartsOnSlide(
   slide: InstanceNode,
@@ -126,11 +104,9 @@ async function refreshChartSlot(wrap: InstanceNode, force: boolean): Promise<voi
   const slot = findSlotInWrap(wrap);
   if (slot === null) return;
   if (slot.getPluginData('chartModel') === '') return;
-  // Alleen re-renderen wanneer de slot-afmetingen écht zijn
-  // veranderd: deze refresh draait op elke CopyWrap-keystroke en een
-  // full clear+rebuild flitst zichtbaar. Theme-switch forceert
-  // (force=true) een re-render — de ramp-kleuren zijn rendertime-RGB en
-  // volgen de mode niet vanzelf, ondanks gelijke afmetingen.
+  // Runs on every CopyWrap keystroke; a full clear+rebuild flashes visibly,
+  // so skip on unchanged dimensions. Theme switches force a re-render:
+  // ramp colors are rendertime RGB and do not follow the mode on their own.
   if (!force) {
    try {
     if (slot.children.length > 0) {
@@ -144,11 +120,11 @@ async function refreshChartSlot(wrap: InstanceNode, force: boolean): Promise<voi
       }
      }
    } catch (_e) {
-    /* stale node — gewoon doorgaan met re-apply */
+    /* stale node throws on property access — fall through to re-apply */
    }
   }
   try {
-    // Suppressie vóór de rebuild (zie handlers/chart.ts).
+    // Mark the self-write before the rebuild starts (see handlers/chart.ts).
     markSelfWrite();
     const model = scanChartSlot(slot);
     await applyChart(slot, model);

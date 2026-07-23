@@ -35,10 +35,8 @@ function onEnter(event: KeyboardEvent): void {
   (event.target as HTMLElement).blur();
 }
 
-// Getypte-maar-niet-geblurde tekst mag niet verdwijnen bij tab-switch
-// (panels zijn v-if, dus unmount zonder blur). Flushen als commit is
-// veilig: panels unmounten níét bij slide-wissel, dus dit kan nooit naar
-// een andere slide posten.
+// Panels are v-if, so a tab switch unmounts without blur — flush typed text here.
+// Safe: panels do not unmount on slide switch, so this never posts to another slide.
 onUnmounted(commit);
 </script>
 

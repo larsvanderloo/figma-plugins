@@ -1,26 +1,11 @@
-// ============================================================
-// scan/readers.ts
-//
-// Gedeelde low-level readers voor de scan-modules: tekst op naam,
-// icon-slugs uit Badge/Card, image-hashes uit slots, en Card/CopyWrap
-// variant-properties. Read-only — mutaties horen in editors/**.
-//
-// FIG-GUARD-01: type-checks vóór property-access.
-// FIG-TRAVERSE-01: traversal bounded via findChild / findOne.
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Read-only scan readers — mutations belong in editors/**.
 
 import { isEffectivelyVisible } from '../slide-machine';
 import { normalizeIconKey, LUCIDE_SLUG_RE } from '../editors/_shared/icon-swap';
 import { findImageSlot } from '../editors/_shared/node-finders';
 import { debugLog } from '../../shared/debug';
 
-/**
- * Leest een descendant text-node op naam en geeft zijn characters terug.
- * Bounded scope (findOne binnen de wrapper) en naam-gebaseerd. Text-lookup
- * is read-only zodat we geen font hoeven te laden alvorens `characters` te
- * lezen.
- */
+// Reading .characters needs no font load — only writes do.
 export function readTextByName(scope: SceneNode, name: string): string | null {
   if (!('findOne' in scope)) return null;
   const node = scope.findOne((n: SceneNode) => {
@@ -31,13 +16,8 @@ export function readTextByName(scope: SceneNode, name: string): string | null {
   return node.characters;
 }
 
-/**
- * Zoekt het eerste zichtbare descendant-TextNode met de gegeven naam binnen
- * de scope en retourneert het TextNode-object zelf (nodig voor
- * `getStyledTextSegments`). Slide Machine variant-componenten bevatten vaak
- * meerdere text-nodes met dezelfde naam (één per variant-branch); we pakken
- * de eerste *zichtbare* match, niet de eerste in de tree.
- */
+// Variant masters often carry same-named text nodes (one per branch);
+// take the first *visible* match, not the first in tree order.
 export function findVisibleTextNodeByName(
   scope: SceneNode,
   name: string,
@@ -55,18 +35,11 @@ export function findVisibleTextNodeByName(
   return null;
 }
 
-/**
- * Leest de huidige icon-slug uit een Badge-instance.
- * Structuur: Badge → icon_wrapper (FRAME) → eerste INSTANCE-kind → .name
- * Normaliseert de naam via normalizeIconKey (strip 'i-lucide-' etc.).
- * Retourneert '' wanneer de wrapper of icon-kind ontbreekt.
- */
 export function readBadgeIcon(badge: InstanceNode): string {
   if (!('findOne' in badge)) return '';
 
-  // Slot-based (new): Badge → icon-slot (SLOT) → first child (INSTANCE or
-  // FRAME after SVG-replace). The slot helper sets the child's name to
-  // the Lucide slug after insertion, so normalising the name is enough.
+  // Slot-based path: the insert helper names the slot child after its
+  // Lucide slug, so normalizing the name is enough.
   const slot = badge.findOne(function (n: SceneNode) {
     return n.type === 'SLOT' && n.name === 'icon-slot';
   });
@@ -77,7 +50,7 @@ export function readBadgeIcon(badge: InstanceNode): string {
     }
   }
 
-  // Legacy fallback: Badge → icon_wrapper (FRAME) → first INSTANCE-kind.
+  // Legacy fallback for pre-slot Badge masters.
   if ('findChild' in badge) {
     const wrapper = badge.findChild((n: SceneNode) => n.name === 'icon_wrapper');
     if (wrapper !== null && 'children' in wrapper) {
@@ -93,35 +66,18 @@ export function readBadgeIcon(badge: InstanceNode): string {
   return '';
 }
 
-/**
- * Leest de huidige icon-slug uit een Card-node.
- * Drie strategieën (symmetrisch met applyCardIconSwap in card.ts):
- *
- *   A. Directe INSTANCE-children — eerste child wier naam een Lucide-slug is.
- *   B. icon_wrapper-child → eerste INSTANCE-kind daarin.
- *   C. findOne descendant — eerste INSTANCE-descendant met Lucide-slug-naam.
- *
- * Retourneert null wanneer geen passend kind gevonden wordt of wanneer de
- * gevonden icon-instance niet zichtbaar is (visible === false via ancestor-chain).
- *
- * Signatuur uitgebreid met `slide` zodat isEffectivelyVisible aangeroepen
- * kan worden. Zelfde visibility-pattern als findVisibleTextNodeByName.
- */
+// Strategies mirror applyCardIconSwap in editors/card.ts — keep in sync.
 export function readCardIcon(card: SceneNode, slide: InstanceNode): string | null {
-  // Both INSTANCE (legacy library icon) and FRAME (post-SVG-replace) are
-  // valid icon-node shapes. The frame inserted by replaceCardIconWithSvg
-  // carries the Lucide name as its node name, so the normalize-check is
-  // the only thing the reader needs.
+  // FRAME counts as an icon too: replaceCardIconWithSvg swaps the library
+  // instance for a frame named after its Lucide slug.
   const isIconNode = function (n: SceneNode): boolean {
     return n.type === 'INSTANCE' || n.type === 'FRAME';
   };
 
-  // Strategy 0: read the ACTIVE icon-slot's first child. Card masters
-  // can carry multiple icon-slots (top vs side variant) with the inactive
-  // one hidden via ancestor visibility. findOne hits tree-order and lands
-  // on the hidden one — by which point isEffectivelyVisible nukes the
-  // result and the picker shows a blank preview. Walk all icon-slots and
-  // pick the one whose ancestor chain is visible.
+  // Strategy 0: Card masters can carry multiple icon-slots (top vs side
+  // variant) with the inactive one hidden by an ancestor; findOne walks in
+  // tree order and can land on the hidden one, so walk all slots and pick
+  // the one whose ancestor chain is visible.
   if ('findAll' in card) {
     const slots = (card as InstanceNode).findAll(function (n: SceneNode) {
       return n.type === 'SLOT' && n.name === 'icon-slot';
@@ -147,7 +103,7 @@ export function readCardIcon(card: SceneNode, slide: InstanceNode): string | nul
     }
   }
 
-  // Strategy A: directe INSTANCE/FRAME-children met Lucide-slug-naam
+  // Strategy A: direct children.
   if ('children' in card) {
     const children = (card as FrameNode | GroupNode | InstanceNode).children;
     for (let i = 0; i < children.length; i++) {
@@ -160,7 +116,7 @@ export function readCardIcon(card: SceneNode, slide: InstanceNode): string | nul
     }
   }
 
-  // Strategy B: icon_wrapper → eerste icon-kind (INSTANCE of FRAME)
+  // Strategy B: icon_wrapper child.
   if ('findChild' in card) {
     const wrapper = (card as InstanceNode).findChild((n: SceneNode) => n.name === 'icon_wrapper');
     if (wrapper !== null && 'children' in wrapper) {
@@ -174,7 +130,7 @@ export function readCardIcon(card: SceneNode, slide: InstanceNode): string | nul
     }
   }
 
-  // Strategy C: findOne descendant — eerste icon-node met Lucide-slug-naam
+  // Strategy C: any matching descendant.
   if ('findOne' in card) {
     const found = (card as InstanceNode).findOne((n: SceneNode) => {
       if (!isIconNode(n)) return false;
@@ -188,11 +144,6 @@ export function readCardIcon(card: SceneNode, slide: InstanceNode): string | nul
   return null;
 }
 
-/**
- * Leest de huidige ImagePaint-hash van het image-slot binnen de ImageWrap.
- * Slot-detectie via de shared findImageSlot (editors/_shared/node-finders.ts).
- * Returns null wanneer het slot leeg is of geen IMAGE-fill draagt.
- */
 export function readImageWrapHash(imageWrap: InstanceNode): string | null {
   var slot = findImageSlot(imageWrap, false);
   if (slot === null) return null;
@@ -209,13 +160,8 @@ export function readImageWrapHash(imageWrap: InstanceNode): string | null {
   return null;
 }
 
-/**
- * Best-effort detectie van de image-slot binnen een card.
- * Retourneert de huidige ImagePaint-hash wanneer de slot een IMAGE-fill
- * draagt, null wanneer de slot aanwezig is maar leeg, of undefined
- * wanneer de card geen slot heeft (de UI verbergt dan de upload-knop).
- * Slot-detectie via de shared findImageSlot (editors/_shared/node-finders.ts).
- */
+// Tri-state: hash when the slot has an IMAGE fill, null when the slot is
+// empty, undefined when the card has no slot (UI hides the upload button).
 export function readCardVisualHash(card: SceneNode): string | null | undefined {
   const slot = findImageSlot(card, false);
   if (slot === null) return undefined;
@@ -232,12 +178,8 @@ export function readCardVisualHash(card: SceneNode): string | null | undefined {
   return null;
 }
 
-/**
- * Reads the `Type` VARIANT property off a Card instance. The Welder
- * library's Card master defines this as a flat 'Type' key (no #N:N
- * suffix) so we look it up by name directly. Returns null when the
- * card has no Type property or it isn't a VARIANT.
- */
+// The Card master exposes 'Type' as a flat key (no '#nodeId:n' suffix),
+// so a direct name lookup is safe.
 export function readCardTypeVariant(card: InstanceNode): string | null {
   const props = card.componentProperties;
   if (props === null || props === undefined) return null;
@@ -247,14 +189,8 @@ export function readCardTypeVariant(card: InstanceNode): string | null {
   return typeof t.value === 'string' ? t.value : null;
 }
 
-/**
- * Reads the `Style` VARIANT property off a Card instance. Welder Card
- * masters expose `Default` (filled) and `Outline` (bordered). Returns
- * null when the card has no Style property OR its value isn't one of
- * the two known options — protects the iframe toggle from rendering on
- * card variants that don't actually support outline/fill switching
- * (e.g. CardWrap layouts that flatten cards into inline divs).
- */
+// Anything but the two known options returns null, so the iframe hides the
+// style toggle on card variants that can't actually switch outline/fill.
 export function readCardStyleVariant(card: InstanceNode): 'Default' | 'Outline' | null {
   const props = card.componentProperties;
   if (props === null || props === undefined) return null;
@@ -266,14 +202,9 @@ export function readCardStyleVariant(card: InstanceNode): 'Default' | 'Outline' 
   return null;
 }
 
-/**
- * Heading-size source on CopyWrap is the nested `TypHeading` instance's
- * VARIANT property (verified via Figma MCP on Welder Templates v0). Some
- * older library generations may not have a TypHeading wrapper — we fall
- * back to scanning CopyWrap itself for a size-named VARIANT in case the
- * property was lifted up. Both reads (current value) and writes
- * (setProperties) need the same host + key, so the resolver returns both.
- */
+// Heading size lives on the nested TypHeading VARIANT; legacy masters may
+// lift it onto CopyWrap itself. Reads and writes need the same host + key,
+// so the resolver returns both.
 interface HeadingSizeHost {
   host: InstanceNode;
   key: string;
@@ -285,7 +216,6 @@ export async function resolveTypHeadingSizeHost(
   copyWrap: InstanceNode,
 ): Promise<HeadingSizeHost | null> {
   const candidates: InstanceNode[] = [];
-  // Prefer TypHeading; fall back to CopyWrap-level scan for legacy masters.
   if ('findOne' in copyWrap) {
     const typHeading = copyWrap.findOne(function (n: SceneNode) {
       return n.type === 'INSTANCE' && n.name === 'TypHeading';
@@ -302,9 +232,8 @@ export async function resolveTypHeadingSizeHost(
     if (props === null || props === undefined) continue;
     const keys = Object.keys(props);
     let key: string | null = null;
-    // Pass 1: exact "size" (case-insensitive). The Figma plugin API
-    // returns variant keys with a `#nodeId:n` suffix in some files; we
-    // strip the suffix before comparing.
+    // Variant keys can carry a '#nodeId:n' suffix in some files — strip it
+    // before comparing. Exact "size" match first, then any key containing it.
     for (let k = 0; k < keys.length; k++) {
       const bare = keys[k].split('#')[0].toLowerCase();
       if (bare === 'size' && props[keys[k]].type === 'VARIANT') {
@@ -312,7 +241,6 @@ export async function resolveTypHeadingSizeHost(
         break;
       }
     }
-    // Pass 2: any VARIANT key containing "size" (alnum-stripped).
     if (key === null) {
       for (let k = 0; k < keys.length; k++) {
         const stripped = keys[k].toLowerCase().replace(/[^a-z0-9]/g, '');
@@ -349,21 +277,16 @@ export async function resolveTypHeadingSizeHost(
       );
       continue;
     }
-    // H5 is intentionally excluded from the picker — the library exposes
-    // it but Welder's editor only ships Display through H4 as user-facing
-    // sizes. If a slide is currently on H5 the value passes through (no
-    // forced rewrite); the slider just snaps to the nearest allowed
-    // option as soon as the user drags it.
+    // The library exposes H5 but the editor only ships Display–H4. A slide
+    // already on H5 keeps its value; the slider snaps once the user drags.
     const filteredOptions: string[] = [];
     for (let o = 0; o < def.variantOptions.length; o++) {
       if (def.variantOptions[o].toLowerCase() !== 'h5') {
         filteredOptions.push(def.variantOptions[o]);
       }
     }
-    // Reverse so the slider goes small → big left → right (H4 on the
-    // left, Display on the right) — matches user expectation that
-    // dragging right means a bigger heading. Figma's variantOptions
-    // are declared big → small in the library.
+    // The library declares variantOptions big → small; reverse so dragging
+    // the slider right means a bigger heading.
     filteredOptions.reverse();
     return {
       host: cand,

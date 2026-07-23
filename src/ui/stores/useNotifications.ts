@@ -1,26 +1,6 @@
-// ============================================================
-// useNotifications — centralized toast surface backed by Nuxt UI.
-//
-// Nuxt UI v4 ships `useToast()` (consumed by the `<UApp>` wrapper's
-// Toaster). This store wraps that API behind named helpers
-// (`pushError`, `pushSuccess`, `pushInfo`, `pushWarning`) so callers
-// don't need to remember icon / color conventions and the rest of
-// the app stays decoupled from the rendering library.
-//
-// Lifecycle:
-//   - App.vue calls `useToast()` in its setup, then passes the handle
-//     to this store via `init(toast)` once.
-//   - Anything in the iframe that wants to surface a notification
-//     calls `useNotifications().pushError(title, description?)` etc.
-//   - Toaster auto-dismisses according to its configured duration
-//     (Nuxt UI default: 5s).
-//
-// Why init() instead of calling `useToast()` here directly: the toast
-// composable resolves via Vue's inject() chain, which reliably works
-// only inside a component's setup. A Pinia setup-store factory runs
-// at first-use, often outside that chain. Storing the handle is the
-// least-fragile shape.
-// ============================================================
+// init() receives the toast handle from App.vue instead of calling useToast()
+// here: useToast() resolves via Vue's inject() chain, which only works reliably
+// in component setup — a Pinia setup-store factory runs at first use, outside it.
 
 import { defineStore } from 'pinia';
 
@@ -37,7 +17,6 @@ interface ToastAdd {
 let toastApi: ToastAdd | null = null;
 
 export const useNotifications = defineStore('notifications', () => {
-  /** Wire the Nuxt UI toast handle once (called from App.vue onMounted). */
   function init(api: ToastAdd): void {
     toastApi = api;
   }

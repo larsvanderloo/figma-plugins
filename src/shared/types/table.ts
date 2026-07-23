@@ -1,94 +1,48 @@
-// ============================================================
-// Table-editor types — Slot-based
-//
-// Types voor de Slot-gebaseerde TableWrap. De plugin bouwt zelf
-// FRAMEs + TEXT-nodes binnen de SlotNode, in plaats van
-// library-components of vaste varianten.
-// ============================================================
-
-/**
- * Top-level model voor een bewerkbare TableWrap-instance.
- * `slotId` verwijst naar de SlotNode binnen de TableWrap-INSTANCE.
- */
+/** Model for an editable TableWrap instance; the plugin builds its own FRAME/TEXT tree inside the Slot. */
 export interface TableWrapModel {
-  /** Figma SlotNode ID binnen de TableWrap-INSTANCE. */
+  /** Figma SlotNode id inside the TableWrap instance. */
   slotId: string;
-  /**
-   * Wanneer true krijgt rij 0 een header-treatment: HUG-vertical,
-   * header-typografie, divider eronder. Body-rijen (1+)
-   * delen het restant van de container-hoogte via FILL.
-   * Default: false (bestaande tabellen blijven onveranderd).
-   */
+  /** True gives row 0 header treatment (header typography + divider). Default false. */
   hasColumnHeader: boolean;
-  /**
-   * Per-column footer calculation, inspired by Notion database table
-   * calculations. `null` means no footer value for that column.
-   */
+  /** Per-column footer calculation; null = no footer value for that column. */
   columnCalculations?: TableColumnCalculationSetting[];
-  /**
-   * Per-column emphasis for the footer/calculation value. Mirrors the
-   * per-cell `emphasis` flag but applies only to that column's footer
-   * value. `true` renders the sum in the emphasized (bold) style.
-   */
+  /** Per-column bold styling for the footer value. */
   columnCalculationEmphasis?: boolean[];
-  /**
-   * Per-column currency formatting for the footer/calculation value.
-   * `true` renders the sum with a `€` prefix (UI footer + canvas).
-   * Mutually exclusive with `columnCalculationPercent` (UI-enforced).
-   */
+  /** Per-column `€` prefix on the footer value; mutually exclusive with percent (UI-enforced). */
   columnCalculationCurrency?: boolean[];
-  /**
-   * Per-column percent formatting for the footer/calculation value.
-   * `true` renders the sum with a `%` suffix (UI footer + canvas).
-   * Mutually exclusive with `columnCalculationCurrency` (UI-enforced).
-   */
+  /** Per-column `%` suffix on the footer value; mutually exclusive with currency (UI-enforced). */
   columnCalculationPercent?: boolean[];
   /**
-   * Per-column footer label text. Only used for columns WITHOUT a sum:
-   * the footer row then shows this editable label (e.g. "Totaal") instead
-   * of an empty cell. Ignored for sum columns (those show the computed
-   * value). Empty string = no label.
+   * Footer label for columns WITHOUT a sum (e.g. "Totaal"); ignored on sum
+   * columns, empty string = no label.
    */
   columnCalculationLabel?: string[];
   rows: TableRowModel[];
 }
 
-// `width`-preset (sm/md/lg) en `textSize`-multiplier verwijderd.
-// De tabel rendert full-width binnen de actuele Slot-breedte; kolommen verdelen die breedte via
-// autofit. FontSize komt uit de hoogte-formule in renderer.ts.
-
-/** Eén rij binnen een TableWrapModel. */
 export interface TableRowModel {
-  /** FRAME-id van de bestaande row-FRAME binnen de Slot; leeg bij nieuwe rijen. */
+  /** FRAME id of the existing row frame in the Slot; empty for new rows. */
   rowNodeId: string;
   cells: TableCellModel[];
 }
 
-/** Eén cel binnen een TableRowModel. */
 export interface TableCellModel {
-  /** FRAME-id van de bestaande cell-FRAME binnen de row; leeg bij nieuwe cellen. */
+  /** FRAME id of the existing cell frame in the row; empty for new cells. */
   cellNodeId: string;
   value: string;
-  /** Per-cell visual emphasis. Default false; set through the table UI. */
+  /** Per-cell bold styling. Default false. */
   emphasis?: boolean;
   /**
-   * Per-cell delta badge — vrije tekst die de editor typt (bv. `+12%`),
-   * onder de waarde gerenderd in Text Dimmer-kleur met een ▲/▼-prefix.
-   * Een ▲/▼ vooraan bepaalt de richting (zelfde conventie als de
-   * chart-delta-badge); leeg/undefined → geen badge. Body-cellen alleen.
+   * Delta chip under the value; a leading ▲/▼ encodes direction (same
+   * convention as the chart delta badge). Empty/undefined = no chip. Body cells only.
    */
   delta?: string;
   /**
-   * Per-cell vinkje links van de waarde: true = aangevinkt (lucide
-   * circle-check), false = uitgevinkt (lucide circle). Undefined → geen
-   * vinkje. Body-cellen alleen.
+   * Check icon left of the value: true = circle-check, false = circle,
+   * undefined = none. Body cells only.
    */
   check?: boolean;
-  /**
-   * Per-cell badge — chip rechts van de waarde op de waarderegel (zelfde
-   * Badge-clone als de delta, zonder richtingpijl). Vrije tekst: nummers
-   * én woorden. Leeg/undefined → geen badge. Body-cellen alleen.
-   */
+  /** Free-text chip right of the value (no direction arrow). Empty/undefined = none. Body cells only. */
   badge?: string;
 }
 
@@ -100,10 +54,10 @@ export interface TableColumnSummary {
   value: string;
   numericValue: number;
   numericCount: number;
-  /** When true, the footer value renders in the emphasized (bold) style. */
+  /** When true, the footer value renders bold. */
   emphasis: boolean;
-  /** When true, `value` is formatted as currency (`€` prefix). */
+  /** When true, `value` gets a `€` prefix. */
   currency: boolean;
-  /** When true, `value` is formatted as a percentage (`%` suffix). */
+  /** When true, `value` gets a `%` suffix. */
   percent: boolean;
 }

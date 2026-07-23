@@ -38,7 +38,7 @@
   box-shadow: var(--shadow-surface);
 }
 
-/* Figma iframe heeft beperkt viewport; UApp root mag de volledige hoogte pakken. */
+/* Figma iframe has a constrained viewport; the UApp root must fill the full height. */
 html,
 body,
 #app {

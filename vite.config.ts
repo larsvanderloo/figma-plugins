@@ -1,9 +1,5 @@
-// ============================================================
-// Vite config — bouwt de iframe-UI (Vue 3 + Nuxt UI v4) naar
-// één zelfstandig dist/ui.html (JS + CSS inline). Deze file
-// wordt daarna door esbuild (plugin-side) als string geimporteerd
-// en doorgegeven aan figma.showUI(uiHtml, ...).
-// ============================================================
+// Builds the iframe UI into one self-contained dist/ui.html (JS + CSS inlined);
+// esbuild then imports that file as a string and passes it to figma.showUI.
 
 import { defineConfig, type Plugin } from 'vite';
 import { fileURLToPath, URL } from 'node:url';
@@ -17,8 +13,7 @@ const isDebug = process.env.PLUGIN_DEBUG === '1';
 const debugLogEndpoint = isDebug ? (process.env.PLUGIN_DEBUG_LOG_ENDPOINT ?? '') : '';
 const projectRoot = fileURLToPath(new URL('.', import.meta.url));
 
-// Single source of truth: package.json version, injected at bundle-time
-// via `define` (same mechanism as __PLUGIN_DEBUG__). No generated file.
+// Version comes from package.json via `define` at bundle time — no generated file.
 const appVersion = JSON.parse(
   readFileSync(fileURLToPath(new URL('./package.json', import.meta.url)), 'utf8'),
 ).version as string;
@@ -26,14 +21,9 @@ const uiIndexHtml = fileURLToPath(new URL('./src/ui/index.html', import.meta.url
 const uiAutoImportsDts = fileURLToPath(new URL('./src/ui/auto-imports.d.ts', import.meta.url));
 const uiComponentsDts = fileURLToPath(new URL('./src/ui/components.d.ts', import.meta.url));
 
-/**
- * Vite's input is src/ui/index.html; plugin-side esbuild importeert
- * via `import uiHtml from './dist/ui.html'`. Deze plugin hernoemt de HTML-
- * output van `index.html` naar `ui.html` in de post-write stap.
- *
- * Rolldown/Rollup-compat: we muteren de bundle niet direct, maar verplaatsen
- * het bestand op disk na write (nieuwe Vite 8 / Rolldown-API).
- */
+// Vite emits index.html but plugin-side esbuild imports './dist/ui.html', so rename
+// after write. Moving the file on disk (instead of mutating the bundle) keeps this
+// compatible with both Rolldown (Vite 8) and Rollup.
 function renameIndexToUi(): Plugin {
   return {
     name: 'rename-index-to-ui',
@@ -52,7 +42,7 @@ function renameIndexToUi(): Plugin {
           await fs.rm(path.join(outDir, 'src'), { recursive: true, force: true });
           return;
         } catch (err: unknown) {
-          // Als index.html niet bestaat (al hernoemd in watch-rebuild), geen fout.
+          // ENOENT means it was already renamed in a watch rebuild — not an error.
           const e = err as { code?: string };
           if (e.code !== 'ENOENT') throw err;
         }
@@ -83,7 +73,7 @@ function serveUiIndexAtRoot(): Plugin {
 export default defineConfig({
   root: projectRoot,
   define: {
-    // Replaced verbatim at bundle-time. Type declared in ui/env.d.ts.
+    // Each define needs a matching ambient declaration in ui/env.d.ts.
     __PLUGIN_DEBUG__: JSON.stringify(isDebug),
     __PLUGIN_DEBUG_SOURCE__: JSON.stringify('ui'),
     __PLUGIN_DEBUG_LOG_ENDPOINT__: JSON.stringify(debugLogEndpoint),
@@ -136,9 +126,8 @@ export default defineConfig({
   build: {
     outDir: fileURLToPath(new URL('./dist', import.meta.url)),
     emptyOutDir: false,
-    // Target modern browsers — Figma's iframe sandbox is Chromium-based en
-    // ondersteunt ES2020+ ruimschoots (plugin-sandbox is de ES2017-restrictie,
-    // niet de iframe).
+    // The ES2017 restriction is for the plugin sandbox only; Figma's iframe is
+    // Chromium-based, so ES2020 is safe here.
     target: 'es2020',
     sourcemap: isDebug ? 'inline' : false,
     cssCodeSplit: false,
@@ -146,7 +135,7 @@ export default defineConfig({
     rollupOptions: {
       input: uiIndexHtml,
       output: {
-        // Single-file-plugin verwacht 1 bundle; geen manualChunks.
+        // viteSingleFile expects a single bundle — no manualChunks.
         inlineDynamicImports: true,
         entryFileNames: 'ui.js',
         assetFileNames: 'ui.[ext]',

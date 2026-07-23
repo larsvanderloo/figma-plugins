@@ -1,15 +1,5 @@
-// ============================================================
-// usePluginMessages — plugin→UI berichtafhandeling.
-//
-// Eén handler-keten voor alle inbound PluginToUIMessage-types
-// ('init', 'slide-loaded', 'instructor-card-updated', 'stale-icons',
-// 'slide-summary', 'slide-deselected', 'icon-recents',
-// 'onboarding-seen', 'presentation-pdf-parts', 'document-ready',
-// 'target-updated'), gedispatcht op msg.type. Voorheen stond deze
-// keten inline in App.vue; hier is alleen de afhandeling verhuisd —
-// state-definities blijven in App.vue en de stores, deze composable
-// ontvangt uitsluitend referenties (stores, refs) en callbacks.
-// ============================================================
+// Deliberately stateless: all state patched here is owned by App.vue or the
+// stores and arrives as refs/callbacks — don't add local state to this composable.
 
 import { PDFDocument } from 'pdf-lib';
 import type { Ref } from 'vue';
@@ -57,18 +47,14 @@ function downloadBlob(bytes: Uint8Array, filename: string, mime: string): void {
 }
 
 export interface PluginMessagesOptions {
-  /** Slide/view-store — doelwit van vrijwel alle patches. */
   view: ReturnType<typeof usePluginView>;
   iconRecents: ReturnType<typeof useIconRecents>;
   notifications: ReturnType<typeof useNotifications>;
   onboarding: ReturnType<typeof useOnboarding>;
-  /** Splash-flag in App.vue; gaat uit op 'init' / 'slide-loaded'. */
   initializing: Ref<boolean>;
-  /** Rondt de icon-reconcile-fase af (ruimt de timers in App.vue op). */
   finishReconcile: () => void;
-  /** Plant de reconcile-fallback-timer nadat stale-icon-fixes gepost zijn. */
   scheduleReconcileFallback: () => void;
-  /** Onderdrukt de eerstvolgende set-icon-recents-save (sandbox-echo). */
+  /** Incoming icon-recents originate in the sandbox; saving them back would echo-loop. */
   suppressNextIconRecentsSave: () => void;
 }
 
@@ -99,8 +85,8 @@ export function usePluginMessages(options: PluginMessagesOptions): void {
       return;
     }
     if (msg.type === 'instructor-card-updated') {
-      // Gericht patch-bericht na een instructor-switch: de sandbox heeft
-      // de list-teksten gereset naar de defaults van de nieuwe variant.
+      // After an instructor switch the sandbox has already reset the list texts
+      // to the new variant's defaults; mirror that here rather than re-deriving.
       const instructorList = view.state.content?.instructorCards ?? null;
       if (instructorList !== null) {
         const cardIdx = instructorList.findIndex((c) => c.cardNodeId === msg.cardNodeId);

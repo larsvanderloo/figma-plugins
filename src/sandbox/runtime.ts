@@ -1,12 +1,4 @@
-// ============================================================
-// sandbox/runtime.ts
-//
-// Runtime-omgevingsinfo voor de sandbox: in welk editor-type draait de
-// plugin en met welke vlaggen. Dev Mode is read-only — mutators en
-// backfills checken isDevModeRuntime() en skippen daar.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Dev Mode is read-only — mutators and backfills check isDevModeRuntime() and skip there.
 
 import { PluginRuntimeInfo } from '../shared/types';
 import { isPluginDebugEnabled } from '../shared/debug';

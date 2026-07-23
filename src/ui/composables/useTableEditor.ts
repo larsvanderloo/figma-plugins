@@ -1,5 +1,3 @@
-// useTableEditor — binds the Graphs → Table instance(s) to the store + bridge.
-
 import { computed, onUnmounted, reactive, ref } from 'vue';
 import { debugLog } from '../../shared/debug';
 import {
@@ -68,15 +66,13 @@ function tableSemanticsEqual(a: TableWrapModel | null, b: TableWrapModel): boole
     for (let j = 0; j < aCells.length; j++) {
       if (aCells[j].value !== bCells[j].value) return false;
       if ((aCells[j].emphasis === true) !== (bCells[j].emphasis === true)) return false;
-      // Delta hoort bij de semantiek: zonder deze vergelijking wordt een pure
-      // delta-edit (pijl-menu of delta-input) als duplicaat geskipt en nooit
-      // gepost — de badge verschijnt dan pas na een latere waarde-edit.
+      // Without comparing delta, a pure delta edit is skipped as a duplicate
+      // and never posted — the badge would only appear after a later value edit.
       const aDelta = typeof aCells[j].delta === 'string' ? aCells[j].delta : '';
       const bDelta = typeof bCells[j].delta === 'string' ? bCells[j].delta : '';
       if (aDelta !== bDelta) return false;
-      // Vinkje + nummer-badge: zelfde les als delta — elk veld dat de canvas
-      // rendert moet hier meevergeleken worden, anders wordt een pure
-      // toggle/badge-edit als duplicaat gedropt.
+      // Same for check + badge: every canvas-rendered field must be compared
+      // here, or a pure toggle/badge edit is dropped as a duplicate.
       if (aCells[j].check !== bCells[j].check) return false;
       const aBadge = typeof aCells[j].badge === 'string' ? aCells[j].badge : '';
       const bBadge = typeof bCells[j].badge === 'string' ? bCells[j].badge : '';
@@ -92,7 +88,7 @@ export function useTableEditor() {
   const bridge = usePluginBridge();
   const tracker = useBridgePending(bridge);
 
-  // graphs.instances bevat nu ook chart-instances — filter op tables.
+  // graphs.instances also carries chart instances; keep only tables.
   const instances = computed<GraphInstance[]>(
     () => (view.state.graphs?.instances ?? []).filter((i) => i.tableModel !== null),
   );
@@ -117,27 +113,22 @@ export function useTableEditor() {
 
   const model = computed<TableWrapModel | null>(() => selected.value?.tableModel ?? null);
 
-  // True when the last render reported the table overflowing the slot even at
-  // the minimum font (content clips). The editor shows a warning; cleared on
-  // the next successful render that fits.
+  // Set when the last render reported the table overflowing the slot even at
+  // the minimum font (content clips); cleared by the next render that fits.
   const overflow = ref<boolean>(false);
   bridge.onMessage((msg) => {
     if (msg.type !== 'target-updated') return;
-    // Only react to acks for the currently-selected table slot.
     const inst = selected.value;
     if (inst === null || inst.tableModel === null) return;
     if (msg.targetId !== inst.tableModel.slotId) return;
     overflow.value = msg.ok === true && msg.tableOverflow === true;
   });
 
-  // Settle-pass: de sandbox-fast-path schrijft tijdens het typen alleen tekst
-  // in place en stelt font-fit/kolom-autofit/padding uit. Eén full render
-  // reconcilieert die drift — getriggerd op BLUR (focus verlaat de invoer),
-  // niet op een idle-timer: een timer vuurt midden in natuurlijke typ-pauzes
-  // en de ~215ms render botst dan met de volgende aanslag (voelt traag).
-  // Zolang je in de cel zit verspringt er dus niets; zodra je 'm verlaat
-  // reconcilieert de tabel één keer. Geen tracker.register(): dit is
-  // achtergrond-reconciliatie, geen user-actie.
+  // Settle pass: while typing, the sandbox fast path writes text in place and
+  // defers font-fit/column-autofit/padding; one full render on BLUR reconciles
+  // that drift. Not on an idle timer — it fires mid-typing-pause and the ~215ms
+  // render collides with the next keystroke. No tracker.register(): this is
+  // background reconciliation, not a user action.
   let settleArmed = false;
   let settleFlushTimer: ReturnType<typeof setTimeout> | null = null;
   function fireSettle(): void {
@@ -157,11 +148,11 @@ export function useTableEditor() {
   }
   function onGridFocusOut(event: FocusEvent): void {
     if (!settleArmed) return;
-    // Focus schuift naar een ander invoerveld → nog aan het editen; wachten.
+    // Focus moved to another input → still editing; hold the settle.
     const next = event.relatedTarget;
     if (next instanceof HTMLElement && next.closest('textarea, input') !== null) return;
-    // 250ms uitstel zodat de 200ms-debounce van de grid-emit eerst flusht en
-    // de settle het ACTUELE model rendert i.p.v. de vorige toetsaanslag.
+    // 250ms delay so the grid emit's 200ms debounce flushes first and the
+    // settle renders the current model, not the previous keystroke.
     if (settleFlushTimer !== null) clearTimeout(settleFlushTimer);
     settleFlushTimer = setTimeout(fireSettle, 250);
   }
@@ -194,8 +185,8 @@ export function useTableEditor() {
       slotId: next.slotId,
       desired: next,
     });
-    // Er is nu (mogelijk fast-path-)drift; de eerstvolgende grid-blur rendert
-    // één keer full om te reconciliëren.
+    // Possible fast-path drift now; the next grid blur reconciles with one
+    // full render.
     settleArmed = true;
   }
 

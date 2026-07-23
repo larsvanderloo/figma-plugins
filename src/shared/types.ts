@@ -1,16 +1,4 @@
-// ============================================================
-// Welder Slide Editor — Shared Types (barrel)
-//
-// Consumed by both main-thread (src/sandbox/**: main.ts, slide-machine.ts,
-// editors/**) en UI-iframe (src/ui/**). Deze types zijn de
-// single-source-of-truth voor het plugin-datamodel en de bridge-messages
-// tussen UI en main-thread.
-//
-// De definities zelf leven per domein in src/shared/types/*; dit bestand
-// re-exporteert alles zodat bestaande 'shared/types'-imports blijven werken.
-//
-// Bridge-messages volgen FIG-MSG-01 (typed discriminated unions).
-// ============================================================
+// Barrel over src/shared/types/* so existing 'shared/types' imports keep working.
 
 export type * from './types/runtime';
 export type * from './types/general';
