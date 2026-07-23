@@ -1,22 +1,6 @@
-// ============================================================
-// editors/chart/progress.ts
-//
-// Progress-bar-builder: per categorie een rij met label, track
-// en waarde. De referentieschaal is max(100, hoogste waarde) zodat
-// percentages (0-100) natuurlijk vullen en grotere reeksen relatief
-// schalen. Track in lichte accent-tint, fill in serie-0-kleur.
-// Delta-badges (showDelta): extra kolom rechts van de waarde met
-// de verandering t.o.v. de vorige categorie (▲ +12% / ▼ −5%).
-//
-// Budget-discipline (meet-en-reserveer, à la het box-layout van
-// Chart.js/Highcharts): elke niet-track-kolom wordt eerst gemeten én
-// gecapt, de track krijgt de rest. Verticaal krimpt het korps mee met
-// de rij-band en degraderen badges naar de tekst-variant vóórdat iets
-// de content-frame uit kan lopen. Binnen de envelope (content vanaf
-// 240×160, t/m 12 categorieën) clipt en overflowt er NIETS.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Measure-and-reserve budgeting: every non-track column is measured and capped
+// first, the track gets the rest; rows shrink before anything can overflow.
+// Within the envelope (content from 240x160, up to 12 categories) nothing clips.
 
 import type { ChartWrapModel } from '../../../shared/types';
 import {
@@ -50,18 +34,15 @@ export function buildProgress(
   root.counterAxisSizingMode = 'FIXED';
   root.primaryAxisAlignItems = 'CENTER';
   root.fills = [];
-  // Backstop voor buiten-envelope-input: clippen op de content-rand is
-  // dan minder erg dan de kaart uit lopen. Binnen de envelope zorgt de
-  // budgettering hieronder dat dit clippen nooit triggert.
+  // Backstop for out-of-envelope input: clipping at the content edge beats
+  // overflowing the card. Within the envelope the budgeting below never triggers it.
   root.clipsContent = true;
   root.resize(contentW, contentH);
 
-  // ---- Verticaal budget -------------------------------------------
-  // rowCap = de band (contentH / n) bij nul spacing: een rij mag die
-  // NOOIT overschrijden, anders duwt n × rij de frame uit. Het korps
-  // krimpt mee (regelhoogte ≈ 1.3 × korps), met 9px als absolute vloer
-  // (ONS-vloer is 12; 9-10 alleen op de regels die anders zouden
-  // clippen — binnen de envelope komt 12 rijen × 160px uit op 10px).
+  // Vertical budget: rowCap = the band (contentH / n) at zero spacing — a row
+  // must NEVER exceed it or n × row pushes out of the frame. The font shrinks
+  // with it (line height ≈ 1.3 × font), 9px absolute floor; 9-10 only on rows
+  // that would otherwise clip.
   const band = contentH / n;
   const rowCap = Math.max(10, Math.floor(band));
   let ef = labelSize;
@@ -70,27 +51,24 @@ export function buildProgress(
   if (ef < 9) ef = 9;
   const lineH = Math.ceil(ef * 1.3);
 
-  // Responsieve track-dikte via rij-banden (d3 scaleBand-idee):
-  // de track vult ~45% van zijn band, geklemd tussen een dunne
-  // ondergrens (korps-gebonden, veel rijen) en 48px (chunky pill), en
-  // nooit boven de rij-cap.
+  // Responsive track thickness via row bands: the track fills ~45% of its
+  // band, clamped between a thin font-bound minimum and 48px, never above the
+  // row cap.
   const minTrackH = Math.max(8, Math.round(ef * 0.6));
   let trackH = Math.round(band * 0.45);
   if (trackH < minTrackH) trackH = minTrackH;
   if (trackH > 48) trackH = 48;
   if (trackH > rowCap) trackH = rowCap;
 
-  // ---- Horizontaal budget: meet-en-reserveer ----------------------
-  // Caps per kolom (22% label, 18% waarde, 20% delta) + responsieve
-  // gap (~3%, 8-24px): samen maximaal ~70%, dus de track houdt altijd
-  // ≥ ~30% van de content-breedte over.
+  // Horizontal budget, measure-and-reserve: column caps (22% label, 18%
+  // value, 20% delta) + responsive gap (~3%, 8-24px) total at most ~70%, so
+  // the track always keeps ≥ ~30% of the content width.
   const gap = Math.max(8, Math.min(24, Math.round(contentW * 0.03)));
   const labelW = Math.round(contentW * 0.22);
 
-  // Waarde-kolom: alleen reserveren wanneer zichtbaar (showValues uit →
-  // geen lege kolom + gap verspillen). Breedte = breedste gemeten
-  // waarde, gecapt — gemeten tekst mag de reservering nooit
-  // ongelimiteerd laten groeien (ECharts containLabel-principe).
+  // Value column: only reserved when visible (showValues off must not waste a
+  // column + gap). Width = widest measured value, capped so measured text can
+  // never grow the reservation unbounded.
   const valueCap = Math.round(contentW * 0.18);
   const valueNodes: TextNode[] = [];
   let valueW = 0;
@@ -116,11 +94,10 @@ export function buildProgress(
     if (valueW > valueCap) valueW = valueCap;
   }
 
-  // Delta-kolom: nodes eerst bouwen, dan de kolom op de
-  // breedste node maten — geen vaste 11%-gok die smaller kan zijn dan
-  // een badge. Badges mogen alleen wanneer ze verticaal in de rij-cap
-  // passen (anders forceert badgeTemplate=null de tekst-variant);
-  // maxW/maxH-doorvoer laat delta-badge.ts zelf naar tekst degraderen.
+  // Delta column: build the nodes first, then size the column to the widest
+  // one — a fixed 11% guess can be narrower than a badge. Badges only when
+  // they fit the row cap vertically (badgeTemplate=null forces the text
+  // variant otherwise); maxW/maxH lets delta-badge.ts degrade to text itself.
   const deltaCap = Math.round(contentW * 0.2);
   const deltaNodes: Array<SceneNode | null> = [];
   let deltaW = 0;
@@ -147,9 +124,9 @@ export function buildProgress(
     if (deltaW > deltaCap) deltaW = deltaCap;
   }
 
-  // Degradatievolgorde wanneer de track te smal wordt (buiten de
-  // envelope; Highcharts/Carbon-volgorde: annotaties eerst weg, dan
-  // waarde-labels — label + track zijn het minimum-viable-rijtje).
+  // Degradation order when the track gets too narrow (outside the envelope):
+  // annotations first, then value labels — label + track is the minimum
+  // viable row.
   const minTrackW = Math.max(32, Math.round(contentW * 0.15));
   let trackW = contentW - labelW - valueW - deltaW - gap * (1 + (valueW > 0 ? 1 : 0) + (deltaW > 0 ? 1 : 0));
   if (trackW < minTrackW && deltaW > 0) {
@@ -169,10 +146,9 @@ export function buildProgress(
     trackW = contentW - labelW - gap;
   }
 
-  // Rijhoogte = hoogste kolom (per constructie ≤ rowCap); de spacing
-  // krijgt wat overblijft, inclusief boven-/onderrand (delen door
-  // n + 1). Vloer 0 — een vast 12px-minimum zou bij veel rijen de
-  // frame uit duwen.
+  // Row height = tallest column (≤ rowCap by construction); spacing gets the
+  // remainder, including top/bottom edges (divide by n + 1). Floor 0 — a fixed
+  // 12px minimum would push out of the frame at many rows.
   const rowH = Math.max(trackH, lineH, deltaH);
   root.itemSpacing = Math.max(0, Math.floor((contentH - n * rowH) / (n + 1)));
 
@@ -181,8 +157,8 @@ export function buildProgress(
     row.name = 'ProgressRow-' + String(i);
     row.layoutMode = 'HORIZONTAL';
     row.primaryAxisSizingMode = 'FIXED';
-    // Vaste rijhoogte uit het budget i.p.v. HUG: geen meet-races
-    // met auto-layout en geen rijen die door wrappende tekst oprekken.
+    // Fixed row height from the budget instead of HUG: no measurement races
+    // with auto-layout and no rows stretched by wrapping text.
     row.counterAxisSizingMode = 'FIXED';
     row.counterAxisAlignItems = 'CENTER';
     row.clipsContent = false;
@@ -197,8 +173,8 @@ export function buildProgress(
     label.fontSize = ef;
     label.characters = model.categories[i];
     label.textAutoResize = 'HEIGHT';
-    // maxLines is VERPLICHT naast ENDING: bij autoResize HEIGHT
-    // truncate Figma anders nooit en wrappen lange labels de rij uit.
+    // maxLines is REQUIRED next to ENDING: with autoResize HEIGHT Figma
+    // otherwise never truncates and long labels wrap the row open.
     label.textTruncation = 'ENDING';
     label.maxLines = 1;
     label.fills = [
@@ -218,17 +194,16 @@ export function buildProgress(
     track.fills = [trackPaint(light)];
     track.clipsContent = true;
 
-    // Nul-conventie (Highcharts/Chart.js): GEEN inkt voor waarde
-    // 0, en ook niet voor bijna-nul onder de halve pill-radius
-    // (trackH / 4) — de oude Math.max(trackH, …) rendert anders een
-    // losse cirkel die een waarde suggereert waar geen is.
+    // Zero convention: NO ink for value 0, nor for near-zero under half the
+    // pill radius (trackH / 4) — Math.max(trackH, …) would render a loose
+    // circle suggesting a value where there is none.
     const ratio = Math.min(1, Math.max(0, series.values[i] / reference));
     const rawW = Math.round(trackW * ratio);
     if (series.values[i] > 0 && rawW >= trackH / 4) {
       const fill = figma.createFrame();
       fill.name = 'Fill';
-      // Minimale pill = volle cirkel (trackH breed) zodat kleine maar
-      // echte waarden zichtbaar blijven (minPointLength-principe).
+      // Minimum pill = a full circle (trackH wide) so small but real values
+      // stay visible.
       fill.resize(Math.max(trackH, rawW), trackH);
       fill.cornerRadius = trackH / 2;
       fill.fills = [{ type: 'SOLID', color: light }];
@@ -240,9 +215,8 @@ export function buildProgress(
 
     if (valueW > 0) {
       const value = valueNodes[i];
-      // Van meet-modus (WIDTH_AND_HEIGHT) naar kolom-modus: vaste
-      // breedte, één regel, truncation-backstop voor outliers boven
-      // de kolom-cap.
+      // From measure mode (WIDTH_AND_HEIGHT) to column mode: fixed width,
+      // one line, truncation backstop for outliers above the column cap.
       value.textTruncation = 'ENDING';
       value.maxLines = 1;
       value.textAutoResize = 'HEIGHT';
@@ -250,16 +224,16 @@ export function buildProgress(
       value.resize(valueW, value.height);
     }
 
-    // Delta-kolom: vaste-breedte cel zodat rij-alignment
-    // behouden blijft wanneer een categorie geen delta heeft.
+    // Fixed-width delta cell so row alignment survives categories without a
+    // delta.
     if (deltaW > 0) {
       const deltaCell = figma.createFrame();
       deltaCell.name = 'DeltaCell';
       deltaCell.layoutMode = 'HORIZONTAL';
       deltaCell.primaryAxisSizingMode = 'FIXED';
-      // GEEN hoogte-meting op de net-gevulde cel: dat racet met
-      // auto-layout en kneep badges tot een ~1px-sliver. De hoogte
-      // komt uit het bekende rij-budget en de cel clipt nooit.
+      // NO height measurement on the just-filled cell: that races auto-layout
+      // and squeezed badges to a ~1px sliver. Height comes from the known row
+      // budget; the cell never clips.
       deltaCell.counterAxisSizingMode = 'FIXED';
       deltaCell.counterAxisAlignItems = 'CENTER';
       deltaCell.clipsContent = false;

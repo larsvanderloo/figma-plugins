@@ -1,5 +1,3 @@
-// useTimelineEditor — binds the Content → Timeline items to the store + bridge.
-
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
@@ -20,11 +18,9 @@ export function useTimelineEditor() {
     const idx = list !== null ? list.findIndex((t) => t.copyWrapNodeId === copyWrapNodeId) : -1;
     const prev = idx >= 0 && list !== null ? list[idx] : null;
 
-    // Ongewijzigde commits overslaan — live typen en blur/Enter lopen door
-    // dezelfde handler, dus een blur ná een gedebouncede live-post zou
-    // anders exact dezelfde payload nogmaals posten. De store wordt
-    // hieronder optimistisch bijgewerkt én door scans hersynchroniseerd,
-    // dus vergelijken tegen de store blijft ook na undo/externe edits eerlijk.
+    // Live typing and blur/Enter share this handler, so a blur after a debounced live
+    // post would repost the identical payload. The store is updated optimistically
+    // below and resynced by scans, so comparing against it stays honest after undo.
     if (prev !== null && prev.heading === value.heading && prev.paragraph === value.paragraph) {
       return;
     }

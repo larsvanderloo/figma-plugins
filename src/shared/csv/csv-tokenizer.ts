@@ -1,48 +1,22 @@
-// ============================================================
-// Chart Builder Widget — CSV Tokenizer
-// ============================================================
-//
-// Verantwoordelijkheid: ruwe tekst → string[][]
-//   - Dialect-detectie (';' / ',' / tab) op basis van per-regel-frequentie
-//     over de eerste 5 rijen.
-//   - RFC 4180-achtige quote-handling:
-//       "foo,bar"  → één cel met waarde  foo,bar
-//       ""         → escaped aanhalingsteken, levert "
-//   - Lege rijen worden BEHOUDEN (filtering is verantwoordelijkheid van
-//     csv-mapper, niet van de tokenizer).
-//   - Lege cellen worden BEHOUDEN (idem).
-//
-// Geen semantiek hier: geen header-detectie, geen TOTAAL-filter,
-// geen nummerparse — die horen in csv-mapper.
+// Raw text → string[][] only. Empty rows and empty cells are kept on purpose:
+// filtering and all semantics (headers, totals, number parsing) live in csv-mapper.
 
 import type { CsvDialect, CsvRow } from './types';
-
-// ----------------------------------------------------------------
-// Public API
-// ----------------------------------------------------------------
 
 export interface TokenizeResult {
   dialect: CsvDialect;
   rows: CsvRow[];
 }
 
-/**
- * Tokeniseer een CSV/TSV-string naar een matrix van cellen.
- *
- * @param input - Ruwe CSV-tekst, afkomstig van clipboard-plak of bestand.
- * @returns Gedetecteerd dialect + matrix van cellen.
- */
 export function tokenize(input: string): TokenizeResult {
   if (!input) {
     return { dialect: 'semicolon', rows: [] };
   }
 
-  // Normaliseer regelafbrekers: \r\n en \r → \n
   const normalized = input.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
   const rawLines = normalized.split('\n');
 
-  // Detecteer dialect op basis van de eerste 5 niet-lege regels.
   const dialect = detectDialect(rawLines);
   const separator = dialectToSeparator(dialect);
 
@@ -53,15 +27,6 @@ export function tokenize(input: string): TokenizeResult {
   return { dialect: dialect, rows: rows };
 }
 
-// ----------------------------------------------------------------
-// Dialect detection
-// ----------------------------------------------------------------
-
-/**
- * Telt het voorkomen van elk delimiterteken per regel over de eerste
- * SAMPLE_LINES niet-lege regels en kiest het meest voorkomende.
- * Tab wint bij gelijkspel (minder kans op vals-positief in vrije tekst).
- */
 const SAMPLE_LINES = 5;
 
 function detectDialect(lines: string[]): CsvDialect {
@@ -82,7 +47,7 @@ function detectDialect(lines: string[]): CsvDialect {
     tabTotal += countOutsideQuotes(line, '\t');
   }
 
-  // Volgorde: tab > puntkomma > komma (tab is unambiguous)
+  // Tab wins ties: least likely to be a false positive in free text.
   if (tabTotal > 0 && tabTotal >= semicolonTotal && tabTotal >= commaTotal) {
     return 'tab';
   }
@@ -92,11 +57,6 @@ function detectDialect(lines: string[]): CsvDialect {
   return 'comma';
 }
 
-/**
- * Telt hoe vaak `char` buiten aanhalingstekens voorkomt in `line`.
- * Quotes volgen RFC 4180: veld begint met " → alles tot sluitend "
- * (met "" als escape voor ") is quoted.
- */
 function countOutsideQuotes(line: string, char: string): number {
   var count = 0;
   var inQuote = false;
@@ -105,9 +65,9 @@ function countOutsideQuotes(line: string, char: string): number {
     var c = line[i];
     if (inQuote) {
       if (c === '"') {
-        // Kijk vooruit: "" = escaped quote, geen einde van het veld
+        // "" is an escaped quote (RFC 4180), not the end of the field.
         if (i + 1 < line.length && line[i + 1] === '"') {
-          i++; // sla tweede " over
+          i++;
         } else {
           inQuote = false;
         }
@@ -124,14 +84,7 @@ function countOutsideQuotes(line: string, char: string): number {
   return count;
 }
 
-// ----------------------------------------------------------------
-// Line parser
-// ----------------------------------------------------------------
-
-/**
- * Splitst één regel op `separator`, met RFC 4180 quote-handling.
- * Lege regel → één lege cel (zodat de rij-matrix consistent blijft).
- */
+// An empty line yields one empty cell so the row matrix stays consistent.
 function parseLine(line: string, separator: string): CsvRow {
   var cells: string[] = [];
   var current = '';
@@ -143,7 +96,6 @@ function parseLine(line: string, separator: string): CsvRow {
 
     if (inQuote) {
       if (c === '"') {
-        // Kijk vooruit voor ""
         if (i + 1 < line.length && line[i + 1] === '"') {
           current += '"';
           i += 2;
@@ -159,7 +111,7 @@ function parseLine(line: string, separator: string): CsvRow {
       }
     } else {
       if (c === '"' && current === '') {
-        // Quoted veld begint alleen als " direct na separator of aan het begin staat
+        // A quote opens a quoted field only at the start of a cell; mid-cell quotes are literal.
         inQuote = true;
         i++;
       } else if (c === separator) {
@@ -173,15 +125,10 @@ function parseLine(line: string, separator: string): CsvRow {
     }
   }
 
-  // Laatste cel
   cells.push(current);
 
   return cells;
 }
-
-// ----------------------------------------------------------------
-// Helpers
-// ----------------------------------------------------------------
 
 export function dialectToSeparator(dialect: CsvDialect): string {
   if (dialect === 'semicolon') return ';';

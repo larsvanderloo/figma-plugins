@@ -15,12 +15,9 @@ const emit = defineEmits<{
   'update:modelValue': [value: TimelineItem];
 }>();
 
-// Live meetypen: het `live`-event gaat gedebounced dezelfde emit-route op
-// als een commit; de no-op-guard in useTimelineEditor blijft de
-// dedupe-laag. props.modelValue wordt pas bij het vuren gespreid, zodat
-// het andere veld zijn actuele store-waarde houdt. Commit (blur/Enter)
-// cancel()t het lopende timertje eerst — anders zou de debounce ná de
-// commit nog een verouderde waarde posten.
+// Live events debounce onto the same emit path as commit; useTimelineEditor's no-op guard dedupes.
+// modelValue is spread only at fire time so the other field keeps its current store value; commit
+// cancels the pending debounce first — else it would post a stale value after the commit.
 let liveHeadingValue = '';
 const liveHeading = useLiveText(() =>
   emit('update:modelValue', { ...props.modelValue, heading: liveHeadingValue }),

@@ -1,26 +1,3 @@
-// ============================================================
-// esbuild — bouwt uitsluitend de plugin-thread (src/sandbox/main.ts
-// -> dist/code.js). De iframe-UI wordt gebouwd door Vite naar
-// dist/ui.html; esbuild laadt die file als string via de
-// chunked-text-loader zodat main.ts hem aan figma.showUI kan geven.
-//
-// Buildvolgorde: npm run build -> vite (dist/ui.html) -> esbuild
-// (dist/code.js). In watch-mode draaien beide tools tegelijk
-// (concurrently) zodat elke UI-wijziging een nieuwe ui.html
-// produceert die bij de eerstvolgende plugin-herbouw is inbegrepen.
-//
-// chunked-text-loader: de gegenereerde ui.html kan honderden KB groot
-// zijn. Een enkele JS-string-literal van die grootte gooit Figma's
-// sandbox-parser een "SyntaxError: Invalid or unexpected token" bij
-// load. Oplossing: splits de HTML in chunks van ~60KB en join tijdens
-// plugin-init. Elk chunk is een op zichzelf staand string-literal dat
-// ruim onder welke parser-limiet dan ook valt.
-//
-// Target ES2017: de plugin-sandbox accepteert geen optional chaining,
-// nullish coalescing of catch-without-binding (memory
-// feedback_figma_runtime.md). De UI-bundle (Vite) mag wél ES2020+.
-// ============================================================
-
 import * as esbuild from 'esbuild';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -36,12 +13,8 @@ if (!fs.existsSync(distDir)) {
   fs.mkdirSync(distDir, { recursive: true });
 }
 
-/**
- * esbuild-plugin: laadt .html-bestanden als een JS-module die een
- * samengevoegde string exporteert, opgebouwd uit kleine chunks.
- * Voorkomt "Invalid or unexpected token" bij grote single-literal
- * HTML-strings in Figma's plugin-sandbox.
- */
+// Figma's sandbox parser throws "SyntaxError: Invalid or unexpected token" on very large
+// single string literals, so .html imports are emitted as ~60KB chunks joined at load time.
 function chunkedTextLoader(options = {}) {
   const chunkSize = options.chunkSize ?? 60000;
   return {

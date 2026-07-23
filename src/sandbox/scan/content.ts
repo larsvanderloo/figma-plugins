@@ -1,13 +1,3 @@
-// ============================================================
-// scan/content.ts
-//
-// Content-tab scan: Cards, InstructorCards en Timeline-items binnen
-// CardWrap/TimelineWrap. Bouwt de ContentItems-payload voor de iframe.
-//
-// FIG-TRAVERSE-01: findAll bounded tot de wrapper-subtree.
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import {
   findCardWrap,
   findAllCardWraps,
@@ -31,16 +21,6 @@ import {
   readCardStyleVariant,
 } from './readers';
 
-/**
- * Extraheert Card-instances (recursief via findAll) binnen een
- * wrapper-scope (CardWrap of TimelineWrap). Bounded tot de wrapper-subtree
- * (FIG-TRAVERSE-01 — findAll op een wrapper-node, niet op de hele pagina).
- *
- * Corrupt-items zonder Heading-textnode worden silent overgeslagen.
- *
- * `slide` parameter zodat readCardIcon de visibility van de
- * icon-instance kan beoordelen via isEffectivelyVisible.
- */
 function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
   const items: CardItem[] = [];
   if (!('findAll' in scope)) return items;
@@ -49,32 +29,20 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
   });
   for (let i = 0; i < cardInstances.length; i++) {
     const card = cardInstances[i] as InstanceNode;
-    // TimelineWrap masters carry a hidden leftover/template Card sibling
-    // (visible=false) alongside the real, on-canvas timeline items. Without
-    // this gate it passed the heading-check below like any other card and
-    // got a normal, indistinguishable editor panel — edits landed on it
-    // silently (ok:true, no visible change) because it never renders.
+    // TimelineWrap masters carry a hidden template Card sibling; without this
+    // gate it gets a normal editor panel and edits land on it with no visible change.
     if (!isEffectivelyVisible(card, slide)) continue;
     const heading = readTextByName(card, 'Heading');
-    if (heading === null) continue; // corrupt card: skip
+    if (heading === null) continue;
 
-    // Welder Card has a `Type` VARIANT property with values
-    // 'Stack Icon' | 'Icon Side' | 'Image' | 'User'. The first two
-    // render an icon child; the latter two render an ImageWrap. The
-    // icon and image scans below can both produce false positives on
-    // the wrong variant (readCardIcon's Strategy A matches `ImageWrap`
-    // as a Lucide slug; readCardVisualHash's any-IMAGE-fill fallback
-    // could pick up an unrelated descendant). Variant is the source
-    // of truth — confirmed via Figma MCP for the Welder Card master.
+    // The Type variant is the source of truth for icon vs image: both scans
+    // below can false-positive on the wrong variant. Unknown variant: run both.
     const cardType = readCardTypeVariant(card);
     const isIconType = cardType === 'Stack Icon' || cardType === 'Icon Side';
     const isImageType = cardType === 'Image' || cardType === 'User';
 
-    // Persisted-by-the-plugin icon slug. Survives library-master
-    // republishes (Figma resets icon-slot child overrides on master
-    // update; plugin data stays). The iframe compares this with the
-    // current visible `icon` and re-applies the user's pick when they
-    // diverge (auto-reconcile after library updates).
+    // Persisted icon slug: a library-master republish resets the icon-slot
+    // child override but plugin data survives, so the UI can re-apply the user's pick.
     let iconIntended: string | null = null;
     try {
       const stored = card.getSharedPluginData('welder', 'icon');
@@ -84,12 +52,8 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
     } catch (_e) {
       /* silent — plugin data unreadable */
     }
-    // Backfill: cards whose icons were picked in plugin builds older
-    // than 0.5.149 have no plugin-data record. The next library update
-    // would wipe their slot child without any way to restore. Capture
-    // the currently-visible icon as the user's intent NOW so the next
-    // republish doesn't lose them too. One-time per card — once
-    // iconIntended is set, subsequent scans skip this branch.
+    // Backfill: cards without an icon record would lose their slot child on the
+    // next library republish — capture the visible icon as intent, once per card.
     const currentSlotIcon = isImageType ? null : readCardIcon(card, slide);
     if (
       !isDevModeRuntime() &&
@@ -113,12 +77,8 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
       cardNodeId: card.id,
       heading: heading,
       paragraph: readTextByName(card, 'Paragraph') || '',
-      // Icon picker shows iff the variant carries an icon. On unknown
-      // variants we fall back to the scan (cardType === null).
       icon: currentSlotIcon,
       iconIntended: iconIntended,
-      // Image picker shows iff the variant carries an image. On
-      // unknown variants we fall back to the scan.
       visualHash: isIconType ? undefined : readCardVisualHash(card),
       style: readCardStyleVariant(card),
     });
@@ -126,15 +86,8 @@ function extractCards(scope: InstanceNode, slide: InstanceNode): CardItem[] {
   return items;
 }
 
-/**
- * Extraheert CopyWrap-instances (recursief via findAll) binnen een
- * wrapper-scope (TimelineWrap). Bounded tot de wrapper-subtree (FIG-TRAVERSE-01).
- *
- * Skipt decoratieve `Stepper Item`-instances; pakt alleen CopyWrap-
- * instances als editable items. Elk item heeft Heading + Paragraph
- * (geen icon, geen visual). Corrupt-items zonder Heading-textnode
- * worden silent overgeslagen.
- */
+// Only CopyWrap instances are editable content; sibling 'Stepper Item'
+// instances are decorative and deliberately not scanned.
 function extractCopyWrapItems(scope: InstanceNode): TimelineItem[] {
   const items: TimelineItem[] = [];
   if (!('findAll' in scope)) return items;
@@ -154,13 +107,8 @@ function extractCopyWrapItems(scope: InstanceNode): TimelineItem[] {
   return items;
 }
 
-/**
- * Extraheert InstructorCard-instances binnen een wrapper-scope. De
- * `Instructor` VARIANT + opties komen uit de component-set (designer-
- * beheerd, picker-bron in de UI); de list-item-teksten zijn de
- * bewerkbare content. Async vanwege getMainComponentAsync (opties) —
- * cards worden parallel gelezen (Promise.all).
- */
+// The Instructor variant and its options are designer-owned (component set);
+// only the list-item texts are editable content.
 async function extractInstructorCards(scope: InstanceNode): Promise<InstructorCardItem[]> {
   if (!('findAll' in scope)) return [];
   const found = scope.findAll(function (n: SceneNode) {
@@ -174,7 +122,7 @@ async function extractInstructorCards(scope: InstanceNode): Promise<InstructorCa
     reads.push(
       (async function (): Promise<InstructorCardItem | null> {
         const instructor = readInstructorVariant(card);
-        if (instructor === null) return null; // geen Instructor-variant: skip
+        if (instructor === null) return null;
         const options = await readInstructorOptions(card);
         const textNodes = findInstructorListTexts(card);
         const items: string[] = [];
@@ -200,33 +148,20 @@ async function extractInstructorCards(scope: InstanceNode): Promise<InstructorCa
   return out;
 }
 
-/**
- * Polymorphic scan van CardWrap en TimelineWrap.
- *
- * TimelineWrap kan in productie bevatten:
- *   - directe Card-instances (worden in content.cards gerouted — icon-picker werkt)
- *   - genestede CopyWrap-instances binnen tussenliggende Frames (→ content.timelineItems)
- *
- * Beide worden gevonden via findAll (recursieve descendant-walk, bounded tot wrapper-scope).
- */
+// TimelineWrap is polymorphic: direct Card instances route to content.cards
+// (so the icon picker works there), nested CopyWraps to content.timelineItems.
 export async function scanContent(slide: InstanceNode): Promise<ContentItems | null> {
-  // ALLE CardWraps scannen (whitepapers dragen er meerdere).
+  // Whitepaper slides carry multiple CardWraps.
   const cardWraps = findAllCardWraps(slide);
   const cardWrap = cardWraps.length > 0 ? cardWraps[0] : findCardWrap(slide);
   const timelineWrap = findTimelineWrap(slide);
 
-  // Retourneer null wanneer geen van alle wrappers aanwezig is.
   if (cardWraps.length === 0 && timelineWrap === null) return null;
 
   const cards: CardItem[] = [];
   const instructorCards: InstructorCardItem[] = [];
   const timelineItems: TimelineItem[] = [];
 
-  // CardWrap: Cards zijn directe children (Slide Machine-pattern); ook hier
-  // gebruiken we extractCards zodat de helper consistent en testbaar blijft.
-  // InstructorCards (Instructor-variant van de Card-slot) leven in dezelfde
-  // CardWrap maar heten 'InstructorCard' — aparte extractie. Loopt over
-  // ALLE CardWraps zodat geen enkele card onzichtbaar blijft.
   for (let cw = 0; cw < cardWraps.length; cw++) {
     const wrap = cardWraps[cw];
     const fromCardWrap = extractCards(wrap, slide);
@@ -239,8 +174,6 @@ export async function scanContent(slide: InstanceNode): Promise<ContentItems | n
     }
   }
 
-  // TimelineWrap: polymorphic — directe Cards (met icon + visual) én genestede
-  // CopyWraps (heading + paragraph only) via tussenliggende Frames.
   if (timelineWrap !== null) {
     const fromTimeline = extractCards(timelineWrap, slide);
     for (let i = 0; i < fromTimeline.length; i++) {
@@ -257,11 +190,9 @@ export async function scanContent(slide: InstanceNode): Promise<ContentItems | n
     });
   }
 
-  // Losse Cards buiten een CardWrap/TimelineWrap: slide-breed
-  // bijzoeken, met uitsluiting van (a) cards die al via een wrap-scope
-  // gevonden zijn en (b) cards die binnen een InstructorCard leven (die
-  // zijn eigendom van de instructor-editor). Mutaties targeten toch al
-  // cardNodeId rechtstreeks, dus losse cards zijn direct bewerkbaar.
+  // Loose Cards outside any wrap are editable too (edits target cardNodeId
+  // directly); skip cards already found or living inside an InstructorCard,
+  // which belong to the instructor editor.
   const seenCardIds: { [id: string]: boolean } = {};
   for (let i = 0; i < cards.length; i++) seenCardIds[cards[i].cardNodeId] = true;
   const looseCardHosts = slide.findAll(function (n: SceneNode) {
@@ -297,8 +228,6 @@ export async function scanContent(slide: InstanceNode): Promise<ContentItems | n
     hasLoose = true;
   }
   if (hasLoose) {
-    // extractCards zoekt descendants — slide-breed extraheren en daarna
-    // filteren op de toegelaten losse card-ids.
     const slideWide = extractCards(slide, slide);
     for (let j = 0; j < slideWide.length; j++) {
       if (allowedLooseIds[slideWide[j].cardNodeId] === true && seenCardIds[slideWide[j].cardNodeId] !== true) {
@@ -312,8 +241,7 @@ export async function scanContent(slide: InstanceNode): Promise<ContentItems | n
     return null;
   }
 
-  // `cardWrapId` blijft semantisch gebonden aan CardWrap wanneer aanwezig;
-  // bij slide-met-alleen-TimelineWrap vallen we terug op de TimelineWrap-id.
+  // cardWrapId falls back to the TimelineWrap id on timeline-only slides.
   var wrapId: string;
   if (cardWrap !== null) {
     wrapId = cardWrap.id;

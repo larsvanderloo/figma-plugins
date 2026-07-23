@@ -1,23 +1,5 @@
-// ============================================================
-// editors/table/csv.ts
-//
-// CSV-import → applyTable-adapter.
-//
-// Parsing leunt op de gedeelde RFC 4180-achtige tokenizer in
-// `csv/`. Die module ondersteunt:
-//   - dialect-detectie (',' / ';' / tab)
-//   - quoted cells met embedded comma's én quotes (""-escape)
-//   - meerregelige cellen binnen quotes
-//
-// De vorige `line.split(',')`-implementatie brak op alledaagse CSV-
-// formats — bv. een cel "Acme, Inc.,100" werd in 3 cellen geknipt en
-// liet de quotes letterlijk op de waarde staan.
-//
-// Truncate naar TABLE_MAX_ROWS rijen en TABLE_MAX_COLS kolommen (flat
-// max — de Slot-breedte rendert altijd full-width per surface).
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Parses via the shared RFC 4180-ish tokenizer in `csv/`; a naive
+// line.split(',') breaks on quoted cells with embedded commas/quotes.
 
 import type { TableWrapModel, TableRowModel, TableCellModel } from '../../../shared/types';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../shared/constants';
@@ -39,9 +21,7 @@ export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
   const rows: TableRowModel[] = [];
   for (let i = 0; i < tokenized.rows.length && rows.length < TABLE_MAX_ROWS; i++) {
     const row = tokenized.rows[i];
-    // Tokenizer preserves empty rows (caller's responsibility to filter).
-    // Skip rows that are entirely empty cells — matches the previous
-    // behaviour where pure-blank lines were dropped.
+    // The tokenizer preserves fully-blank rows; filtering them is our job.
     let allEmpty = true;
     for (let j = 0; j < row.length; j++) {
       if (row[j].length > 0) {
@@ -53,8 +33,7 @@ export async function importCSV(slot: SlotNode, csv: string): Promise<void> {
 
     const cells: TableCellModel[] = [];
     for (let j = 0; j < row.length && cells.length < TABLE_MAX_COLS; j++) {
-      // Input-cap verwijderd; truncation gebeurt rendertime via
-      // maxLines+textTruncation in renderer.ts.
+      // No length cap here; cell text truncates render-side (maxLines + textTruncation in renderer.ts).
       cells.push({ cellNodeId: '', value: row[j].trim() });
     }
     if (cells.length > 0) {

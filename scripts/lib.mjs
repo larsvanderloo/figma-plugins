@@ -1,6 +1,3 @@
-// Shared helpers for the scripts/ watchers, used by write-debug-manifests.mjs
-// (the version-reader + the coalescing watch-sync pattern).
-
 import { watchFile } from 'node:fs';
 import { readFile } from 'node:fs/promises';
 
@@ -12,11 +9,8 @@ export async function readPackageVersion(packagePath) {
   return pkg.version;
 }
 
-/**
- * Wraps `run` in a coalescing runner: concurrent calls while a run is
- * in flight collapse into a single follow-up run, so rapid file events
- * never overlap writes. Errors are logged with `label`, never thrown.
- */
+// Calls arriving while a run is in flight coalesce into one follow-up run, so
+// rapid file events never overlap writes. Errors are logged, never thrown.
 export function createSyncRunner(run, label) {
   let syncing = false;
   let needsSync = false;
@@ -44,10 +38,6 @@ export function createSyncRunner(run, label) {
   return sync;
 }
 
-/**
- * watchFile each path (500ms poll) and invoke `onChange` after
- * `debounceMs` when mtime or size actually changed.
- */
 export function watchPathsForChange(paths, debounceMs, onChange) {
   for (const watchedPath of paths) {
     watchFile(watchedPath, { interval: 500 }, (current, previous) => {

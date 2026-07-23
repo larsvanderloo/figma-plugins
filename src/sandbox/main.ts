@@ -1,22 +1,5 @@
-// ============================================================
-// Welder Slide Editor — Plugin Main
-//
-// Entry-point voor de plugin-thread. Verantwoordelijkheden:
-//   1. UI-iframe tonen (figma.showUI).
-//   2. Fonts preloaden (FIG-FONT-01) zodat latere debounced text-edits
-//      direct kunnen doorzetten zonder per-call loadFontAsync.
-//   3. Command-dispatch op `figma.command` (manifest menu "open").
-//   4. Bridge-message-loop: vertaalt UI-events naar figma-node-scans
-//      en response-messages (FIG-MSG-01).
-//   5. Page-change listener: hercomputet de slidelist bij page-nav.
-//
-// Keep new feature logic in domain modules under editors/** where
-// possible; this entry point should only wire Figma lifecycle,
-// scanning, message dispatch, and UI responses.
-// Message-handlers leven in sandbox/handlers/** (registry in
-// sandbox/handlers/index.ts); sessie-state + emit-helpers in
-// sandbox/session.ts.
-// ============================================================
+// Entry point: wires Figma lifecycle, scanning, message dispatch, and UI
+// responses only — keep feature logic in domain modules under editors/**.
 
 import uiHtml from '../../dist/ui.html';
 import { REQUIRED_FONTS } from '../shared/constants';
@@ -42,17 +25,12 @@ import { primeIconCache } from './editors/_shared/icon-swap';
 import { readBadgeIcon, readCardIcon } from './scan/readers';
 import type { UIToPluginMessage } from '../shared/types';
 
-// ============================================================
-// Bootstrap
-// ============================================================
-
 figma.showUI(uiHtml, { width: 520, height: 760, themeColors: true });
 
 debugLog('sandbox', 'startup', getRuntimeInfo());
 
-// Restore last-saved iframe size (clientStorage, per-user). Async so the
-// UI shows immediately at the default; the resize is a no-op flicker if
-// the saved values match the defaults.
+// Async on purpose: the UI paints immediately at the default size; the
+// resize follows once clientStorage answers.
 (function restoreUiSize(): void {
   figma.clientStorage
     .getAsync('welder-ui-size')
@@ -74,18 +52,9 @@ debugLog('sandbox', 'startup', getRuntimeInfo());
     });
 })();
 
-// ============================================================
-// Proactive icon backfill — walks every Welder Slide on every page,
-// captures each Card's currently-visible icon into plugin data when
-// it has no record yet. One-shot per plugin session, fire-and-forget.
-//
-// Why: the reconcile fix only protects icons that already have plugin
-// data. Cards on slides the user hasn't visited via the new plugin yet
-// have no record, so a subsequent library update wipes their slot
-// child without anything to restore from. Running this on startup
-// ensures every card in the file is protected before the user gets a
-// chance to accept the next library update.
-// ============================================================
+// One-shot per session: record each Card/Badge's visible icon into plugin
+// data when none exists yet — without a record, a library update wipes the
+// icon slot with nothing to restore from.
 async function backfillAllIcons(): Promise<void> {
   try {
     await figma.loadAllPagesAsync();
@@ -111,7 +80,6 @@ async function backfillAllIcons(): Promise<void> {
     }
     for (let s = 0; s < slides.length; s++) {
       const slide = slides[s];
-      // ── Cards ──
       let cards: SceneNode[];
       try {
         cards = slide.findAll(function (n: SceneNode) {
@@ -133,8 +101,7 @@ async function backfillAllIcons(): Promise<void> {
         }
         const current = readCardIcon(card, slide);
         if (typeof stored === 'string' && stored.length > 0) {
-          // Already persisted — flag stale when slot diverged from the
-          // record (library republish wiped the override).
+          // Slot diverged from the stored record — a library republish wiped the override.
           if (current !== null && current.length > 0 && current !== stored) {
             staleCards.push({
               slideId: slide.id,
@@ -144,16 +111,13 @@ async function backfillAllIcons(): Promise<void> {
           }
           continue;
         }
-        // No record yet — backfill from current slot value.
         if (current === null || current.length === 0) continue;
         try {
           cardInst.setSharedPluginData('welder', 'icon', current);
           cardsWritten++;
         } catch (_e) {
-          /* silent */
         }
       }
-      // ── Badges ──
       let badges: SceneNode[];
       try {
         badges = slide.findAll(function (n: SceneNode) {
@@ -185,7 +149,6 @@ async function backfillAllIcons(): Promise<void> {
           badgeInst.setSharedPluginData('welder', 'icon', current);
           badgesWritten++;
         } catch (_e) {
-          /* silent */
         }
       }
     }
@@ -197,15 +160,12 @@ async function backfillAllIcons(): Promise<void> {
       ' · badges: visited ' + badgesVisited + ', wrote ' + badgesWritten +
       ', stale ' + staleBadges.length,
   );
-  // Post stale list (always — possibly empty) so the iframe can dismiss
-  // its "reconciling" splash phase once it sees this message.
+  // Posted even when empty: the iframe dismisses its reconciling splash on it.
   postToUI({ type: 'stale-icons', cards: staleCards, badges: staleBadges });
 }
 
-// Fire-and-forget — happens in the background after the UI is shown.
-// Plugin-data writes are cheap and the user is unlikely to accept a
-// library update within the first ~second of opening the plugin.
-// Dev Mode is read-only for this debug manifest, so skip backfills there.
+// Fire-and-forget: a library update accepted within the first ~second could
+// still race the backfill — accepted risk. Dev Mode is read-only, so skip.
 if (!isDevModeRuntime()) {
   backfillAllIcons().catch(function (e: unknown) {
     console.log('[icon-backfill] failed:', e);
@@ -214,18 +174,11 @@ if (!isDevModeRuntime()) {
   debugLog('icon-backfill', 'skipped-dev-mode');
 }
 
-/**
- * Parallel preload van alle fonts die we in text-mutaties gebruiken.
- * Faalt hard bij een missing font zodat we niet later stille crashes
- * krijgen. FIG-FONT-01.
- */
+// Fonts must be loaded before any .characters write; fail hard on a missing
+// font now rather than crash silently during a later text edit.
 async function loadFonts(): Promise<void> {
   await Promise.all(REQUIRED_FONTS.map((font) => figma.loadFontAsync(font)));
 }
-
-// ============================================================
-// Bridge-message-loop
-// ============================================================
 
 function isMutatingMessage(msg: UIToPluginMessage): boolean {
   if (msg.type === 'ui-ready') return false;
@@ -253,9 +206,7 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
     return;
   }
 
-  // Registry-lookup (sandbox/handlers/index.ts). Een onbekend
-  // message-type is een stille no-op — zelfde gedrag als de oude
-  // if-chain die er zonder match doorheen viel.
+  // An unknown message type is deliberately a silent no-op.
   const handler = messageHandlers[msg.type] as
     | ((m: UIToPluginMessage) => void | Promise<void>)
     | undefined;
@@ -263,41 +214,22 @@ async function handleMessage(msg: UIToPluginMessage): Promise<void> {
   await handler(msg);
 }
 
-// ============================================================
-// Main — init-sequence
-// ============================================================
-
 async function main(): Promise<void> {
-  // Command-dispatch: er is alleen 'open' (manifest menu +
-  // relaunch-buttons vuren met diezelfde command). Geen command-match
-  // betekent dat de plugin via een ander event is gestart; we tonen
-  // dan alsnog de UI (defensief).
+  // Only 'open' exists (menu and relaunch buttons share it); an unknown
+  // command still gets the UI so the plugin stays debuggable.
   const cmd = figma.command;
   debugLog('sandbox', 'main:start', getRuntimeInfo());
   if (cmd !== '' && cmd !== 'open') {
-    // Onbekend command: log maar blijf draaien zodat de UI debugbaar is.
     console.log('[welder-slide-editor] Unknown command:', cmd);
   }
 
-  // Font-preload: klaar vóór live-events. FIG-FONT-01, FIG-ASYNC-01.
-  // loadAllPagesAsync is verwijderd — het scande alle pagina's en veroorzaakte
-  // 10-30s vertraging bij grote bestanden. primeIconCache bestaat niet meer,
-  // dus er is geen volledige paginascan nodig.
+  // Deliberately no awaited loadAllPagesAsync in this init path — it stalled
+  // startup by 10-30s on large files.
   await loadFonts();
 
-  // Pre-warm icon-swap cache. The Welder Card master's INSTANCE_SWAP
-  // property carries ~1500 preferredValues (the full Lucide collection),
-  // and `buildPrefValueCache` resolves each via importComponentByKeyAsync
-  // — many seconds in aggregate. Without pre-warming, a user who picks
-  // a badge icon shortly after plugin open lands inside the cache-build
-  // wait inside `swapComponentByName` (Badge's icon path), and the swap
-  // visibly stalls; the bug surfaces as "works after switching slides
-  // back and forth" because by then the build has finished.
-  //
-  // Kick the build off here, fire-and-forget, so it's already running
-  // (or done) by the time the iframe sends ui-ready. The post-slide-
-  // loaded primeIconCache call is now a no-op safety net — it
-  // short-circuits on the existing prefValueBuildPromise.
+  // Pre-warm the icon-swap cache: resolving the Card master's ~1500 Lucide
+  // preferredValues takes seconds, and an early icon pick would stall inside
+  // that build. Later primeIconCache calls short-circuit on the shared promise.
   if (!isDevModeRuntime()) {
     (async function () {
       try {
@@ -343,12 +275,9 @@ async function main(): Promise<void> {
     });
   };
 
-  // Per-page nodechange subscription instead of figma.on('documentchange').
-  // documentchange forces Figma to load every page in the file just to
-  // subscribe — Figma's own dynamic-page docs steer us to PageNode.on
-  // ('nodechange') for targeted monitoring. We re-attach the listener
-  // whenever the current page changes so we always observe the page
-  // the user is editing.
+  // Per-page nodechange instead of documentchange: subscribing to
+  // documentchange forces Figma to load every page. Re-attached on page
+  // change so we always observe the page being edited.
   type NodeChangeEvent = {
     nodeChanges: ReadonlyArray<{ type: string; node: SceneNode }>;
   };
@@ -406,7 +335,6 @@ async function main(): Promise<void> {
       try {
         subscribedPage.off('nodechange', onPageNodeChange);
       } catch (_e) {
-        /* silent */
       }
     }
     try {
@@ -434,9 +362,6 @@ async function main(): Promise<void> {
       // so any edits there reach the iframe.
       attachNodeChangeListener();
 
-      // Page changed — the previously-focused slide is on a different page
-      // now, so the iframe should re-evaluate based on the new page's
-      // current selection.
       const focused = findFocusedWelderSlide();
       if (focused === null) {
         clearDisplayedSlide();
@@ -454,11 +379,8 @@ async function main(): Promise<void> {
     }
   });
 
-  // Selection-driven slide switching. When the user selects a slide (or
-  // anything inside one), the sandbox scans it and posts slide-loaded.
-  // When the selection no longer resolves to a slide, posts slide-deselected.
-  // Full try/catch — crashing this would re-introduce the earlier "plugin
-  // opent niet meer" bug; silent skip is fine.
+  // Both registration and handler are wrapped: a throw here once made the
+  // plugin fail to open at all, and selectionchange can be unavailable.
   try {
     figma.on('selectionchange', () => {
       try {
@@ -486,7 +408,7 @@ async function main(): Promise<void> {
 
   figma.on('close', () => {
     debugLog('figma-event', 'close');
-    // Cleanup hook — Figma ruimt listeners automatisch op. FIG-CLOSE-01.
+    // Figma detaches event listeners itself; only pending timers need clearing.
     clearPendingSlideEmitTimers();
   });
 }

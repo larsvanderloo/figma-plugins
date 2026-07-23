@@ -31,8 +31,8 @@ function onInput(v: string): void {
   emit('live', v);
 }
 
-// Zelfde unmount-flush als WInput: tab-switch unmount zonder blur mag
-// getypte tekst niet weggooien; slide-wissel unmount panels niet.
+// Same unmount-flush as WInput: a tab switch unmounts without blur and must
+// not discard typed text; a slide switch does not unmount panels.
 onUnmounted(commit);
 </script>
 

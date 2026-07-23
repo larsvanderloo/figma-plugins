@@ -1,5 +1,3 @@
-// useBadgeEditor — binds the General → Badge section to the store + bridge.
-
 import { computed, reactive } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
 import { useBridgePending, usePluginBridge } from './usePluginBridge';
@@ -22,22 +20,17 @@ export function useBadgeEditor() {
     const b = view.state.general?.badge;
     if (slideId === null || b === null || b === undefined) return;
 
-    // Same no-op guard as the title editor: live typing already posted
-    // this value on the last pause, so a blur/unmount commit with an
-    // unchanged label+icon would only repeat the sandbox write. Skipping
-    // also leaves a pending iconIntended reconcile intact instead of
-    // clobbering it with the (unchanged) scanned icon.
+    // Live typing already posted this value on the last pause; skipping the
+    // unchanged commit also keeps a pending iconIntended reconcile intact.
     if (next.label === b.label && next.icon === b.icon) return;
 
     b.label = next.label;
     b.icon = next.icon;
-    // Also sync iconIntended so the reconcile watcher (below) doesn't
-    // fire on the optimistic update after a user pick.
+    // Sync iconIntended so the reconcile watcher does not fire on this optimistic update.
     b.iconIntended = next.icon;
 
-    // Include the resolved SVG body so the sandbox can render the icon via
-    // its slot without an INSTANCE_SWAP + library import. Sandbox falls back
-    // to the legacy swap when iconSvg is absent or the lookup misses.
+    // Resolved SVG lets the sandbox render the icon without an INSTANCE_SWAP +
+    // library import; it falls back to the legacy swap when iconSvg is absent.
     const iconSvg = getLucideSvg(next.icon);
     tracker.register();
     bridge.post({
@@ -52,8 +45,7 @@ export function useBadgeEditor() {
     });
   }
 
-  // NOTE: badge-icon reconcile lives at App.vue scope (useIconReconcile)
-  // so it runs regardless of which tab is mounted.
+  // Badge-icon reconcile lives at App.vue scope (useIconReconcile) so it runs whichever tab is mounted.
 
   function commitVisibility(next: boolean): void {
     const slideId = view.state.currentSlideId;
@@ -62,7 +54,7 @@ export function useBadgeEditor() {
     if (b.visible === null) return;
     if (b.visible === next) return;
 
-    // Optimistic store-flip — switch stays put through the round-trip.
+    // Optimistic flip so the switch stays put through the round-trip.
     b.visible = next;
 
     tracker.register();

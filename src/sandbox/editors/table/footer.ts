@@ -1,19 +1,8 @@
-// ============================================================
-// editors/table/footer.ts
-//
-// Footer-rij-builders: toont per-kolom calculation-summaries
-// (som) onder de body-rijen. Styling volgt de body-cells; sum-kolommen
-// zijn rechts uitgelijnd (Notion number-column-stijl).
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import type { TableColumnSummary } from '../../../shared/types';
 import type { TableLayoutMetrics } from './metrics';
 
-// Canvas footer-tekst: `€`-prefix bij currency, `%`-suffix bij percent,
-// anders kale waarde. (De UI rendert dezelfde tekst in de grid-footer;
-// de twee vlaggen zijn UI-zijdig mutually exclusive.)
+// The UI renders identical text in its grid footer — keep the two in sync.
+// `currency` and `percent` are mutually exclusive on the UI side.
 export function footerCanvasText(summary: TableColumnSummary | null): string {
   if (summary === null) return '';
   let text = summary.value;
@@ -38,18 +27,12 @@ function buildFooterCell(
   cellFrame.primaryAxisAlignItems = 'MIN';
   cellFrame.counterAxisAlignItems = 'CENTER';
   cellFrame.fills = [];
-  // Geen clip: leadingTrim-descenders hangen buiten het tekst-vak
-  // (zie build-rows.ts buildCell).
+  // No clip: leadingTrim descenders hang outside the text box (see build-rows.ts buildCell).
   cellFrame.clipsContent = false;
   cellFrame.setPluginData('emphasis', '');
 
-  // Footer-cell styling volgt de body-cells (Inter Regular, body-fontSize,
-  // volledige Text-kleur, geen eigen padding — die zit op de row).
-  // Per-column emphasis bold't alleen de footer-waarde, identiek aan de
-  // per-cell `emphasis`-stijl in buildCell().
-  // Sum-kolommen zijn numeriek; waarde rechts uitgelijnd (Notion-stijl).
-  // Kolommen ZONDER som tonen een vrije label-tekst (bv. "Totaal"),
-  // links uitgelijnd zoals normale body-cells.
+  // Styling mirrors body cells, incl. the per-cell `emphasis` style in buildCell().
+  // Sum columns are numeric, so right-aligned (Notion style); label-only columns align left.
   const emphasized = summary !== null && summary.emphasis === true;
   const t = figma.createText();
   t.fontName = emphasized
@@ -58,22 +41,22 @@ function buildFooterCell(
   t.fontSize = emphasized ? sizes.heading : sizes.body;
   t.characters = summary !== null ? footerCanvasText(summary) : label;
   t.textAutoResize = 'HEIGHT';
-  // Cap-height-trim voor optisch gecentreerde footer-tekst (zie buildCell).
+  // Cap-height trim optically centers the text (see buildCell).
   try {
     t.leadingTrim = 'CAP_HEIGHT';
   } catch (_e) {
-    /* silent — oudere Figma API zonder leadingTrim */
+    /* older Figma API without leadingTrim */
   }
   t.textAlignHorizontal = summary !== null ? 'RIGHT' : 'LEFT';
   try {
     t.maxLines = 1;
   } catch (_e) {
-    /* silent */
+    /* older Figma API */
   }
   try {
     t.textTruncation = 'ENDING';
   } catch (_e) {
-    /* silent */
+    /* older Figma API */
   }
   t.fills = [
     figma.variables.setBoundVariableForPaint({ type: 'SOLID', color: textRGB }, 'color', textVar),
@@ -83,12 +66,12 @@ function buildFooterCell(
   try {
     t.layoutSizingHorizontal = 'FILL';
   } catch (_e) {
-    /* silent */
+    /* older Figma API */
   }
   try {
     t.layoutSizingVertical = 'HUG';
   } catch (_e) {
-    /* silent */
+    /* older Figma API */
   }
   return cellFrame;
 }
@@ -110,11 +93,9 @@ export function buildFooterRow(
   rowFrame.counterAxisSizingMode = 'AUTO';
   rowFrame.primaryAxisAlignItems = 'MIN';
   rowFrame.counterAxisAlignItems = 'CENTER';
-  // Geen clip: leadingTrim-descenders hangen buiten het tekst-vak.
+  // No clip: leadingTrim descenders hang outside the text box.
   rowFrame.clipsContent = false;
   rowFrame.itemSpacing = metrics.rowGap;
-  // Footer-row padding volgt dezelfde body-rij-padding zodat de
-  // footer-rij visueel niet afwijkt van de data-rijen.
   rowFrame.paddingTop = rowPadding;
   rowFrame.paddingBottom = rowPadding;
   rowFrame.paddingLeft = metrics.rowPadX;
@@ -140,12 +121,12 @@ export function buildFooterRow(
     try {
       cellFrame.layoutSizingHorizontal = 'FILL';
     } catch (_e) {
-      /* silent */
+      /* older Figma API */
     }
     try {
       cellFrame.layoutSizingVertical = 'HUG';
     } catch (_e) {
-      /* silent */
+      /* older Figma API */
     }
   }
   return rowFrame;

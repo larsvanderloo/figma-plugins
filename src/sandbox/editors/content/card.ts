@@ -1,29 +1,3 @@
-// ============================================================
-// editors/content/card.ts
-//
-// Main-thread mutator voor de Content → Cards-sectie.
-// Zoekt binnen de slide de CardWrap-instance en vervolgens de specifieke
-// card (identificeerd op node-id), en muteert:
-//   1. Heading  — descendant text-node met name 'Heading' binnen de card.
-//   2. Paragraph — descendant text-node met name 'Paragraph' binnen de card.
-//   3. Icon     — INSTANCE_SWAP-property op de card-instance zelf
-//                 (preferredValues + setProperties via shared/icon-swap).
-//   4. Visual   — optioneel: vervang de ImagePaint op de image-slot van
-//                 de card (best-effort descendant-frame met naam 'Visual'/
-//                 'Image' of een bestaande IMAGE-fill).
-//
-// Tekstupdates volgen hetzelfde patroon als editors/general/title-
-// description.ts (FIG-FONT-01 met mixed-font-fallback).
-// Visual-update volgt editors/general/image.ts (figma.createImage +
-// node.fills replace) maar zoekt het image-slot descendant binnen de
-// card i.p.v. de slide-level ImageWrap.
-//
-// FIG-GUARD-01: type-checks vóór property-access; silent skip wanneer
-// de card of target-nodes ontbreken.
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
-// findCardWrap no longer needed — applyCard/applyCardVisual use slide.findOne(id).
 import {
   normalizeIconKey,
   trySwapViaInstanceProperty,
@@ -38,14 +12,9 @@ import {
 import { setTextCharactersSafe } from '../_shared/fonts';
 import { debugLog } from '../../../shared/debug';
 
-/** Payload-shape voor `update-card` (text-velden) + `upload-image`
- *  (visualBytes wanneer CardItemEditor een file selecteert).
- *  `visualBytes` is optioneel en wordt door de `upload-image`-route
- *  naar `applyCardVisual` geleid (zie code.ts).
- *  `icon` is de Lucide-naam (voor diff-checks + node-naming);
- *  `iconSvg` is het volledige SVG-document dat de iframe meelevert
- *  zodat de sandbox direct kan renderen via figma.createNodeFromSvg —
- *  geen INSTANCE_SWAP / library-import meer nodig. */
+/** `icon` is the Lucide name (diff checks + node naming); `iconSvg` is the full SVG
+ *  document from the iframe so the sandbox renders it directly via
+ *  figma.createNodeFromSvg — no INSTANCE_SWAP or library import needed. */
 export interface CardPayload {
   cardNodeId: string;
   heading?: string;
@@ -53,27 +22,11 @@ export interface CardPayload {
   icon?: string;
   iconSvg?: string;
   visualBytes?: Uint8Array;
-  /** Card `Style` VARIANT property — `Default` (filled) of `Outline`. */
+  /** Card `Style` variant — `Default` is the filled look. */
   style?: 'Default' | 'Outline';
 }
 
-// ============================================================
-// Card icon helpers — mirror van badge.ts applyIconSwap
-// ============================================================
-
-// Card-icon-swap loopt via de shared `replaceIconViaSlot` helper in
-// `editors/_shared/icon-slot.ts` — zie daar voor de algoritme-beschrijving.
-
-/**
- * Best-effort icon-swap voor een card. Probeert in volgorde:
- *   1. INSTANCE_SWAP-property op card-level (primary).
- *   2. INSTANCE_SWAP-property op de nested icon-child (fallback).
- *   3. swapComponentByName op de nested icon-child (last resort).
- *
- * Retourneert true als een van de strategieën slaagde.
- */
 async function applyCardIconSwap(card: InstanceNode, iconName: string): Promise<boolean> {
-  // --- Strategy 1: INSTANCE_SWAP property op card zelf ---
   debugLog('card-icon', 'strategy 1: trySwapViaInstanceProperty on card "' + card.name + '"');
   if (await trySwapViaInstanceProperty(card, iconName)) {
     debugLog('card-icon', 'strategy 1 hit for "' + iconName + '"');
@@ -81,7 +34,6 @@ async function applyCardIconSwap(card: InstanceNode, iconName: string): Promise<
   }
   debugLog('card-icon', 'strategy 1 miss for "' + iconName + '"');
 
-  // --- Strategy 2: INSTANCE_SWAP property op nested icon-child ---
   const nestedIcon = findNestedIconInstance(card);
   if (nestedIcon !== null) {
     debugLog(
@@ -94,7 +46,6 @@ async function applyCardIconSwap(card: InstanceNode, iconName: string): Promise<
     }
     debugLog('card-icon', 'strategy 2 miss for "' + iconName + '"');
 
-    // --- Strategy 3: swapComponentByName op nested icon ---
     debugLog('card-icon', 'strategy 3: swapComponentByName on nested "' + nestedIcon.name + '"');
     if (await swapComponentByName(nestedIcon, iconName)) {
       debugLog('card-icon', 'strategy 3 hit for "' + iconName + '"');
@@ -111,20 +62,13 @@ async function applyCardIconSwap(card: InstanceNode, iconName: string): Promise<
   return false;
 }
 
-/**
- * Vervangt de fill van het image-slot binnen een card met de geüploade
- * afbeelding. Best-effort — faalt stil wanneer geen slot gevonden wordt.
- * Retourneert de nieuwe ImagePaint-hash bij succes, of null bij skip.
- *
- * Zoekt Card via slide.findOne(id) zodat Cards binnen TimelineWrap
- * (genest in tussenliggende Frames) ook bereikbaar zijn — wrapper-agnostisch.
- */
+/** Returns the new image hash, or null when the card or image slot is missing.
+ *  slide.findOne (not CardWrap-scoped) so Cards nested inside TimelineWrap frames are found too. */
 export async function applyCardVisual(
   slide: InstanceNode,
   cardNodeId: string,
   bytes: Uint8Array,
 ): Promise<string | null> {
-  // Slide-scoped findOne op node-id — vindt Cards in CardWrap én TimelineWrap.
   const cardNode = slide.findOne(function (n: SceneNode) {
     return n.type === 'INSTANCE' && n.name === 'Card' && n.id === cardNodeId;
   });
@@ -145,29 +89,18 @@ export async function applyCardVisual(
   return hash;
 }
 
-/**
- * Past een CardPayload toe op de aangewezen card.
- * Resolveert zonder error wanneer de target-card ontbreekt (silent skip, FIG-GUARD-01).
- *
- * Zoekt Card via slide.findOne(id) zodat Cards binnen TimelineWrap
- * (genest in tussenliggende Frames) ook muteerbaar zijn — wrapper-agnostisch.
- */
+/** Resolves without error when the target card is missing (silent skip).
+ *  slide.findOne (not CardWrap-scoped) so Cards nested inside TimelineWrap frames are found too. */
 export async function applyCard(slide: InstanceNode, payload: CardPayload): Promise<void> {
-  // Slide-scoped findOne op node-id — vindt Cards in CardWrap én TimelineWrap.
   const cardNode = slide.findOne(function (n: SceneNode) {
     return n.type === 'INSTANCE' && n.name === 'Card' && n.id === payload.cardNodeId;
   });
   const card = cardNode;
   if (card === null) return;
 
-  // Per-field no-op-skip: the iframe emits the FULL CardItem on every
-  // typing-debounce fire (heading + paragraph + icon + style), even if
-  // only one field changed. Without these checks every keystroke re-runs
-  // the heavy icon swap (getMainComponentAsync + cache lookup +
-  // importComponentByKeyAsync + setProperties) AND a Style setProperties
-  // — adding 30-100ms of wasted sandbox work per keystroke that the user
-  // perceives as typing lag. Reading current state is cheap; skipping
-  // the writes when state already matches is the win.
+  // The iframe re-sends the FULL CardItem on every typing debounce; skip writes when
+  // state already matches, or each keystroke re-runs the heavy icon swap and Style
+  // setProperties (30-100ms of felt typing lag).
 
   if (typeof payload.heading === 'string') {
     const headingNode = findTextByName(card, 'Heading');
@@ -183,11 +116,8 @@ export async function applyCard(slide: InstanceNode, payload: CardPayload): Prom
     }
   }
 
-  // Style first — when both `style` and `icon` arrive together (e.g. the
-  // user toggled Outline and the iframe re-sent the icon so we can refresh
-  // the slot's stroke paint), the variant must already be active when the
-  // icon swap runs so the captured paint comes from the NEW variant's
-  // bound stroke variable, not the old one.
+  // Style must be applied before the icon swap: when both arrive together, the
+  // swap must capture the stroke paint bound by the NEW variant, not the old one.
   let styleJustChanged = false;
   if (payload.style !== undefined && card.type === 'INSTANCE') {
     const cardInst = card as InstanceNode;
@@ -212,20 +142,14 @@ export async function applyCard(slide: InstanceNode, payload: CardPayload): Prom
     );
     if (card.type === 'INSTANCE') {
       const cardInst = card as InstanceNode;
-      // Cheap pre-check: peek at the nested icon's component name and
-      // compare normalized to the desired icon. Skips the entire
-      // icon-replacement round-trip on the common no-op path — unless
-      // the Style variant just changed, in which case the slot content
-      // needs to be re-rendered to pick up the new variant's stroke
-      // paint binding.
+      // A matching icon still needs re-rendering when the Style variant just
+      // changed — the slot must pick up the new variant's stroke paint binding.
       const currentIconInstance = findNestedIconInstance(cardInst);
       const currentIconKey =
         currentIconInstance !== null ? normalizeIconKey(currentIconInstance.name) : '';
       const desiredIconKey = normalizeIconKey(payload.icon);
       debugLog('card', 'currentIconKey="' + currentIconKey + '" desiredIconKey="' + desiredIconKey + '"');
       if (currentIconKey !== desiredIconKey || styleJustChanged) {
-        // Preferred path: iframe shipped the SVG body — we render it
-        // directly via createNodeFromSvg. No library import, no INSTANCE_SWAP.
         let handled = false;
         if (typeof payload.iconSvg === 'string' && payload.iconSvg.length > 0) {
           handled = replaceIconViaSlot(
@@ -235,20 +159,15 @@ export async function applyCard(slide: InstanceNode, payload: CardPayload): Prom
             styleJustChanged,
           );
         }
-        // Fallback to the legacy INSTANCE_SWAP path (kept for safety while
-        // the new path is being smoke-tested; can be removed once the SVG
-        // route is verified across all Card variants).
+        // Legacy INSTANCE_SWAP fallback, kept until the SVG route is verified
+        // across all Card variants.
         if (!handled) {
           console.log('[card] SVG path failed/skipped, falling back to legacy swap');
           await applyCardIconSwap(cardInst, payload.icon);
         }
       }
-      // Persist the picked icon as plugin data on the Card instance.
-      // Slot-child overrides do NOT survive a library-master republish
-      // (Figma resets them to the master's default), but plugin data
-      // does — so this is the durable "what icon did the user pick?"
-      // record. The scan side reads it and the iframe auto-reconciles
-      // by re-applying when slot.child.name diverges from this value.
+      // Slot-child overrides don't survive a library-master republish, but plugin data
+      // does — persist the picked icon as the durable record the scan side reconciles against.
       try {
         cardInst.setSharedPluginData('welder', 'icon', desiredIconKey);
         debugLog(

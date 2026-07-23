@@ -1,22 +1,8 @@
-// ============================================================
-// editors/_shared/node-finders.ts
-//
-// Gedeelde node-zoek-helpers voor de editors. Eén implementatie voor
-// patronen die voorheen per editor gekopieerd waren (badge/card/
-// title-description/image) en daardoor uit elkaar dreven.
-//
-// FIG-GUARD-01: type-checks vóór property-access.
-// FIG-TRAVERSE-01: traversal bounded via findChild / findOne.
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Single implementation of the badge/card/image lookup patterns that used to be
+// copied per editor and drifted apart.
 
 import { normalizeIconKey, LUCIDE_SLUG_RE } from './icon-swap';
 
-/**
- * Zoekt het eerste descendant-text-node met de opgegeven naam binnen
- * `scope` en retourneert het als TextNode of null. Bounded — blijft
- * binnen de scope-subtree.
- */
 export function findTextByName(scope: SceneNode, name: string): TextNode | null {
   if (!('findOne' in scope)) return null;
   const found = scope.findOne((n: SceneNode) => {
@@ -27,14 +13,7 @@ export function findTextByName(scope: SceneNode, name: string): TextNode | null 
   return found;
 }
 
-/**
- * Zoekt de geneste icon-INSTANCE binnen een host-instance (Badge/Card).
- * Primair pad: directe child met name 'icon_wrapper', daarbinnen de
- * eerste INSTANCE. Fallback: eerste INSTANCE-descendant wier naam een
- * Lucide-slug is.
- */
 export function findNestedIconInstance(host: InstanceNode): InstanceNode | null {
-  // Primair pad: directe child met name 'icon_wrapper'
   if ('findChild' in host) {
     const wrapper = host.findChild((n: SceneNode) => n.name === 'icon_wrapper');
     if (wrapper !== null && 'children' in wrapper) {
@@ -46,7 +25,6 @@ export function findNestedIconInstance(host: InstanceNode): InstanceNode | null 
     }
   }
 
-  // Fallback: eerste INSTANCE-descendant wier naam een Lucide-slug is
   if ('findOne' in host) {
     const found = host.findOne((n: SceneNode) => {
       if (n.type !== 'INSTANCE') return false;
@@ -58,27 +36,18 @@ export function findNestedIconInstance(host: InstanceNode): InstanceNode | null 
   return null;
 }
 
-/**
- * Zoekt het image-slot (fill-dragende node) binnen `scope`.
- * Strategie 1: descendant met name 'Image', 'Visual' of 'ImageSlot'
- *              met fills-property.
- * Strategie 2: descendant met een bestaande IMAGE-fill (Slide Machine
- *              gebruikt placeholder-IMAGE-fills op het slot).
- * Strategie 3 (alleen met `fallbackToSelf`): de scope zelf — juist voor
- *              slide-level ImageWraps die zelf de fill dragen, fout voor
- *              cards (een card als geheel is nooit het image-slot).
- */
+// Matching an existing IMAGE fill works because the Slide Machine leaves placeholder
+// IMAGE fills on the slot. `fallbackToSelf` exists for slide-level ImageWraps that
+// carry the fill themselves; cards must pass false — a card is never the slot itself.
 export function findImageSlot(scope: SceneNode, fallbackToSelf: boolean): SceneNode | null {
   if (!('findOne' in scope)) return fallbackToSelf ? scope : null;
 
-  // Strategie 1: naam-gebaseerd
   const byName = scope.findOne((n: SceneNode) => {
     if (n.name !== 'Image' && n.name !== 'Visual' && n.name !== 'ImageSlot') return false;
     return 'fills' in n;
   });
   if (byName !== null) return byName;
 
-  // Strategie 2: bestaande IMAGE-fill
   const byFill = scope.findOne((n: SceneNode) => {
     if (!('fills' in n)) return false;
     const fills = (n as GeometryMixin).fills;
@@ -91,6 +60,5 @@ export function findImageSlot(scope: SceneNode, fallbackToSelf: boolean): SceneN
   });
   if (byFill !== null) return byFill;
 
-  // Strategie 3: de scope zelf als laatste redmiddel
   return fallbackToSelf ? scope : null;
 }

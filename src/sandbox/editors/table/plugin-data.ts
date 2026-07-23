@@ -1,13 +1,5 @@
-// ============================================================
-// editors/table/plugin-data.ts
-//
-// PluginData read/write voor de TableWrap-Slot: header-flag en
-// de per-kolom calculation-settings (som, emphasis, currency).
-// Lege string = key-delete; normalisatie loopt via de gedeelde
-// helpers in `shared/table-calculations`.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Empty string is Figma's pluginData sentinel: setPluginData('') deletes the
+// key and getPluginData returns '' for missing keys, so '' means "unset" here.
 
 import type { TableColumnCalculationSetting } from '../../../shared/types';
 import {
@@ -18,7 +10,6 @@ import {
   normalizeColumnLabels,
 } from '../../../shared/table-calculations';
 
-/** Leest of de tabel een header-rij heeft. Default false. */
 export function readHasColumnHeader(slot: SlotNode): boolean {
   return slot.getPluginData('hasColumnHeader') === '1';
 }

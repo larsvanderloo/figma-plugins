@@ -1,22 +1,12 @@
-// ============================================================
-// editors/_shared/accent-ranges.ts
-//
-// Canonical Text Dimmer range reader/writer for Heading accent marks.
-// Used by both slide scans and text mutations so a heading text update
-// can clear invalid ranges in the same sandbox write.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Canonical Text Dimmer range reader/writer for Heading accent marks. Shared by
+// slide scans and text mutations so a heading text update can clear invalid
+// ranges in the same sandbox write.
 
 import { loadAccentVars, resolveColor, TEXT_DIMMER_RGB } from './accent-vars';
 import { loadAllFontsForNode } from './fonts';
 
 const DIMMER_HEX_TOLERANCE = 0.01;
 
-/**
- * True wanneer een fill een SOLID-paint is bound aan de gegeven variable-id,
- * of raw SOLID met een kleur die ongeveer #ffc78f matcht.
- */
 function isDimmedFill(fill: Paint, dimmerId: string | null): boolean {
   if (fill.type !== 'SOLID') return false;
   const solid = fill as SolidPaint;
@@ -37,13 +27,8 @@ function isDimmedFill(fill: Paint, dimmerId: string | null): boolean {
   return false;
 }
 
-/**
- * Leest dim-ranges van een TextNode via `getStyledTextSegments`.
- *
- * - `null` betekent: library variables niet bereikbaar.
- * - `[]` betekent: library OK, geen dim-range aanwezig.
- * - gevuld betekent: canonical, samengevoegde char-ranges.
- */
+// null = library variables unreachable; [] = library OK, no dim ranges present;
+// non-empty = canonical merged char ranges.
 export async function readDimRanges(node: TextNode): Promise<Array<[number, number]> | null> {
   const vars = await loadAccentVars();
   if (vars.text === null && vars.dimmer === null) {
@@ -74,10 +59,6 @@ export async function readDimRanges(node: TextNode): Promise<Array<[number, numb
   return ranges;
 }
 
-/**
- * Past accent-ranges toe op een text-node: dim-fill op `dimRanges`,
- * text-fill op het complement. Characters blijven ongemoeid.
- */
 export async function applyAccentRanges(
   node: TextNode,
   dimRanges: Array<[number, number]>,

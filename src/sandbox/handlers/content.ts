@@ -1,12 +1,3 @@
-// ============================================================
-// sandbox/handlers/content.ts
-//
-// Content-tab messages: cards (update-card / update-instructor-card /
-// set-card-size) en timeline-items (update-timeline-item).
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideById } from '../slides';
 import { applyCard } from '../editors/content/card';
@@ -74,10 +65,8 @@ export async function handleUpdateInstructorCard(
     targetId: msg.cardNodeId,
   });
   if (resetItems !== null && typeof msg.payload.instructor === 'string') {
-    // Instructor-switch reset de list-teksten naar de defaults van de
-    // nieuwe variant — de sandbox is hier de bron, niet de iframe.
-    // Gericht patch-bericht: een volledige emitSlideLoaded (incl.
-    // preview-exports + icon-prime) maakte de switch merkbaar traag.
+    // An instructor switch resets the list texts to the new variant's defaults, so the
+    // sandbox is the source here; a full emitSlideLoaded made the switch noticeably slow.
     postToUI({
       type: 'instructor-card-updated',
       cardNodeId: msg.cardNodeId,
@@ -100,9 +89,8 @@ export async function handleSetCardSize(
     });
     return;
   }
-  // Resolve the heading text-style id once, up front. Library-subscribed
-  // styles aren't enumerable by name — sandbox walks all TEXT nodes on
-  // first use to build a styleName → styleId map (cached for the session).
+  // Library-subscribed styles aren't enumerable by name — the resolver walks all
+  // TEXT nodes on first use to build a name → id map (cached for the session).
   const styleId = await resolveTextStyleByName(msg.headingStyleName);
   if (styleId === null) {
     postToUI({
@@ -130,9 +118,6 @@ export async function handleSetCardSize(
 export async function handleUpdateTimelineItem(
   msg: Extract<UIToPluginMessage, { type: 'update-timeline-item' }>,
 ): Promise<void> {
-  // Muteert heading/paragraph van één CopyWrap-item.
-  // Zoek CopyWrap via slide.findOne(id) zodat ook genestede CopyWraps
-  // (binnen tussenliggende Frames) gevonden worden — wrapper-agnostisch.
   const slide = await findSlideById(msg.slideId);
   if (slide === null) {
     postToUI({
@@ -142,7 +127,7 @@ export async function handleUpdateTimelineItem(
     });
     return;
   }
-  // Slide-scoped findOne op node-id — vindt ook genestede CopyWraps.
+  // findOne over the whole slide so CopyWraps nested inside intermediate frames are found.
   const copyWrapNode = slide.findOne(function (n: SceneNode) {
     return n.type === 'INSTANCE' && n.name === 'CopyWrap' && n.id === msg.copyWrapNodeId;
   });
@@ -159,13 +144,9 @@ export async function handleUpdateTimelineItem(
     return;
   }
   figma.commitUndo();
-  // Mark vóór én na apply (patroon: handleUpdateGeneral in general.ts).
-  // De writes hieronder triggeren documentchange-events die de 200ms-
-  // debounce van postSlideContent armen; duurt apply langer dan 200ms
-  // (font-loads + auto-layout-reflow), dan vuurt de re-scan vóór apply
-  // klaar is en clobbert de slide-loaded-post in-progress typing in de
-  // iframe. Pre-apply opent de suppress-window vroeg; post-apply
-  // verlengt 'm voorbij de laatste write.
+  // Mark before AND after: the writes below arm postSlideContent's 200ms debounce, and if
+  // apply takes longer (font-loads, reflow) the re-scan clobbers in-progress typing in the
+  // iframe. Pre-apply opens the suppress window early; post-apply extends it past the last write.
   markSelfWrite();
   if (typeof msg.payload.heading === 'string') {
     const headingNode = copyWrap.findOne((n: SceneNode) => {
@@ -173,10 +154,8 @@ export async function handleUpdateTimelineItem(
     });
     if (headingNode !== null && headingNode.type === 'TEXT') {
       const headingText = headingNode as TextNode;
-      // No-op-skip per veld (patroon: applyCard in editors/content/card.ts):
-      // de iframe stuurt heading én paragraph samen per typepauze, ook als
-      // maar één veld wijzigde. Alleen schrijven bij echt verschil bespaart
-      // de font-load + write op het ongewijzigde veld.
+      // The iframe sends heading and paragraph together per typing pause even if only
+      // one changed; skipping unchanged values saves the font-load + write.
       if (headingText.characters !== msg.payload.heading) {
         await setTextCharactersSafe(headingText, msg.payload.heading);
       }

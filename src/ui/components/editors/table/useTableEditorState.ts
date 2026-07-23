@@ -1,13 +1,5 @@
-// ============================================================
-// components/editors/table/useTableEditorState.ts
-//
-// Local mirror of the TableWrapModel for the table editor: editable
-// copies of rows, header flag and column-calculation settings.
-//
-// Syncs from incoming props behind an echo guard (our own emits
-// bounce back over the message bus) and debounces the outgoing
-// `update:modelValue` emit via scheduleEmit.
-// ============================================================
+// Local editable mirror of TableWrapModel. Incoming prop syncs are gated by an
+// echo guard: our own debounced emits bounce back over the message bus.
 
 import { computed, ref, watch, onBeforeUnmount } from 'vue';
 import type {
@@ -47,8 +39,8 @@ function cloneRows(rows: TableRowModel[]): TableRowModel[] {
       if (rows[i].cells[j].emphasis === true) cell.emphasis = true;
       const delta = rows[i].cells[j].delta;
       if (typeof delta === 'string' && delta.trim() !== '') cell.delta = delta;
-      // check/badge horen bij de cel-semantiek: wie hier niet meekopieert,
-      // stript het veld uit elke emit (zelfde valkuil als delta destijds).
+      // cloneRows sits on the emit path: any cell field not copied here is
+      // silently stripped from every outgoing emit.
       const check = rows[i].cells[j].check;
       if (check === true || check === false) cell.check = check;
       const badge = rows[i].cells[j].badge;
@@ -66,11 +58,8 @@ function columnCountForRows(rows: TableRowModel[]): number {
   return rows[0].cells.length > 0 ? rows[0].cells.length : 1;
 }
 
-// Guarantee the local grid always has at least one editable row. A scanned
-// TableWrap with no content scans to 0 rows, which would render an empty,
-// un-editable grid (no cells to focus/type into). Seed a single empty row of
-// `cols` columns so the editor is always usable; the canvas only renders
-// non-empty rows, so this seed costs nothing visually until the user types.
+// An empty TableWrap scans to 0 rows, leaving no cell to focus or type into;
+// seed one empty row (the canvas skips empty rows, so it costs nothing).
 function ensureNonEmpty(rows: TableRowModel[], cols: number): TableRowModel[] {
   if (rows.length > 0) return rows;
   const safeCols = cols > 0 ? cols : 1;
@@ -255,7 +244,7 @@ export function useTableEditorState(
       });
       const rows = cloneRows(localRows.value);
       if (localHasColumnHeader.value && rows.length > 0) {
-        // Koprij draagt geen per-cell emphasis, delta, vinkje of badge.
+        // Header rows never carry per-cell emphasis, delta, check or badge.
         for (let j = 0; j < rows[0].cells.length; j++) {
           delete rows[0].cells[j].emphasis;
           delete rows[0].cells[j].delta;

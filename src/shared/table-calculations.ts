@@ -210,13 +210,8 @@ export function formatTableNumber(value: number): string {
   return sign + grouped + (decimalPart !== '' ? ',' + decimalPart : '');
 }
 
-/**
- * Per-column "is dit een getallen-kolom?"-detectie voor uitlijning.
- * Een kolom telt als numeriek wanneer minstens één niet-lege body-cel
- * een getal is (volgens parseTableNumber: ook `€ 45`, `12%`, `1,2M`)
- * en géén enkele niet-lege body-cel tekst bevat ('45 mensen' → false).
- * De header-rij (indien aanwezig) telt niet mee.
- */
+// Numeric-column detection for alignment: a single text body cell (e.g. '45 people')
+// disqualifies the whole column, so mixed columns stay left-aligned.
 export function computeNumericColumns(
   rows: readonly TableRowModel[],
   hasColumnHeader: boolean,
@@ -280,9 +275,7 @@ export function computeTableColumnSummaries(
 
     out.push({
       calculation: 'sum',
-      // `value` is always the plain formatted number. Currency/percent are
-      // signalled via the flags: consumers (UI footer + canvas renderer)
-      // add the `€`-prefix or `%`-suffix themselves.
+      // `value` is the plain formatted number; consumers add the euro/percent affixes from the flags.
       value: formatTableNumber(sum),
       numericValue: sum,
       numericCount: count,

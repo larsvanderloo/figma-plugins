@@ -1,15 +1,5 @@
-// ============================================================
-// shared/chart-calculations.ts
-//
-// Gedeelde chart-model-helpers voor sandbox-renderer én UI-editor:
-// normalisatie (ragged series → rechthoek), equality voor de
-// duplicate-update-guard, en totalen/percentages voor donut/pie en
-// progress. Waarde-formatting hergebruikt formatTableNumber zodat
-// tabellen en charts identiek formatteren (1.250,5 stijl).
-//
-// Sandbox-safe: ES2017 — geen optional chaining, geen nullish
-// coalescing, geen catch-without-binding.
-// ============================================================
+// Number formatting reuses formatTableNumber so charts and tables format
+// values identically (1.250,5 style).
 
 import type { ChartSeriesModel, ChartType, ChartWrapModel } from './types';
 import { formatTableNumber } from './table-calculations';
@@ -26,11 +16,8 @@ function isChartType(value: string): value is ChartType {
   return false;
 }
 
-/**
- * Normaliseer een (mogelijk ragged of leeg) chart-model naar een
- * rechthoekige vorm: elke serie krijgt exact één numerieke waarde per
- * categorie, lengtes gecapt op de maxima, minimaal 1 categorie + 1 serie.
- */
+/** Normalizes a ragged/empty model to a rectangle: one finite value per
+ * category per series, capped at the maxima, min 1 category + 1 series. */
 export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
   const categories: string[] = [];
   const sourceCategories = Array.isArray(model.categories) ? model.categories : [];
@@ -79,8 +66,6 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
     series.push({ name: '', values: values, emphasis: emphasis, percent: false });
   }
 
-  // Delta-overrides rechthoekig op categorie-lengte; progressMax
-  // alleen geldig wanneer een eindig getal > 0.
   const deltaOverrides: string[] = [];
   const sourceOverrides = Array.isArray(model.deltaOverrides) ? model.deltaOverrides : [];
   for (let i = 0; i < categories.length; i++) {
@@ -111,7 +96,7 @@ export function normalizeChartModel(model: ChartWrapModel): ChartWrapModel {
   };
 }
 
-/** Semantische gelijkheid voor de duplicate-update-guard. */
+/** Semantic equality for the duplicate-update guard. */
 export function chartModelsEqual(a: ChartWrapModel | null, b: ChartWrapModel): boolean {
   if (a === null) return false;
   const left = normalizeChartModel(a);
@@ -154,24 +139,20 @@ export function chartModelsEqual(a: ChartWrapModel | null, b: ChartWrapModel): b
   return true;
 }
 
-/** Nadruk-flag van datapunt (serie s, categorie i); afwezig = false. */
 export function isPointEmphasized(series: ChartSeriesModel, i: number): boolean {
   return series.emphasis !== undefined && series.emphasis[i] === true;
 }
 
-/** Nadruk-flag van categorie i (categoriekolom); afwezig = false. */
 export function isCategoryEmphasized(model: ChartWrapModel, i: number): boolean {
   return model.categoryEmphasis !== undefined && model.categoryEmphasis[i] === true;
 }
 
-/** Som van alle waarden in een serie. */
 export function seriesTotal(series: ChartSeriesModel): number {
   let total = 0;
   for (let i = 0; i < series.values.length; i++) total += series.values[i];
   return total;
 }
 
-/** Hoogste waarde over alle series (bar/line-schaal). */
 export function chartMaxValue(model: ChartWrapModel): number {
   let max = 0;
   for (let s = 0; s < model.series.length; s++) {
@@ -182,17 +163,12 @@ export function chartMaxValue(model: ChartWrapModel): number {
   return max;
 }
 
-/** Geformatteerde waarde voor labels — zelfde stijl als de tabel. */
 export function formatChartValue(value: number): string {
   return formatTableNumber(value);
 }
 
-/**
- * Delta-badge-tekst voor categorie `index` t.o.v. de vorige categorie:
- * ▲ +12% / ▼ −5%, afgerond op hele procenten. Conventies: eerste categorie
- * heeft geen vorige → null; vorige waarde 0 → absolute verandering i.p.v. een
- * oneindig percentage (Geckoboard-conventie); beide 0 → null.
- */
+/** Delta badge vs the previous category; a previous value of 0 yields the
+ * absolute change, not an infinite percentage (Geckoboard convention). */
 export function chartDeltaLabel(values: number[], index: number): string | null {
   if (index <= 0 || index >= values.length) return null;
   const previous = values[index - 1];
@@ -208,7 +184,6 @@ export function chartDeltaLabel(values: number[], index: number): string | null 
   return '▼ −' + String(pct) + '%';
 }
 
-/** Leeg default-model voor een verse ChartWrap-slot. */
 export function emptyChartModel(slotId: string): ChartWrapModel {
   return {
     slotId: slotId,
@@ -221,11 +196,7 @@ export function emptyChartModel(slotId: string): ChartWrapModel {
   };
 }
 
-/**
- * Effectieve delta-tekst voor categorie i (serie 0): een niet-lege
- * override wint van de auto-berekening. Single source of truth voor de
- * sandbox-renderers én de UI-grid-placeholder.
- */
+/** Single source of the shown delta text — sandbox renderers and the UI grid placeholder must agree. */
 export function chartDeltaDisplay(model: ChartWrapModel, i: number): string | null {
   const overrides = model.deltaOverrides;
   if (overrides !== undefined && i < overrides.length) {
@@ -236,19 +207,16 @@ export function chartDeltaDisplay(model: ChartWrapModel, i: number): string | nu
   return chartDeltaLabel(model.series[0].values, i);
 }
 
-/** Referentieschaal voor progress: progressMax of auto. */
 export function chartProgressReference(model: ChartWrapModel): number {
   const max = model.progressMax;
   if (typeof max === 'number' && isFinite(max) && max > 0) return max;
   return Math.max(100, chartMaxValue(model));
 }
 
-/** Chart-types die alleen serie 0 renderen. */
 export function isSingleSeriesChartType(t: ChartType): boolean {
   return t === 'donut' || t === 'pie' || t === 'progress';
 }
 
-/** Waarde-label met optioneel procentteken (per serie). */
 export function chartValueLabel(series: ChartSeriesModel, value: number): string {
   const formatted = formatTableNumber(value);
   return series.percent === true ? formatted + '%' : formatted;

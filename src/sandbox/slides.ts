@@ -1,14 +1,5 @@
-// ============================================================
-// sandbox/slides.ts
-//
-// Slide-lookup voor de sandbox: per-page cache van Welder-slides
-// (canvas-grid of children-walk), 1-based nummering, en de finders
-// waarmee handlers en scans van slide-id naar InstanceNode komen.
-// De cache wordt geïnvalideerd vanuit code.ts' documentchange/
-// currentpagechange-listeners.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// The slide-page cache never invalidates itself: main.ts's documentchange/
+// currentpagechange listeners call invalidateSlidePageCache.
 
 import { findSlidesOnPage, isSlide, slideSummary } from './slide-machine';
 import { SlideSummary } from '../shared/types';
@@ -143,13 +134,8 @@ function getSlideNumber(slide: InstanceNode): number {
   return 1;
 }
 
-/**
- * Compute the SlideSummary for a single slide. Used by every slide-loaded
- * / slide-summary emission. `findSlidesOnPage` here is for the 1-based
- * `number` fallback when the slide has no heading text — most slides have
- * a heading, so the number rarely shows in the UI but it keeps the
- * SlideSummary shape consistent with the export-document filename logic.
- */
+// The 1-based number only surfaces in the UI when a slide has no heading,
+// but it must stay consistent with the export-document filename logic.
 export function summaryForSlide(slide: InstanceNode): SlideSummary {
   return slideSummary(slide, getSlideNumber(slide));
 }
@@ -159,35 +145,25 @@ export async function findSlideById(id: string): Promise<InstanceNode | null> {
   for (const node of nodes) {
     if (node.id === id) return node;
   }
-  // Fallback: de cache-walk (canvas-grid / page-children) mist slides
-  // die dieper genest zijn — bv. binnen een SECTION op een design-pagina
-  // zoals Templates. De scan-kant vindt die slides wél (up-walk vanaf de
-  // selectie via findSlideAncestor), dus zonder deze fallback kan de UI
-  // een slide tonen waarvan elke mutatie op "Slide not found" strandt.
+  // The cache walk misses deeply nested slides (e.g. inside a SECTION on a
+  // design page), while the scan side finds them via up-walk; without this
+  // fallback the UI can show a slide whose every mutation fails "Slide not found".
   try {
     const node = await figma.getNodeByIdAsync(id);
     if (node !== null && node.type === 'INSTANCE' && isSlide(node as InstanceNode)) {
       return node as InstanceNode;
     }
   } catch (_e) {
-    /* silent — id kan stale zijn na undo/delete */
+    /* id can be stale after undo/delete */
   }
   return null;
 }
 
-/**
- * Loopt vanaf `node` omhoog langs `.parent` tot we een Slide-instance
- * vinden (isSlide-check). Retourneert null wanneer we de pagina-root
- * bereiken zonder hit — dan zit het target niet binnen een Slide.
- * Gebruikt door `upload-image` om vanuit een ImageWrap-id terug te
- * herleiden welke slide hij draagt.
- */
 export function findSlideAncestor(node: BaseNode): InstanceNode | null {
   let current: BaseNode | null = node;
-  // Bounded: Slide Machine-slides staan op page-level, dus ≤5 parent-hops.
+  // Slides sit at page level, so at most ~5 parent hops; 10 is a safe bound.
   for (let i = 0; i < 10; i++) {
     if (current === null) return null;
-    // Alleen SceneNodes (dus niet page/document) kunnen isSlide-match zijn.
     if ('type' in current && (current as SceneNode).type === 'INSTANCE') {
       const asScene = current as SceneNode;
       if (isSlide(asScene)) return asScene as InstanceNode;
@@ -199,32 +175,20 @@ export function findSlideAncestor(node: BaseNode): InstanceNode | null {
   return null;
 }
 
-/**
- * Bepaalt welke Welder-Slide de user momenteel voor ogen heeft op basis
- * van de huidige selectie. Drie scenarios (in volgorde):
- *   1. Primary selection = Welder-Slide zelf → direct return.
- *   2. Primary selection = descendant van een Welder-Slide (bv. text-klik
- *      in Figma Design) → walk up via findSlideAncestor.
- *   3. Primary selection = container die een Welder-Slide BEVAT (bv.
- *      SlideNode in Figma Slides navigator) → walk down via findOne met
- *      isSlide-predicate, bounded.
- * Retourneert null wanneer geen match — caller doet niets.
- */
 export function findFocusedWelderSlide(): InstanceNode | null {
   const selection = figma.currentPage.selection;
   if (selection.length === 0) return null;
   const selected = selection[0];
 
-  // Scenario 1: selected IS a Welder-Slide
   if (selected.type === 'INSTANCE' && isSlide(selected)) {
     return selected;
   }
 
-  // Scenario 2: selected is INSIDE a Welder-Slide
   const ancestor = findSlideAncestor(selected);
   if (ancestor !== null) return ancestor;
 
-  // Scenario 3: selected is a CONTAINER of a Welder-Slide (e.g. SlideNode)
+  // The Slides navigator selects the SlideNode container, not the Welder
+  // instance inside it — walk down for that case.
   if ('findOne' in selected) {
     const container = selected as SceneNode & { findOne: SlideNode['findOne'] };
     const descendant = container.findOne((n: SceneNode) => {

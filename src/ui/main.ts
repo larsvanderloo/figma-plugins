@@ -1,12 +1,6 @@
-// ============================================================
-// Vue-app entry. Mount App.vue met Nuxt UI-plugin.
-//
-// Icon-bundling: Figma plugin-iframe heeft `networkAccess:
-// ["none"]`, dus Iconify's runtime-API-fetch (api.iconify.design)
-// wordt door CSP geblokkeerd. We registreren de volledige Lucide
-// collection compile-time via @iconify/vue's `addCollection`,
-// zodat alle `i-lucide-*` iconen lokaal resolven zonder network.
-// ============================================================
+// The plugin iframe runs with `networkAccess: ["none"]`, so Iconify's runtime
+// fetch to api.iconify.design is CSP-blocked; the full Lucide collection is
+// registered compile-time via `addCollection` so `i-lucide-*` resolves offline.
 
 import './main.css';
 import { createApp } from 'vue';
@@ -17,8 +11,6 @@ import { addCollection } from '@iconify/vue';
 import lucideIcons from '@iconify-json/lucide/icons.json';
 import App from './App.vue';
 
-// Registreer alle Lucide-iconen (prefix = 'lucide') voor offline-gebruik.
-// @iconify/vue pakt deze als eerste op voordat het naar de remote API valt.
 addCollection(lucideIcons as Parameters<typeof addCollection>[0]);
 
 const app = createApp(App);

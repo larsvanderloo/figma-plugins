@@ -1,16 +1,5 @@
-// ============================================================
-// scan/slide-scan.ts
-//
-// Composer van de read-kant: scanSlide bundelt de per-domein scans
-// (general / content / graphs) tot de typed SlideScan die als
-// `slide-loaded` over de bus gaat, plus de on-load normalisatie van
-// CopyWrap-zichtbaarheid. De domein-scans en readers leven in hun
-// eigen modules (scan/general, scan/content, scan/graphs, scan/theme,
-// scan/readers, scan/previews). Mutaties horen hier NIET — die leven
-// in editors/**.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Read-side scan composer. Mutations do not belong here — they live in
+// editors/**; the on-load CopyWrap visibility normalization is the one exception.
 
 import { findCopyWrap } from '../slide-machine';
 import { GeneralSections, ContentItems, GraphItems } from '../../shared/types';
@@ -20,7 +9,7 @@ import { scanGeneral } from './general';
 import { scanContent } from './content';
 import { scanGraphs, refreshTablesOnSlide } from './graphs';
 
-/** Combinatie van de drie tab-payloads; exact de shape van `slide-loaded`. */
+/** Exactly the shape of the `slide-loaded` bus message. */
 export interface SlideScan {
   general: GeneralSections | null;
   content: ContentItems | null;
@@ -77,34 +66,20 @@ export async function scanSlide(slide: InstanceNode): Promise<SlideScan> {
 }
 
 /**
- * Normaliseer Heading/Paragraph-zichtbaarheid op slide-load.
- *
- * Bestaande slides kunnen lege heading/paragraph text-nodes hebben die
- * nooit door de plugin gemuteerd zijn (visible=true ondanks characters="").
- * Het mutation-pad wordt elders gefixt; deze helper handelt de existing-
- * empty case op pick-slide.
- *
- * Returnt `true` als er minstens één visibility-flip plaatsvond, zodat
- * de caller weet of een refreshTablesOnSlide nodig is.
- *
- * Idempotent: als beide nodes al de juiste visibility hebben → no-op.
+ * Pre-existing slides can carry visible=true Heading/Paragraph nodes with empty
+ * characters (never plugin-mutated); normalize on slide-load. Returns true when
+ * any visibility flipped, so the caller knows tables need a refresh.
  */
 async function normalizeCopyWrapVisibility(slide: InstanceNode): Promise<boolean> {
   const copyWrap = findCopyWrap(slide);
   if (copyWrap === null) return false;
   let changed = false;
 
-  // Scope guard: only mutate text nodes that belong to CopyWrap's OWN
-  // content, not nodes inside a nested instance (e.g. a Badge embedded
-  // in CopyWrap, which has its own Heading/Placeholder semantics owned
-  // by the Badge component). Without this, the plugin clobbers state
-  // it doesn't own — confirmed via Figma MCP for the Welder Templates
-  // file (Badge has a `Placeholder` TEXT child whose visibility carries
-  // the badge's displayed text appearance; flipping it to false hides
-  // the badge text on every slide-load).
+  // Only mutate CopyWrap's own text nodes, never those inside a nested instance:
+  // e.g. Badge has its own `Placeholder` TEXT child whose visibility carries the
+  // badge text — flipping it would hide the badge on every slide-load.
   const isOwnNode = (n: SceneNode): boolean => !isInsideNestedInstance(n, copyWrap);
 
-  // Heading + Paragraph: visible alleen als characters niet leeg zijn.
   const charDriven = ['Heading', 'Paragraph'];
   for (let i = 0; i < charDriven.length; i++) {
     const name = charDriven[i];
@@ -120,11 +95,8 @@ async function normalizeCopyWrapVisibility(slide: InstanceNode): Promise<boolean
     }
   }
 
-  // Placeholder is een Slide-Machine-template-hint die zich toont
-  // wanneer Paragraph leeg is. Plugin is source-of-truth; placeholder is
-  // designer-crutch en moet altijd verborgen zijn zodat CopyWrap-auto-
-  // layout om de werkelijke content sluit. Naam "Placeholder" matcht alle
-  // bekende Welder-template-varianten.
+  // "Placeholder" is a designer-side template hint shown when Paragraph is empty;
+  // keep it hidden so CopyWrap's auto-layout closes around the real content.
   const placeholders = copyWrap.findAll(
     (n: SceneNode) => n.type === 'TEXT' && n.name === 'Placeholder' && isOwnNode(n),
   );
@@ -139,16 +111,6 @@ async function normalizeCopyWrapVisibility(slide: InstanceNode): Promise<boolean
   return changed;
 }
 
-/**
- * Walks the parent chain from `node` up to (but not past) `scopeRoot`.
- * Returns true if any ancestor along the way is itself an INSTANCE — i.e.
- * `node` lives inside a nested component instance whose internal structure
- * is owned by that component, not by the scope.
- *
- * Confirmed via Figma MCP that Welder Badge instances live inside CopyWrap
- * and carry their own `Placeholder` TEXT child (visibility = badge's
- * displayed text), which the plugin must not touch.
- */
 function isInsideNestedInstance(node: SceneNode, scopeRoot: InstanceNode): boolean {
   let current: BaseNode | null = node.parent;
   while (current !== null && current !== scopeRoot) {

@@ -1,11 +1,3 @@
-// ============================================================
-// Bridge-messages
-//
-// Discriminated unions per richting (FIG-MSG-01). Beide bundels
-// (main + UI) importeren deze types zodat send- en receive-kant altijd
-// over dezelfde shape praten.
-// ============================================================
-
 import type { TitleDescriptionPayload, BadgePayload, GeneralSections } from './general';
 import type { ContentItems } from './content';
 import type { GraphItems } from './graphs';
@@ -13,10 +5,7 @@ import type { TableWrapModel } from './table';
 import type { ChartWrapModel } from './chart';
 import type { SlideSummary, PluginRuntimeInfo } from './runtime';
 
-/**
- * UI-iframe → main-thread (`parent.postMessage({ pluginMessage })`).
- * Main-thread ontvangt via `figma.ui.onmessage`.
- */
+/** UI iframe → main thread via `parent.postMessage({ pluginMessage })`; received in `figma.ui.onmessage`. */
 export type UIToPluginMessage =
   | { type: 'ui-ready' }
   | {
@@ -33,18 +22,15 @@ export type UIToPluginMessage =
     }
   | {
       /**
-       * Muteert alleen fills op de heading via Text Dimmer-variable.
-       * Characters blijven ongemoeid; zie `update-general`
-       * voor tekst-mutaties.
-       *
-       * Heading-only — geen `field`-discriminator. Paragraph-accent is
-       * permanent out-of-scope.
+       * Mutates only fills on the heading via the Text Dimmer variable; characters stay
+       * untouched (text edits go through `update-general`). Heading-only by design —
+       * paragraph accent is permanently out of scope, hence no `field` discriminator.
        */
       type: 'update-accent';
       slideId: string;
       /** UI correlation id so high-frequency accent edits only ack themselves. */
       requestId?: string;
-      /** Canonical ranges (zie `TitleDescriptionSection.headingDim`). */
+      /** Canonical ranges (see `TitleDescriptionSection.headingDim`). */
       dimRanges: Array<[number, number]>;
     }
   | {
@@ -56,10 +42,8 @@ export type UIToPluginMessage =
         paragraph: string;
         icon: string;
         /**
-         * Full SVG document string for the chosen Lucide icon, generated
-         * iframe-side from the bundled Lucide body map. Sent alongside
-         * `icon` so the sandbox can replace the icon node directly via
-         * `figma.createNodeFromSvg` — no INSTANCE_SWAP, no library import.
+         * Full SVG generated iframe-side from the bundled Lucide map, so the sandbox can
+         * swap the icon via `figma.createNodeFromSvg` — no INSTANCE_SWAP or library import.
          */
         iconSvg: string;
         visualHash: string;
@@ -69,10 +53,8 @@ export type UIToPluginMessage =
     }
   | {
       /**
-       * Muteert één InstructorCard: switcht de `Instructor` VARIANT
-       * (foto + naam volgen de variant) en/of de list-item-teksten.
-       * `items` is de volledige lijst in document-volgorde; de sandbox
-       * skipt ongewijzigde teksten per index.
+       * `instructor` switches the Instructor VARIANT (photo + name follow it). `items`
+       * is the full list in document order; the sandbox skips unchanged texts per index.
        */
       type: 'update-instructor-card';
       slideId: string;
@@ -80,16 +62,11 @@ export type UIToPluginMessage =
       payload: Partial<{
         instructor: string;
         items: string[];
-        /** Card-zichtbaarheid — hidden collapst uit de CardWrap-auto-layout. */
+        /** Hidden cards collapse out of the CardWrap auto-layout. */
         visible: boolean;
       }>;
     }
   | {
-      /**
-       * Muteert heading en/of paragraph van één timeline-item binnen de
-       * TimelineWrap. `copyWrapNodeId` identificeert de
-       * target-CopyWrap-instance. Debounced 200ms in TimelineItemEditor.
-       */
       type: 'update-timeline-item';
       slideId: string;
       copyWrapNodeId: string;
@@ -99,51 +76,34 @@ export type UIToPluginMessage =
       }>;
     }
   | {
-      /**
-       * Full-state PUT van een TableWrap. `slotId` identificeert
-       * de SlotNode binnen de TableWrap-INSTANCE; `desired` is het complete
-       * gewenste model inclusief alle rows + cells.
-       */
+      /** Full-state PUT: `desired` is the complete table model (all rows + cells), not a patch. */
       type: 'update-table';
       slideId: string;
       slotId: string;
       desired: TableWrapModel;
       /**
-       * Settle-pass: true → sla de in-place fast-path over en render full,
-       * zodat font-fit/kolom-autofit/padding reconciliëren met de tekst-edits
-       * die de fast-path onderweg oversloeg. De UI stuurt dit één keer nadat
-       * het typen ~1s idle is; géén nieuwe undo-stap (merge't met de edit).
+       * true → skip the in-place fast path and render full, so font-fit/column-autofit/
+       * padding reconcile with the edits the fast path skipped. Sent once after ~1s of
+       * typing idle; no new undo step (merges with the edit).
        */
       settle?: boolean;
     }
   | {
-      /**
-       * Full-state PUT van een ChartWrap. `slotId` identificeert de
-       * SlotNode binnen de ChartWrap-INSTANCE; `desired` is het complete
-       * gewenste chart-model (type, categories, series, weergave-opties).
-       */
+      /** Full-state PUT: `desired` is the complete chart model, not a patch. */
       type: 'update-chart';
       slideId: string;
       slotId: string;
       desired: ChartWrapModel;
     }
   | {
-      /**
-       * CSV-import voor een ChartWrap. Main-thread parseert de CSV
-       * (rij 0 = koprij met serienamen, kolom 0 = categorie-labels) en
-       * roept applyChart aan.
-       */
+      /** CSV contract: row 0 = header row with series names, column 0 = category labels. */
       type: 'import-chart-csv';
       slideId: string;
       slotId: string;
       csv: string;
     }
   | {
-      /**
-       * CSV-import voor een TableWrap. Main-thread parseert de CSV-
-       * string, trunceert op TABLE_MAX_ROWS / TABLE_MAX_COLS (flat max)
-       * en roept applyTable aan.
-       */
+      /** Sandbox truncates at TABLE_MAX_ROWS / TABLE_MAX_COLS (flat max). */
       type: 'import-csv';
       slideId: string;
       slotId: string;
@@ -156,12 +116,9 @@ export type UIToPluginMessage =
     }
   | {
       /**
-       * Apply a global card size to every Card on the slide in one pass:
-       * resize each card's icon-slot child to `iconSize` × `iconSize`
-       * pixels AND apply the named text style to its Heading TextNode AND
-       * switch the slide's explicit-variable mode for the collection that
-       * owns the CardWrap's `itemSpacing` binding (so the gap follows).
-       * One sandbox walk + one commitUndo for all three mutations.
+       * Applies to every Card on the slide in one pass: icon-slot resize, Heading text
+       * style, and the mode switch on the collection owning the CardWrap's `itemSpacing`
+       * binding (so the gap follows). One sandbox walk + one commitUndo for all three.
        */
       type: 'set-card-size';
       slideId: string;
@@ -187,19 +144,17 @@ export type UIToPluginMessage =
       /** New value for the Slide's "Show Confidental" boolean property. */
       show: boolean;
       /**
-       * When set, also switch the nested ConfidentalBadge's `Variant` (e.g.
-       * 'Vertrouwelijk', 'Intern'). Omitted on a plain show/hide toggle so
-       * the badge keeps whatever variant it already has.
+       * When set, also switches the nested ConfidentalBadge's `Variant` (e.g.
+       * 'Vertrouwelijk', 'Intern'); omitted on a plain show/hide toggle so the badge
+       * keeps its current variant.
        */
       variant?: string;
     }
   | {
       /**
-       * Toggle visibility of the Heading or Paragraph subtree on the
-       * slide's CopyWrap. Heading routes through the whole CopyWrap's
-       * `.visible` flag; Paragraph through the `showParagraph` BOOLEAN
-       * component property on CopyWrap. Text content is preserved on both
-       * sides so toggling off-then-on doesn't lose what the user typed.
+       * Heading toggles the whole CopyWrap's `.visible`; paragraph toggles CopyWrap's
+       * `showParagraph` BOOLEAN component property. Text is preserved either way, so
+       * off-then-on never loses what the user typed.
        */
       type: 'set-typography-visibility';
       slideId: string;
@@ -208,51 +163,31 @@ export type UIToPluginMessage =
     }
   | {
       /**
-       * Set the CopyWrap's `Size` VARIANT property (Display/H1/.../H4).
-       * The variant master holds the per-size text style, so swapping the
-       * variant value re-renders the Heading automatically — no separate
-       * text-style rebind needed. Fired on slider release (commit).
+       * Sets the CopyWrap `Size` VARIANT; the variant master carries the per-size text
+       * style, so swapping the value re-renders the Heading — no text-style rebind needed.
        */
       type: 'set-copywrap-size';
       slideId: string;
       size: string;
     }
-  /**
-   * Persist the user's recently-picked icon list. Sandbox writes the
-   * array to `figma.clientStorage` so it survives plugin restarts and
-   * is shared across all `IconPicker` instances. Capped at 8 entries
-   * client-side; sandbox writes verbatim.
-   */
+  /** Persisted to `figma.clientStorage`. Capped at 8 entries UI-side; sandbox writes verbatim. */
   | { type: 'set-icon-recents'; items: string[] }
   /**
-   * Persist that the user has seen the first-run onboarding walkthrough.
-   * Single-shot command (no payload) — sandbox writes `true` to
-   * `figma.clientStorage` under `ONBOARDING_SEEN_KEY`. UI never un-sets
-   * during normal use; bumping the storage key suffix is how we
-   * re-trigger onboarding on a future version.
+   * Writes `true` to `figma.clientStorage`; never un-set in normal use — re-triggering
+   * onboarding on a future version is done by bumping the storage-key suffix.
    */
   | { type: 'set-onboarding-seen' }
-  /**
-   * Resize the plugin iframe. Fired continuously while the user drags
-   * the resize handle; sandbox calls `figma.ui.resize` and persists the
-   * final size via `figma.clientStorage` so subsequent plugin opens
-   * restore the last picked dimensions.
-   */
+  /** Fired continuously during drag; the sandbox persists the final size so later opens restore it. */
   | { type: 'resize-ui'; width: number; height: number }
   /**
-   * Pin (or clear) a slide's explicit Theme-collection mode. `modeId =
-   * null` clears the explicit binding so the slide inherits the page-
-   * level mode. Sandbox calls `setExplicitVariableModeForCollection`
-   * on the slide instance and re-posts the resulting `slide-loaded`
-   * payload so the picker UI reflects the resolved state.
+   * `modeId = null` clears the explicit Theme-collection binding so the slide inherits
+   * the page-level mode; the sandbox re-posts `slide-loaded` so the picker shows the
+   * resolved state.
    */
   | { type: 'set-slide-theme'; slideId: string; modeId: string | null }
   /**
-   * Export the active slide OR the entire presentation as PDF or PNG.
-   * Target=slide uses `slideId`; target=presentation exports the
-   * current page (PDF→multi-page on Figma Slides; PNG→one wide image).
-   * Sandbox replies with a `document-ready` message carrying bytes
-   * + a suggested filename; the iframe triggers a blob-download.
+   * target='presentation' exports the current page: PDF becomes multi-page on Figma
+   * Slides, PNG one wide image. Reply arrives as `document-ready`.
    */
   | {
       type: 'export-document';
@@ -261,22 +196,14 @@ export type UIToPluginMessage =
       slideId?: string;
     }
   /**
-   * Plugin-API trigger for native undo. No redo equivalent in the API.
-   *
-   * `slideId` is the iframe's currently-displayed slide. The sandbox
-   * uses it to re-scan and re-emit `slide-loaded` after triggerUndo,
-   * so iframe-side optimistic state (e.g. the picker's localIcon
-   * watch on view.state.general.badge.icon) gets re-synced from the
-   * post-undo canvas. Without this the picker would still show the
-   * pre-undo value and the user reads the toolbar Undo as a no-op.
+   * No redo equivalent in the plugin API. `slideId` is the iframe's current slide: the
+   * sandbox re-scans and re-emits `slide-loaded` after undo so optimistic UI state
+   * re-syncs — otherwise the picker keeps the pre-undo value and Undo reads as a no-op.
    */
   | { type: 'trigger-undo'; slideId?: string }
   | { type: 'close' };
 
-/**
- * Main-thread → UI-iframe (`figma.ui.postMessage`).
- * UI-iframe ontvangt via `window.onmessage`.
- */
+/** Main thread → UI iframe via `figma.ui.postMessage`; received in `window.onmessage`. */
 export type PluginToUIMessage =
   | {
       type: 'init';
@@ -284,14 +211,10 @@ export type PluginToUIMessage =
     }
   | {
       /**
-       * Posted once on plugin startup after the sandbox has walked
-       * every slide and built a list of Card/Badge instances whose
-       * persisted-via-plugin-data icon disagrees with their currently-
-       * visible slot child. The iframe receives the list, looks up the
-       * SVG body for each, and posts one update-card / update-general
-       * per entry — sandbox then applies the canonical icon back to
-       * each stale slot. This is what makes library-update recovery
-       * work for ALL slides instead of just the one the user opens.
+       * Posted once on startup: instances whose plugin-data icon disagrees with the
+       * visible slot child. The iframe looks up each SVG and posts update-card /
+       * update-general back — this round-trip recovers ALL slides after a library
+       * update, not just the one the user opens.
        */
       type: 'stale-icons';
       cards: Array<{ slideId: string; cardNodeId: string; iconIntended: string }>;
@@ -299,10 +222,8 @@ export type PluginToUIMessage =
     }
   | {
       /**
-       * Posted whenever the focused slide changes (selectionchange) or its
-       * content changes (documentchange). Carries both the summary (name,
-       * skip-state) and the full content payload. The UI replaces its
-       * entire slide-state on receipt.
+       * Posted on slide focus (selectionchange) and content change (documentchange).
+       * The UI replaces its entire slide state on receipt — no merge.
        */
       type: 'slide-loaded';
       summary: SlideSummary;
@@ -311,20 +232,12 @@ export type PluginToUIMessage =
       graphs: GraphItems | null;
     }
   | {
-      /**
-       * Posted when only the slide's summary fields (name, isSkipped)
-       * change — cheaper than a full slide-loaded since content doesn't
-       * need to re-scan.
-       */
+      /** Summary-only change (name, isSkipped) — skips the content re-scan of `slide-loaded`. */
       type: 'slide-summary';
       summary: SlideSummary;
     }
   | {
-      /**
-       * Posted when the user's selection no longer resolves to a slide
-       * (selection cleared, or selected node has no slide ancestor). UI
-       * clears its slide-state and shows the empty prompt.
-       */
+      /** Selection cleared, or the selected node has no slide ancestor. */
       type: 'slide-deselected';
     }
   | {
@@ -334,9 +247,8 @@ export type PluginToUIMessage =
       targetId?: string;
       error?: string;
       /**
-       * Table-only: true when the table content can't fit the slot even at the
-       * minimum font size (it clips at the bottom). The editor surfaces a
-       * warning so the user knows to shorten content or resize the slot.
+       * Table-only: content can't fit the slot even at minimum font size (clips at the
+       * bottom); the editor surfaces a warning.
        */
       tableOverflow?: boolean;
     }
@@ -346,35 +258,18 @@ export type PluginToUIMessage =
   | {
       type: 'image-preview';
       imageWrapId: string;
-      /** PNG/JPG bytes van de huidige ImagePaint; structured-clonable. */
+      /** PNG/JPG bytes of the current ImagePaint; structured-clonable. */
       bytes: Uint8Array;
-      /** Breedte van het image-slot (fill-dragende child) in Figma-pixels. 0 als onbekend. */
+      /** Width of the image slot (the fill-bearing child) in Figma pixels. 0 = unknown. */
       fillW: number;
-      /** Hoogte van het image-slot (fill-dragende child) in Figma-pixels. 0 als onbekend. */
+      /** Height of the image slot (the fill-bearing child) in Figma pixels. 0 = unknown. */
       fillH: number;
     }
-  /**
-   * Initial hydration of recently-picked icons after plugin open.
-   * Sandbox reads from `figma.clientStorage` and posts the array;
-   * `useIconRecents` store calls `setItems(items)`. Empty array on
-   * first run.
-   */
+  /** Hydration of recent icons from `figma.clientStorage` on plugin open; empty array on first run. */
   | { type: 'icon-recents'; items: string[] }
-  /**
-   * Hydration of the first-run onboarding flag. Sandbox reads
-   * `ONBOARDING_SEEN_KEY` from `figma.clientStorage` on `ui-ready` and
-   * posts the boolean. `useOnboarding` opens the modal automatically
-   * when `seen === false`. Missing/unreadable storage is treated as
-   * `seen: false` (first run).
-   */
+  /** First-run onboarding flag; missing or unreadable storage is treated as `seen: false`. */
   | { type: 'onboarding-seen'; seen: boolean }
-  /**
-   * Result of an `export-document` request. Bytes are PDF or PNG
-   * depending on `format`; iframe wraps them in a Blob with the
-   * matching mime type and triggers a download with `filename`.
-   * Failures still go through `target-updated` (ok=false) and surface
-   * via the notifications toast.
-   */
+  /** Successful `export-document` result; failures go through `target-updated` (ok=false) instead. */
   | {
       type: 'document-ready';
       target: 'slide' | 'presentation';
@@ -386,13 +281,9 @@ export type PluginToUIMessage =
       title: string;
     }
   /**
-   * Multi-slide presentation export. Sandbox iterates each non-skipped
-   * SLIDE node, runs exportAsync({ format: 'PDF' }) on each, and posts
-   * the parts as a single message. Iframe uses `pdf-lib` to merge the
-   * single-page PDFs into a multi-page PDF before triggering download.
-   * Necessary because Figma's plugin API exportAsync on a PageNode
-   * produces one giant single-page PDF spanning the canvas grid, not
-   * a multi-page deck.
+   * One single-page PDF per non-skipped slide; the iframe merges them with `pdf-lib`.
+   * Needed because exportAsync on a PageNode yields one giant single-page PDF spanning
+   * the canvas grid, not a multi-page deck.
    */
   | {
       type: 'presentation-pdf-parts';
@@ -402,13 +293,8 @@ export type PluginToUIMessage =
       title: string;
     }
   /**
-   * Per-card visual thumbnail bytes — analogue of `image-preview`
-   * but keyed by `cardNodeId` instead of `imageWrapId`. Sandbox emits
-   * one message per Type=Image (or Type=User) card with a non-null
-   * visualHash, after `slide-loaded`. Iframe converts bytes to a data
-   * URL and renders it as a thumbnail in the card's editor row.
-   * Refreshed on `upload-image` (Vervangen-flow) so the thumbnail
-   * keeps up with replaces.
+   * One per Type=Image/User card with a non-null visualHash, emitted after
+   * `slide-loaded`; refreshed on `upload-image` so the thumbnail follows replaces.
    */
   | {
       type: 'card-visual-preview';
@@ -420,10 +306,9 @@ export type PluginToUIMessage =
       fillH: number;
     }
   /**
-   * Na een instructor-switch: de list-teksten zijn sandbox-side gereset
-   * naar de defaults van de nieuwe variant. Gericht patch-bericht zodat
-   * de iframe alleen deze card bijwerkt — een volledige slide-rescan
-   * (incl. preview-exports) is hier onnodig traag.
+   * After an instructor switch: list texts were reset sandbox-side to the new variant's
+   * defaults. Targeted patch so the iframe updates only this card — a full slide rescan
+   * (incl. preview exports) is needlessly slow here.
    */
   | {
       type: 'instructor-card-updated';

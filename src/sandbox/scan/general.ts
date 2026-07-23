@@ -1,13 +1,3 @@
-// ============================================================
-// scan/general.ts
-//
-// General-tab scan: titel/omschrijving (CopyWrap), badge, slide-image
-// en theme. Bouwt de GeneralSections-payload voor de iframe.
-//
-// FIG-GUARD-01: type-checks vóór property-access.
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import {
   findCopyWrap,
   findBadge,
@@ -34,19 +24,15 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
   const badge = findBadge(slide);
   const imageWrap = findImageWrap(slide);
 
-  // Secties opbouwen; elke null wanneer de wrapper niet bestaat.
   let titleDescription: GeneralSections['titleDescription'] = null;
   if (copyWrap !== null) {
-    // Visibility-aware read (used for accent dim-ranges below — those
-    // require the live TextNode reference). Plain characters are read
-    // regardless of visibility so the iframe can preserve text across
-    // toggle-off-then-on without round-tripping to Figma.
+    // Characters are read regardless of visibility so the iframe can preserve
+    // text across a hide/show cycle; the visible node ref is only needed for
+    // the accent dim-range read below.
     const headingNode = findVisibleTextNodeByName(copyWrap, 'Heading', slide);
     const heading = readTextByName(copyWrap, 'Heading') || '';
-    // `paragraph` is null only when the master has no Paragraph TextNode
-    // at all — that's the "section unsupported" signal. When the node
-    // exists but the section is hidden via showParagraph, we still send
-    // the chars so the toggle can preserve them across off/on cycles.
+    // `paragraph` null = master has no Paragraph TextNode at all (section
+    // unsupported); a hidden-but-present node still sends its chars.
     const paragraphChars = readTextByName(copyWrap, 'Paragraph');
     const paragraph = paragraphChars !== null ? paragraphChars : null;
 
@@ -61,9 +47,8 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
       return n.type === 'INSTANCE' && n.name === 'TypHeading';
     });
     if (headingVisible && typHeading !== null && 'visible' in typHeading) {
-      // Legacy read: pre-CopyWrap-toggle builds hid TypHeading directly.
-      // Keep reflecting that as hidden until the next "on" toggle
-      // normalizes both CopyWrap and TypHeading back to visible.
+      // Legacy: older builds hid TypHeading directly; report that as hidden
+      // until the next "on" toggle normalizes both nodes.
       headingVisible = (typHeading as InstanceNode).visible !== false;
     }
     let paragraphVisible: boolean | null = null;
@@ -71,12 +56,9 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
       const showParagraphValue = readBooleanProperty(copyWrap, 'showParagraph');
       paragraphVisible = showParagraphValue === null ? true : showParagraphValue;
       if (paragraphVisible) {
-        // Node-level read — mirrors the TypHeading legacy read above and
-        // the apply-side fallback in title-description.ts: CopyWraps
-        // without a showParagraph property (or with a stale true value)
-        // carry visibility on the TypParagraph wrapper / Paragraph node
-        // itself. Without this read the toggle reports ON for a hidden
-        // paragraph and bounces back after every off-toggle.
+        // CopyWraps without a showParagraph property (or a stale true) carry
+        // visibility on the TypParagraph wrapper / Paragraph node itself;
+        // without this read the toggle bounces back after every off-toggle.
         const typParagraph = copyWrap.findOne(function (n: SceneNode) {
           return n.type === 'INSTANCE' && n.name === 'TypParagraph';
         });
@@ -99,9 +81,8 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
       showParagraphProp: readBooleanProperty(copyWrap, 'showParagraph'),
     });
 
-    // Dim-range scan — heading-only, silent-fail naar null
-    // wanneer de library onbereikbaar is of het heading-node ontbreekt.
-    // Paragraph-accent is permanent out-of-scope (geen paragraphDim).
+    // Heading-only; paragraph accent is permanently out of scope. Falls back
+    // to null when the library is unreachable or the heading node is missing.
     let headingDim: Array<[number, number]> | null = null;
     if (headingNode !== null) {
       try {
@@ -112,10 +93,8 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
       }
     }
 
-    // Heading-size VARIANT property lives on the nested `TypHeading`
-    // instance inside CopyWrap, not on CopyWrap itself (verified via
-    // Figma MCP — CopyWrap's componentProperties only exposes Badge/
-    // Paragraph toggles; size is a TypHeading-level variant).
+    // The heading-size VARIANT lives on the nested TypHeading instance, not
+    // on CopyWrap itself.
     let size: { current: string; options: ReadonlyArray<string> } | null = null;
     try {
       const headingHost = await resolveTypHeadingSizeHost(copyWrap);
@@ -147,12 +126,9 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
     };
   }
 
-  // Badge visibility — the `Badge_wrap` FRAME inside CopyWrap is the
-  // source of truth (verified via Figma MCP on Welder Templates v0).
-  // Toggling its `.visible` cleanly collapses the badge out of CopyWrap's
-  // auto-layout, which is what the audience expects when the badge is
-  // hidden. Fallback to the `showBadge` BOOLEAN for legacy CopyWraps
-  // that predate the wrap-based pattern.
+  // Badge visibility source of truth is the Badge_wrap FRAME's .visible
+  // (collapses cleanly out of CopyWrap auto-layout); the showBadge BOOLEAN is
+  // a legacy fallback for pre-wrap CopyWraps.
   let badgeVisible: boolean | null = null;
   if (badge !== null && copyWrap !== null) {
     const badgeWrap = copyWrap.findOne(function (n: SceneNode) {
@@ -168,9 +144,8 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
   let badgeSection: GeneralSections['badge'] = null;
   if (badge !== null) {
     const currentBadgeIcon = readBadgeIcon(badge);
-    // Plugin data — same pattern as Card. Survives library republishes
-    // that wipe the slot child. The iframe compares with `icon` and
-    // re-applies on mismatch.
+    // Plugin data survives library republishes that wipe the slot child; the
+    // iframe re-applies the stored pick on mismatch.
     let badgeIconIntended = '';
     try {
       const stored = badge.getSharedPluginData('welder', 'icon');
@@ -180,8 +155,8 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
     } catch (_e) {
       /* silent */
     }
-    // Backfill: if no record yet but the slot already shows a real
-    // icon, capture it so the next library update can reconcile.
+    // Backfill: capture a visible icon without a record so the next library
+    // update can reconcile.
     if (
       !isDevModeRuntime() &&
       badgeIconIntended.length === 0 &&
@@ -217,19 +192,16 @@ export async function scanGeneral(slide: InstanceNode): Promise<GeneralSections 
 
   const themeSection = await scanTheme(slide);
 
-  // "Show Confidental" — BOOLEAN component property on the Slide instance
-  // itself (controls the ConfidentalBadgeWrap). null when the slide's
-  // component has no such property → the editor hides the toggle. The node
-  // is spelled "Confidental" in the library; fall back to the correct
-  // spelling in case a future master fixes it.
+  // "Show Confidental" is the library's actual (misspelled) property name;
+  // the corrected spelling is a fallback for a future master rename. null =
+  // the slide's component lacks the property and the editor hides the control.
   let confidentialProp = readBooleanProperty(slide, 'Show Confidental');
   if (confidentialProp === null) {
     confidentialProp = readBooleanProperty(slide, 'Show Confidential');
   }
-  // Variant lives on the nested ConfidentalBadge instance (NOT exposed on the
-  // Slide instance — confirmed via runtime: the slide only exposes the
-  // `Show Confidental` boolean). Read the current variant + the available
-  // options so the editor dropdown reflects whatever the designer defines.
+  // The Variant is NOT exposed on the Slide instance — it lives on the nested
+  // ConfidentalBadge. Options are read from its component set so the dropdown
+  // mirrors whatever the designer defines.
   let confidentialSection: GeneralSections['confidential'] = null;
   if (confidentialProp !== null) {
     let variant: string | null = null;

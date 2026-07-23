@@ -1,24 +1,6 @@
-// ============================================================
-// editors/chart/bars.ts
-//
-// Bar-chart-builder: verticale (gegroepeerde) bars via
-// auto-layout. Per categorie een kolom-groep met per serie één bar;
-// hoogtes schalen tegen de hoogste waarde over alle series. Waarde-
-// labels boven de bars (showValues), categorie-labels eronder,
-// serie-legenda erboven bij meerdere series (showLegend).
-// Delta-badges (showDelta): onder het waarde-label van serie 0
-// de verandering t.o.v. de vorige categorie (▲ +12% / ▼ −5%).
-//
-// Hard overflow-budget (meet-dan-reserveer, à la het box-layout
-// van Chart.js/Highcharts): alle niet-plot-elementen worden eerst
-// GEMETEN (tekst-probes + echte delta-nodes), de bar-zone krijgt
-// exact wat overblijft. Past het niet, dan degradeert de chart in
-// vaste volgorde (waarde-labels → delta-badges → legenda) i.p.v. de
-// kaart uit te lopen. Breedte heeft een harde band-fit + gemeten
-// backstop zodat de groepen contentW nooit overschrijden.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Overflow is measure-then-reserve (cf. Chart.js/Highcharts box layout): non-plot
+// elements are measured first, the bar zone gets the remainder, and on overflow the
+// chart degrades in fixed order (value labels → deltas → legend) instead of overrunning.
 
 import type { ChartWrapModel } from '../../../shared/types';
 import {
@@ -31,22 +13,20 @@ import { buildLegend, ChartTheme, LegendEntry, truncateToWidth } from './legend'
 import { buildDeltaNode, DeltaBadgeContext } from './delta-badge';
 import { probeTextHeight } from '../_shared/fonts';
 
-/** Verticale ruimte tussen waarde-label / delta-badge / bar in een kolom. */
 const COL_GAP = 6;
-/** Minimaal leesbare bar-zone; daaronder degraderen i.p.v. clippen. */
+/** Smallest readable plot height; below it features degrade instead of clipping. */
 const MIN_PLOT_H = 48;
-/** Absolute bar-breedte-vloer (antialiasing-grens, research ≥2-4px). */
+/** Bar-width floor: thinner bars antialias into near-invisibility. */
 const MIN_BAR_W = 2;
-/** Platte baseline-markering voor exacte 0 (Highcharts minPointLength). */
+/** Flat marker height for exact-zero values (cf. Highcharts minPointLength). */
 const ZERO_BAR_H = 3;
 
-/** Best-effort batch-opruimen (degradatie-paden). */
 function removeNodes(nodes: SceneNode[]): void {
   for (let i = 0; i < nodes.length; i++) {
     try {
       nodes[i].remove();
     } catch (_e) {
-      /* al verwijderd */
+      /* already removed */
     }
   }
 }
@@ -74,7 +54,6 @@ export function buildBars(
   root.resize(contentW, contentH);
   const rootGap = root.itemSpacing;
 
-  // ---- Meten — legenda (gewrapt), tekst-probes, echte delta-nodes.
   let legend: FrameNode | null = null;
   if (model.showLegend && seriesCount > 1) {
     const entries: LegendEntry[] = [];
@@ -84,8 +63,8 @@ export function buildBars(
         color: ramp[s % ramp.length],
       });
     }
-    // Gewrapte horizontale rij met hoogte-budget: buildLegend
-    // degradeert zelf (korps → delta's → '+N meer') tot het past.
+    // buildLegend degrades itself (font size → deltas → '+N more') until it fits
+    // the height budget.
     legend = buildLegend(
       entries,
       theme,
@@ -113,10 +92,8 @@ export function buildBars(
       )
     : 0;
 
-  // ---- Breedte-budget — bandverdeling met harde fit. De d3-
-  // scaleBand-gedachte blijft (groep ~80% van zijn step, bar ~90% van
-  // zijn serie-slot, cap ~12% contentW), maar bars/gaps krimpen door
-  // tot de groep ALTIJD binnen zijn band past (vloer MIN_BAR_W).
+  // Band layout à la d3 scaleBand (group ~80% of its step, bar cap ~12% of contentW),
+  // but bars and gaps shrink until the group always fits its band (floor MIN_BAR_W).
   const step = contentW / Math.max(1, catCount);
   const minGroupGap = catCount > 1 ? 2 : 0;
   const groupBudget = Math.max(seriesCount * MIN_BAR_W, Math.floor(step) - minGroupGap);
@@ -132,27 +109,21 @@ export function buildBars(
   if (barW > maxBarW) barW = maxBarW;
   let barsW = seriesCount * barW + (seriesCount - 1) * barGap;
   if (barsW > groupBudget) {
-    // Krappe band (veel categorieën × series): gap naar 1px en bars
-    // krimpen tot de fit klopt — nooit de band uitlopen.
     if (seriesCount > 1) barGap = 1;
     barW = Math.floor((groupBudget - (seriesCount - 1) * barGap) / seriesCount);
     if (barW < MIN_BAR_W) barW = MIN_BAR_W;
     barsW = seriesCount * barW + (seriesCount - 1) * barGap;
   }
-  // Categorie-label mag zijn band niet uitlopen; breder wordt afgekapt.
   const maxLabelW = Math.max(
     barsW,
     Math.floor(step) - Math.max(minGroupGap, Math.min(16, Math.round(step * 0.1))),
   );
-  // Waarde-label-budget per kolom (research: "hide when it doesn't
-  // fit") — een breder label zou de auto-layout-kolom oprekken en de
-  // bandverdeling laten overlopen.
+  // A value label wider than this would stretch its auto-layout column and break the
+  // band layout, so wider labels are dropped instead.
   const availValueW = seriesCount > 1 ? barW + barGap : maxLabelW;
 
-  // Delta-nodes vooraf bouwen mét band-breedte-cap: het verticale
-  // budget rekent met de ECHTE node-hoogte (badge-clone ≈ labelSize*1.4,
-  // tekst-fallback lager) i.p.v. een aanname per route, en de engine
-  // degradeert te brede badges zelf naar een afgekapte tekst-variant.
+  // Deltas are built up front so the vertical budget uses the real node height (badge
+  // clone vs lower text fallback) instead of a per-route assumption.
   const deltaNodes: (SceneNode | null)[] = [];
   let deltaH = 0;
   if (model.showDelta === true) {
@@ -164,8 +135,7 @@ export function buildBars(
     deltaH = Math.ceil(deltaH);
   }
 
-  // Fit-voorcheck via één herbruikbare probe: past er ÜBERHAUPT
-  // een waarde-label/badge, anders vervalt de verticale reservering.
+  // If no value label fits anywhere, the vertical reservation is dropped entirely.
   let anyValueFits = false;
   if (model.showValues) {
     const wProbe = figma.createText();
@@ -187,9 +157,6 @@ export function buildBars(
     if (n !== null && n.width <= maxLabelW) anyDeltaFits = true;
   }
 
-  // ---- Verticaal budget — plot = contentH minus ALLE gemeten
-  // niet-plot-hoogtes en gaps. Zakt de bar-zone onder MIN_PLOT_H, dan
-  // degraderen in vaste volgorde i.p.v. clippen.
   const groupGap = Math.round(labelSize * 0.5);
   let valuesOn = model.showValues && valueH > 0 && anyValueFits;
   let deltaOn = model.showDelta === true && deltaH > 0 && anyDeltaFits;
@@ -207,8 +174,8 @@ export function buildBars(
     return h;
   };
 
-  // Disproportioneel hoge (gewrapte) legenda eerst weg — eet anders de
-  // hele plot op smalle kaarten op (Highcharts responsive rule 1).
+  // A disproportionately tall wrapped legend goes first — otherwise it eats the
+  // whole plot on narrow cards.
   if (legendOn && legend !== null && legend.height + rootGap > contentH * 0.4) {
     legend.remove();
     legend = null;
@@ -228,7 +195,7 @@ export function buildBars(
         try {
           n.remove();
         } catch (_e) {
-          /* al verwijderd */
+          /* already removed */
         }
         deltaNodes[i] = null;
       }
@@ -236,23 +203,20 @@ export function buildBars(
   }
 
   const plotH = Math.max(4, contentH - overheadH());
-  // Vaste rij-hoogte voor ELKE groep: bar-max + gemeten top-stapel.
-  // Kolommen zijn bottom-aligned binnen de rij, dus alle bars delen
-  // exact dezelfde baseline en niets steekt boven de rij uit.
+  // Same fixed row height for every group: columns are bottom-aligned within it, so
+  // all bars share one baseline and nothing pokes above the row.
   const rowH = plotH + topStackH();
 
-  // Plot-rij: per categorie een groep op zijn band-center.
   const plot = figma.createFrame();
   plot.name = 'Plot';
   plot.layoutMode = 'HORIZONTAL';
   plot.primaryAxisSizingMode = 'FIXED';
   plot.counterAxisSizingMode = 'FIXED';
   plot.primaryAxisAlignItems = 'CENTER';
-  // MIN i.p.v. MAX: alle bar-rijen zijn even hoog (rowH), dus
-  // top-uitlijnen houdt de baselines gelijk én laat de (per categorie
-  // licht variërende) labelhoogte binnen de catLabelH-zone vallen.
+  // MIN, not MAX: all bar rows share rowH, so top-aligning keeps baselines equal while
+  // the slightly varying label heights stay inside the catLabelH zone.
   plot.counterAxisAlignItems = 'MIN';
-  plot.itemSpacing = 0; // na het bouwen gemeten gezet (zie backstop)
+  plot.itemSpacing = 0; // set from measured widths after building (see backstop)
   plot.fills = [];
   plot.resize(contentW, rowH + groupGap + catLabelH);
 
@@ -280,8 +244,6 @@ export function buildBars(
 
     for (let s = 0; s < seriesCount; s++) {
       const value = model.series[s].values[i];
-      // Exacte 0 rendert een platte baseline-markering; kleine-
-      // maar-niet-nul waarden minimaal dezelfde zichtbare hoogte.
       const barH =
         value === 0 ? ZERO_BAR_H : Math.max(ZERO_BAR_H, Math.round((value / max) * plotH));
 
@@ -309,8 +271,6 @@ export function buildBars(
             theme.textVar,
           ),
         ];
-        // Past het label niet in zijn kolom-budget → laten vallen
-        // (Highcharts allowOverlap=false-gedrag), nooit de band oprekken.
         if (valueText.width > availValueW) {
           valueText.remove();
         } else {
@@ -319,16 +279,14 @@ export function buildBars(
         }
       }
 
-      // Delta-badge: alleen serie 0, override-aware via engine.
       if (deltaOn && s === 0) {
         const deltaNode = deltaNodes[i];
         if (deltaNode !== null) {
           if (deltaNode.width > maxLabelW) {
-            // Badge breder dan de band → vervalt i.p.v. overlopen.
             try {
               deltaNode.remove();
             } catch (_e) {
-              /* al verwijderd */
+              /* already removed */
             }
             deltaNodes[i] = null;
           } else {
@@ -366,8 +324,7 @@ export function buildBars(
         theme.textVar,
       ),
     ];
-    // Single-line ellipsen (maxLines 1): de oude HEIGHT-zonder-
-    // maxLines-route liet lange labels wikkelen en blies catLabelH op.
+    // Truncate to a single line: a wrapping label would blow past the measured catLabelH.
     if (label.width > maxLabelW) {
       truncateToWidth(label, maxLabelW);
     }
@@ -376,9 +333,8 @@ export function buildBars(
     plot.appendChild(group);
   }
 
-  // ---- Backstop: GEMETEN totaalbreedte mag contentW nooit
-  // overschrijden (kolommen kunnen door labels/badges breder zijn dan
-  // barW). Drop-volgorde: waarde-labels → delta-badges.
+  // Backstop: labels/badges can make columns wider than barW, so re-measure and drop
+  // value labels, then deltas, until the total fits contentW.
   const measureGroups = function (): number {
     let w = 0;
     for (let c = 0; c < plot.children.length; c++) w += plot.children[c].width;
@@ -395,9 +351,8 @@ export function buildBars(
     appendedDeltas.length = 0;
     sumGroups = measureGroups();
   }
-  // Band-center-spacing uit GEMETEN groepsbreedtes: gap = step minus
-  // gemiddelde groep → totaal ≤ contentW met halve gaps aan de randen
-  // (CENTER), nooit edge-pinned zoals bij SPACE_BETWEEN.
+  // gap = step minus average measured group width; with CENTER alignment that leaves
+  // half-gaps at the edges instead of SPACE_BETWEEN's edge-pinned groups.
   let groupSpacing = 0;
   if (catCount > 1) {
     groupSpacing = Math.floor((contentW - sumGroups) / catCount);

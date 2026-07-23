@@ -1,14 +1,5 @@
-// ============================================================
-// editors/chart/delta-badge.ts
-//
-// Chart-specifieke wrapper rond de gedeelde delta-badge-bouwer
-// (editors/_shared/delta-badge-node.ts). Levert de chart-context
-// (Badge-template + theme + labelSize) en vertaalt categorie-index naar
-// de delta-tekst via chartDeltaDisplay; de badge-clone/tekst-degradatie
-// zelf zit in de gedeelde module zodat tabellen dezelfde styling delen.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Badge cloning and text-fallback degradation live in the shared builder
+// (_shared/delta-badge-node) so tables and charts keep identical badge styling.
 
 import type { ChartWrapModel } from '../../../shared/types';
 import { chartDeltaDisplay } from '../../../shared/chart-calculations';
@@ -16,12 +7,12 @@ import type { ChartTheme } from './legend';
 import { findDeltaBadgeTemplate, buildDeltaBadgeNode } from '../_shared/delta-badge-node';
 
 export interface DeltaBadgeContext {
-  /** Omsluitende Slide-INSTANCE (mode-context + Badge-template-bron). */
+  /** Enclosing slide instance: supplies variable-mode context and the Badge template. */
   slide: SceneNode;
   model: ChartWrapModel;
   theme: ChartTheme;
   labelSize: number;
-  /** Badge-template, één keer per apply gezocht; null → tekst-variant. */
+  /** Looked up once per apply; null → plain-text fallback. */
   badgeTemplate: InstanceNode | null;
 }
 
@@ -41,12 +32,10 @@ export function createDeltaContext(
 }
 
 /**
- * Delta-node voor categorie i (serie 0), of null wanneer er geen delta is
- * (eerste categorie zonder override, beide waarden 0, ...). De caller
- * appendt en positioneert; de node meet zichzelf (HUG/auto-resize).
- *
- * Optionele budgetten: maxW (kolom-cap) en maxH (rij-cap). Een badge-clone
- * die er na rescale niet in past degradeert naar de tekst-variant.
+ * Returns null when there is no delta to show (first category without
+ * override, both values 0). Caller appends and positions; the node hugs its
+ * content. A badge clone still exceeding maxW/maxH after rescale degrades
+ * to the text variant.
  */
 export function buildDeltaNode(
   ctx: DeltaBadgeContext,

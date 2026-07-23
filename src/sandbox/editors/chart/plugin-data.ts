@@ -1,14 +1,5 @@
-// ============================================================
-// editors/chart/plugin-data.ts
-//
-// Chart-model persistentie op de ChartWrap-Slot. Anders dan de tabel
-// (canvas-truth) is het chart-model pluginData-truth: arcs/vectors
-// zijn niet betrouwbaar terug te scannen, dus applyChart schrijft het
-// volledige genormaliseerde model als JSON en scanChartSlot leest het
-// daar terug. Marker: kind 'welder-chartwrap', v '1'.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// The chart model is pluginData-truth (unlike the table's canvas-truth): arcs/vectors
+// can't be reliably re-scanned, so the full normalized model persists as JSON on the slot.
 
 import type { ChartWrapModel } from '../../../shared/types';
 import { emptyChartModel, normalizeChartModel } from '../../../shared/chart-calculations';

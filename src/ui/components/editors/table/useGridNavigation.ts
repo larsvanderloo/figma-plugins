@@ -1,5 +1,3 @@
-// useGridNavigation — input refs, active-cell state and keyboard/pointer focus handling for TableGrid.
-
 import { nextTick, onBeforeUpdate, ref, type ComputedRef } from 'vue';
 import type { TableRowModel } from '../../../../shared/types';
 import { bulletEnter } from '../../../../shared/table-bullets';
@@ -165,8 +163,6 @@ export function useGridNavigation(
     }
 
     if (event.key === 'Enter') {
-      // Cmd/Ctrl+Enter adds a row after the current one and moves into it —
-      // the explicit "next row" gesture.
       if (event.metaKey || event.ctrlKey) {
         event.preventDefault();
         emit('add-row-after', row);
@@ -174,10 +170,8 @@ export function useGridNavigation(
         return;
       }
       if (event.shiftKey || event.altKey) return;
-      // Apple-Notes lijst-gedrag: binnen een gemarkeerde lijst (bullet,
-      // vinkje of kruisje) vervolgt Enter de lijst met een verse marker van
-      // hetzelfde type; op een lege marker-regel exit hij de lijst. Buiten
-      // een lijst returnt bulletEnter() null en is Enter een gewone newline.
+      // Apple-Notes list behavior: Enter continues a marked list with a fresh marker,
+      // exits on an empty marker line; outside a list bulletEnter() returns null → plain newline.
       const target = event.target;
       if (target instanceof HTMLTextAreaElement) {
         const result = bulletEnter(target.value, target.selectionStart);

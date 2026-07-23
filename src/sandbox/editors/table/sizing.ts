@@ -1,15 +1,3 @@
-// ============================================================
-// editors/table/sizing.ts
-//
-// Breedte- en truncation-helpers voor de tabel-renderer: render-width
-// resolutie (slot-truth met surface-fallback), het cell-budget voor
-// content-weighted autofit, de CellSpec-matrix voor `column-autofit`,
-// het toepassen van de berekende kolom-breedtes en de post-FILL
-// body-truncation pass.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import type { TableRowModel, TableColumnSummary } from '../../../shared/types';
 import { tableWidthForSurface } from '../../../shared/constants';
 import type { CellSpec } from './column-autofit';
@@ -72,9 +60,8 @@ export function buildColumnSpecs(
         fontSize = sizes.body;
       }
       const spec: CellSpec = { text: text, font: font, fontSize: fontSize };
-      // Vinkje/badge nemen ruimte op de waarderegel in — meet ze mee, in
-      // lockstep met buildCell (icoon = 1em + 0.35em gap; chip meet zijn
-      // label + padding in cellContribution).
+      // Checks and badges take width on the value line; measure them in lockstep with
+      // buildCell (icon = 1em + 0.35em gap; badge label + padding via cellContribution).
       if (!isHeader && cell !== null) {
         if (cell.check === true || cell.check === false) {
           spec.leadWidth = Math.round(fontSize) + Math.round(fontSize * 0.35);
@@ -114,33 +101,23 @@ export function applyColumnSizing(rowFrame: FrameNode, colWidths: number[]): voi
       try {
         cellFrame.layoutSizingHorizontal = 'FIXED';
       } catch (_e) {
-        /* silent */
       }
       try {
         cellFrame.resize(colWidths[j], cellFrame.height);
       } catch (_e) {
-        /* silent */
       }
     } else {
       try {
         cellFrame.layoutSizingHorizontal = 'FILL';
       } catch (_e) {
-        /* silent */
       }
     }
   }
 }
 
-/**
- * Cell-sizing pass voor body-rijen. Cell HUGt verticaal (volgt zijn tekst);
- * de rij HUGt op de hoogste cel zodat lange gewrapte waarden niet mid-regel
- * clippen. De waarde-TEXT FILLt horizontaal zodat hij op cell-breedte WRAPt
- * i.p.v. de kolom open te duwen, en HEIGHT-autoresize laat zijn hoogte met het
- * aantal wrap-regels meegroeien.
- *
- * Bewust GEEN FILL-vertical of textTruncation meer: rijen mogen verticaal
- * groeien (HUG) en lange celwaarden wrappen over meerdere regels.
- */
+// Deliberately no vertical FILL or textTruncation: rows HUG their tallest cell so long
+// wrapped values grow the row instead of clipping, and the value TEXT FILLs horizontally
+// so it wraps at cell width rather than pushing the column open.
 export function applyBodyTruncation(bodyRows: FrameNode[]): void {
   for (var r = 0; r < bodyRows.length; r++) {
     var row = bodyRows[r];
@@ -150,7 +127,7 @@ export function applyBodyTruncation(bodyRows: FrameNode[]): void {
       if (cell.type !== 'FRAME') continue;
       var cellFrame = cell as FrameNode;
 
-      // Delta-cellen (VERTICAL waarde+badge-stack) HUGen al; overslaan.
+      // Delta cells (vertical value+badge stack) already HUG; skip them.
       if (cellFrame.getPluginData('delta') !== '') continue;
 
       var t = cellFrame.findOne(function (n: SceneNode): boolean {
@@ -159,17 +136,13 @@ export function applyBodyTruncation(bodyRows: FrameNode[]): void {
       if (t === null || t.type !== 'TEXT') continue;
 
       var textNode = t as TextNode;
-      // Text wrapt op cell-breedte: HEIGHT-autoresize houdt de breedte
-      // extern (FILL) en laat de hoogte met het aantal regels meegroeien.
       try {
         textNode.layoutSizingHorizontal = 'FILL';
       } catch (_e) {
-        /* silent */
       }
       try {
         textNode.textAutoResize = 'HEIGHT';
       } catch (_e) {
-        /* silent */
       }
     }
   }

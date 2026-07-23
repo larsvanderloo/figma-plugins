@@ -1,18 +1,7 @@
-// useIconReconcile — top-level watcher that auto-restores Card and
-// Badge icons after a library republish wipes their icon-slot child
-// overrides. Lives at App.vue scope (always mounted) so it doesn't
-// depend on the user opening the matching tab/panel — earlier it sat
-// inside useCardEditor / useBadgeEditor and only fired when those
-// panels were already mounted, which meant the user had to click the
-// Onderdelen tab for cards to reconcile.
-//
-// Mechanism: watches the per-slide `content.cards` array and the
-// `general.badge` object. Both are replaced wholesale by the sandbox
-// on every `slide-loaded` message. When `iconIntended !== icon` (the
-// slot was reset by a master republish), re-emit the same update path
-// a manual pick uses; sandbox refreshes the slot and re-writes plugin
-// data (idempotent). The optimistic local sync prevents the next
-// slide-load from re-firing while the round-trip is in flight.
+// Auto-restores Card/Badge icons after a library republish resets their icon slots.
+// Runs at App.vue scope, not inside the editor composables, so it fires without the
+// matching panel being mounted. The optimistic `icon = iconIntended` sync prevents
+// the next slide-load from re-firing while the sandbox round-trip is in flight.
 
 import { watch } from 'vue';
 import { usePluginView } from '../stores/usePluginView';
@@ -23,7 +12,6 @@ export function useIconReconcile(): void {
   const view = usePluginView();
   const bridge = usePluginBridge();
 
-  // ── Cards ──
   watch(
     () => view.state.content?.cards ?? null,
     function (cards) {
@@ -53,7 +41,6 @@ export function useIconReconcile(): void {
     { immediate: true },
   );
 
-  // ── Badge ──
   watch(
     () => view.state.general?.badge ?? null,
     function (b) {

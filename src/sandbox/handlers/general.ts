@@ -1,13 +1,3 @@
-// ============================================================
-// sandbox/handlers/general.ts
-//
-// General-tab messages: titel/omschrijving + badge (update-general),
-// heading-accent (update-accent), typografie-zichtbaarheid en de
-// CopyWrap Size-variant.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { debugLog } from '../../shared/debug';
 import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideById } from '../slides';
@@ -19,22 +9,17 @@ import { findVisibleTextNodeByName, resolveTypHeadingSizeHost } from '../scan/re
 import { refreshTablesOnSlide, refreshChartsOnSlide } from '../scan/graphs';
 import type { UIToPluginMessage } from '../../shared/types';
 
-// Alleen update-general loopt door deze ketting: live titel-typen post
-// per ~200ms en de refreshTables/ChartsOnSlide daarin doet een
-// clear+rebuild die met de volgende burst kan interleaven (main.ts
-// dispatcht fire-and-forget). De overige handlers hier zijn discrete
-// klik-acties (toggle/variant) die zichzelf niet in bursts opvolgen, en
-// accent-writes moeten juist NIET achter een trage tabel-refresh
-// wachten — die blijven dus buiten de ketting.
+// Serializes update-general only: main.ts dispatches fire-and-forget, so live-typing
+// bursts (~200ms apart) can interleave with the previous table/chart clear+rebuild.
+// Accent writes stay outside the queue — they must not wait behind a slow table refresh.
 let queue: Promise<void> = Promise.resolve();
 
 function noop(): void {}
 
 function enqueue(work: () => Promise<void>): Promise<void> {
   const run = queue.then(work);
-  // Een rejection mag de ketting niet vergiftigen — de volgende apply
-  // moet gewoon starten. De caller ziet de rejection alsnog via `run`
-  // (main.ts post daarop de error-ack).
+  // A rejection must not poison the chain; the caller still sees it via `run`
+  // (main.ts posts the error-ack on that).
   queue = run.then(noop, noop);
   return run;
 }
@@ -62,16 +47,12 @@ async function runUpdateGeneral(
   if (msg.section === 'titleDescription') {
     const payload = msg.payload;
     figma.commitUndo();
-    // Mark BEFORE apply: the apply chain triggers documentchange events
-    // that arm postSlideContent's 200ms debounce. If apply takes longer
-    // than 200ms (multi-text + auto-layout reflow), the debounce can
-    // fire before apply completes. Marking pre-apply opens the window
-    // early so the debounced scan still skips. We also mark post-apply
-    // to extend the window past completion.
+    // Mark before apply: documentchange events arm postSlideContent's 200ms debounce,
+    // which can fire mid-apply; marking pre- and post-apply keeps the self-write window open.
     markSelfWrite();
     await applyTitleDescription(slide, payload);
-    await refreshTablesOnSlide(slide); // Re-render tables na CopyWrap-edit
-    await refreshChartsOnSlide(slide); // Idem voor charts
+    await refreshTablesOnSlide(slide);
+    await refreshChartsOnSlide(slide);
     markSelfWrite();
     postToUI({
       type: 'target-updated',
@@ -82,9 +63,7 @@ async function runUpdateGeneral(
   }
   if (msg.section === 'badge') {
     const payload = msg.payload;
-    // commitUndo before each plugin mutation creates a discrete
-    // checkpoint so the iframe's plugin-Undo button reverts EXACTLY
-    // this action (and not a coalesced batch with whatever followed).
+    // Discrete undo checkpoint: plugin-Undo reverts exactly this action, not a coalesced batch.
     figma.commitUndo();
     markSelfWrite();
     await applyBadge(slide, payload);
@@ -102,7 +81,7 @@ async function runUpdateGeneral(
 export async function handleUpdateAccent(
   msg: Extract<UIToPluginMessage, { type: 'update-accent' }>,
 ): Promise<void> {
-  // Heading-only. Paragraph-accent permanent out-of-scope.
+  // Heading only; paragraph accent is permanently out of scope.
   const slide = await findSlideById(msg.slideId);
   if (slide === null) {
     postToUI({
@@ -143,8 +122,7 @@ export async function handleUpdateAccent(
   const applyStartedAt = Date.now();
   await applyAccentRanges(headingNode, msg.dimRanges);
   const applyMs = Date.now() - applyStartedAt;
-  // Fill-only accent writes do not alter CopyWrap geometry; table refresh is
-  // reserved for text/size mutations that can actually reflow layout.
+  // Fill-only accent writes don't change geometry, so no table/chart refresh here.
   markSelfWrite();
   debugLog('accent', 'sandbox:done', {
     slideId: msg.slideId,
@@ -173,10 +151,8 @@ export async function handleSetTypographyVisibility(
   markSelfWrite();
   try {
     if (msg.field === 'badge') {
-      // Badge visibility binds to the `Badge_wrap` FRAME inside
-      // CopyWrap — toggling that wrapper collapses the badge out of
-      // CopyWrap's auto-layout cleanly. Legacy fallback: setProperties
-      // on the `showBadge` BOOLEAN for older masters without the wrap.
+      // Toggle the Badge_wrap FRAME so the badge collapses out of CopyWrap's auto-layout;
+      // older masters without the wrap fall back to the `showBadge` BOOLEAN property.
       const cw = findCopyWrap(visSlide);
       if (cw !== null) {
         const badgeWrap = cw.findOne(function (n: SceneNode) {
@@ -249,8 +225,8 @@ export async function handleSetCopywrapSize(
     });
     return;
   }
-  // Same resolver as the read-side: the actual VARIANT host is the
-  // nested TypHeading instance (legacy fallback to CopyWrap-level).
+  // Same resolver as the read side: the actual variant host is the nested TypHeading
+  // instance (legacy fallback: CopyWrap-level).
   const sizeHostInfo = await resolveTypHeadingSizeHost(copyWrapForSize);
   if (sizeHostInfo === null) {
     postToUI({

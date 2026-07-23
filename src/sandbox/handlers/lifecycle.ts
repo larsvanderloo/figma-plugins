@@ -1,46 +1,27 @@
-// ============================================================
-// sandbox/handlers/lifecycle.ts
-//
-// Plugin-lifecycle messages: ui-ready (init + eerste slide-load +
-// clientStorage-hydrates), resize-ui, de clientStorage-persists
-// (icon-recents, onboarding-seen) en close.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { getRuntimeInfo } from '../runtime';
 import { postToUI } from '../bridge';
 import { findFocusedWelderSlide } from '../slides';
 import { emitSlideLoaded } from '../session';
 import type { UIToPluginMessage } from '../../shared/types';
 
-/** clientStorage key for the user's recently-picked icon names (max 8). */
 const ICON_RECENTS_KEY = 'icon-recents';
 
-/**
- * clientStorage key for the first-run onboarding flag. Versioned suffix:
- * bumping `-v1` → `-v2` re-triggers the walkthrough for every user when
- * a refreshed onboarding ships. Old keys can be left orphaned (single
- * boolean per user — no quota concern).
- */
+// Versioned suffix: bump -v1 to -v2 to re-trigger onboarding for every user;
+// orphaned old keys are fine (one boolean per user, no quota concern).
 const ONBOARDING_SEEN_KEY = 'welder-onboarding-seen-v1';
 
 export async function handleUiReady(
   _msg: Extract<UIToPluginMessage, { type: 'ui-ready' }>,
 ): Promise<void> {
-  // Selection-driven: post init, then if there's a currently-focused
-  // slide on the active page, scan + emit slide-loaded. Otherwise the
-  // iframe stays in its empty state until the user clicks a slide.
   postToUI({ type: 'init', runtime: getRuntimeInfo() });
 
+  // No focused slide: the iframe deliberately stays empty until the user selects one.
   const focused = findFocusedWelderSlide();
   if (focused !== null) {
     await emitSlideLoaded(focused);
   }
 
-  // Hydrate icon-recents from clientStorage. Fire-and-forget; init
-  // doesn't block on it. UI shows an empty Recents row until this
-  // resolves (typically <50ms).
+  // Deliberately not awaited so init never blocks on clientStorage.
   figma.clientStorage
     .getAsync(ICON_RECENTS_KEY)
     .then((value: unknown) => {
@@ -52,8 +33,6 @@ export async function handleUiReady(
       postToUI({ type: 'icon-recents', items: [] });
     });
 
-  // Hydrate the first-run onboarding flag. Missing/unreadable storage
-  // is treated as `seen: false` so the UI shows the walkthrough.
   figma.clientStorage
     .getAsync(ONBOARDING_SEEN_KEY)
     .then((value: unknown) => {
@@ -69,9 +48,8 @@ export async function handleUiReady(
 export function handleSetIconRecents(
   msg: Extract<UIToPluginMessage, { type: 'set-icon-recents' }>,
 ): void {
-  // Fire-and-forget. `useIconRecents` is the source of truth in the
-  // iframe; clientStorage is a persistence sink. A failed write only
-  // affects the next plugin open.
+  // The iframe (`useIconRecents`) is the source of truth; clientStorage is only
+  // a persistence sink, so a failed write merely affects the next plugin open.
   figma.clientStorage.setAsync(ICON_RECENTS_KEY, msg.items).catch((err: unknown) => {
     console.log('[welder-slide-editor] icon-recents save failed:', err);
   });
@@ -90,11 +68,8 @@ export function handleSetOnboardingSeen(
 export function handleResizeUi(
   msg: Extract<UIToPluginMessage, { type: 'resize-ui' }>,
 ): void {
-  // Apply the new size on every drag event so the iframe tracks the
-  // user's pointer 1:1; persist asynchronously so a write storm
-  // during drag doesn't block UI updates. clientStorage drops
-  // intermediate writes naturally — only the latest in-flight value
-  // matters for restore.
+  // Resize synchronously so the iframe tracks the drag 1:1; persist async so the
+  // write storm during a drag never blocks it — only the last size matters for restore.
   const w = Math.max(320, Math.min(2000, Math.round(msg.width)));
   const h = Math.max(400, Math.min(2000, Math.round(msg.height)));
   try {

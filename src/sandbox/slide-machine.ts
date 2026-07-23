@@ -1,50 +1,17 @@
-// ============================================================
-// Welder Slide Editor — Slide Machine Selectors
-//
-// Pure synchrone helpers die (a) Slide Machine-slides op de huidige
-// pagina vinden en (b) binnen zo'n slide de verschillende wrapper-
-// instances lokaliseren (CopyWrap / Badge / ImageWrap / CardWrap /
-// ChartWrap / TableWrap).
-//
-// Conventies:
-//   - Alle selectors geven `InstanceNode | null` terug (niet undefined).
-//   - Traversal binnen een slide is O(descendants); een slide heeft
-//     typisch <300 descendants dus findAll is OK.
-//   - Paginaniveau gebruikt `findAll` met een strikte predicate
-//     (INSTANCE + name='Slide' + 1920x1080) zodat we óók slides vinden
-//     die in Figma Slides editor binnen SlideNode-containers genest zijn.
-//   - Geen mutaties, geen async calls, geen figma.ui-interactie.
-// ============================================================
+// Selectors are pure and synchronous by contract: no mutations, no async,
+// no figma.ui interaction.
 
 import type { SlideSummary } from '../shared/types';
 import type { SurfaceSignature } from '../shared/constants';
 import { SURFACE_SIGNATURES } from '../shared/constants';
 
-// ============================================================
-// Slide-detectie
-// ============================================================
-
-/**
- * Type-guard — vertelt TS dat `node` een bewerkbare surface-instance is
- * (Slide of Whitepaper). Match-criteria:
- *   - type === 'INSTANCE'
- *   - name + exacte afmetingen matchen één van SURFACE_SIGNATURES:
- *       'Slide'      1920×1080
- *       'Whitepaper' 1240×1754
- *
- * Figma geeft width/height als number met subpixel-floats bij geschaalde
- * instances; de Slide Machine-surfaces blijven exact op hun maat, dus de
- * strikte gelijkheid filtert per ongeluk geschaalde instances uit.
- */
 export function isSlide(node: SceneNode): node is InstanceNode {
   return matchSurfaceSignature(node) !== null;
 }
 
 /**
- * Geeft de SurfaceSignature terug die `node` matcht (Slide of Whitepaper),
- * of null wanneer het geen herkende surface-instance is. `isSlide` is een
- * dunne type-guard hierboven; callers die WELKE surface nodig hebben
- * (bv. de table-renderer voor per-surface breedte-presets) gebruiken deze.
+ * Strict width/height equality is deliberate: Figma reports subpixel floats
+ * for scaled instances, so exact-size matching filters out scaled copies.
  */
 export function matchSurfaceSignature(node: SceneNode): SurfaceSignature | null {
   if (node.type !== 'INSTANCE') return null;
@@ -57,26 +24,11 @@ export function matchSurfaceSignature(node: SceneNode): SurfaceSignature | null 
   return null;
 }
 
-/**
- * Wandelt vanaf `node` (inclusief) omhoog door de parent-keten en geeft de
- * naam terug van de eerste omsluitende surface-INSTANCE (Slide/Whitepaper).
- * Retourneert null wanneer geen surface-ancestor binnen de bound gevonden
- * wordt. Bounded op 20 hops — een TableWrap-slot zit typisch slide → ... →
- * TableWrap → Slot, ruim binnen 20, met harde safety-break.
- *
- * Gebruikt door de table-renderer om surface-passende tabelbreedte te kiezen
- * (Slide 1920 vs Whitepaper 1240 hebben verschillende Slot-breedtes).
- */
 export function findEnclosingSurfaceName(node: BaseNode): string | null {
   const surface = findEnclosingSurface(node);
   return surface !== null ? surface.name : null;
 }
 
-/**
- * Als `findEnclosingSurfaceName`, maar retourneert de surface-INSTANCE zelf
- * (Slide/Whitepaper) i.p.v. enkel de naam. Gebruikt door de table-renderer
- * om het Badge-template van de slide te vinden voor delta-badges.
- */
 export function findEnclosingSurface(node: BaseNode): InstanceNode | null {
   let cur: BaseNode | null = node;
   for (let i = 0; i < 20; i++) {
@@ -90,15 +42,9 @@ export function findEnclosingSurface(node: BaseNode): InstanceNode | null {
 }
 
 /**
- * Scant de opgegeven page (default: currentPage) op Slide Machine-slides.
- *
- * In Figma Design liggen Welder-Slide-instances op top-level van de page.
- * In Figma Slides editor (manifest.editorType=['figma','slides']) zitten
- * ze in SlideNode-containers, één niveau dieper. We zoeken eerst alleen
- * INSTANCE-nodes via `findAllWithCriteria` en filteren daarna met de strikte
- * isSlide-predicate (INSTANCE + name === 'Slide' + 1920x1080). Dat behoudt
- * de bestaande order, maar vermijdt callback-work voor alle niet-instance
- * descendants op grote decks.
+ * In the Slides editor, Slide instances are nested inside SlideNode containers
+ * (top-level only in Figma Design) — hence the deep search. findAllWithCriteria
+ * narrows to INSTANCE first to avoid predicate work on large decks.
  */
 export function findSlidesOnPage(page?: PageNode): InstanceNode[] {
   const target = page !== undefined ? page : figma.currentPage;
@@ -118,17 +64,8 @@ export function findSlidesOnPage(page?: PageNode): InstanceNode[] {
 }
 
 /**
- * Bouwt een SlideSummary (id + number + display-naam + isSkipped-flag) voor een slide.
- * De `number` is 1-based en wordt door de caller gezet op basis van
- * de volgorde in findSlidesOnPage(); deze helper bouwt alleen de
- * display-naam. Scanning naar een 'Heading' text-node binnen de slide
- * geeft een leesbaardere titel dan de bare instance-naam.
- *
- * `isSkipped` wordt afgeleid uit de SlideNode-parent (Figma Slides-editor):
- *   - `SLIDE`-parent aanwezig → `parent.isSkippedSlide` (true/false).
- *   - Geen SlideNode-parent (Figma Design) → null; skip is niet ondersteund
- *     op dit surface en de UI verbergt de toggle.
- * ES2017-compat: var, geen optional chaining.
+ * isSkipped is null without a SlideNode parent (Figma Design): skip is a
+ * Slides-editor-only concept, and the UI hides the toggle on null.
  */
 export function slideSummary(slide: InstanceNode, number: number): SlideSummary {
   const title = findSlideHeadingText(slide);
@@ -146,16 +83,9 @@ export function slideSummary(slide: InstanceNode, number: number): SlideSummary 
 }
 
 /**
- * Zoekt de Heading-text-node binnen CopyWrap en geeft zijn characters terug.
- *
- * Scope is bewust beperkt tot CopyWrap: een Slide bevat meerdere text-nodes
- * met name 'Heading' (één in CopyWrap, meer in Card-instances en hidden
- * badge-varianten). Een ongescoped findOne raakte soms een Card-heading of
- * hidden-badge-heading wiens content literal "Slide 1 — Vestibulum..."
- * bevat — dat gaf een dubbele "Slide N — " prefix in de dropdown-naam.
- *
- * Retourneert null wanneer er geen CopyWrap is, geen Heading binnen CopyWrap
- * staat, of wanneer de text-node leeg is. Caller valt dan terug op "Slide N".
+ * Scoped to CopyWrap on purpose: a slide holds multiple 'Heading' text nodes
+ * (in Cards and hidden badge variants), and an unscoped findOne can pick one
+ * of those, yielding a wrong or doubled slide title.
  */
 function findSlideHeadingText(slide: InstanceNode): string | null {
   const copyWrap = findCopyWrap(slide);
@@ -170,23 +100,13 @@ function findSlideHeadingText(slide: InstanceNode): string | null {
   return chars;
 }
 
-// ============================================================
-// Wrapper-finders
-//
-// Elk van deze helpers zoekt één specifieke wrapper-instance binnen
-// een slide. Alle helpers retourneren het eerste gevonden InstanceNode
-// of null.
-// ============================================================
-
 function findFirstInstance(
   slide: InstanceNode,
   predicate: (n: InstanceNode) => boolean,
 ): InstanceNode | null {
   const found = slide.findOne((n: SceneNode) => {
-    // Dynamic-pages kunnen stale instance-sublayers aanbieden
-    // tijdens een interleaved rebuild (chart-clones): property-access
-    // (n.type/n.name) gooit dan "node does not exist". Stale nodes
-    // matchen nooit.
+    // Dynamic-pages can serve stale instance sublayers during an interleaved
+    // rebuild (chart clones); property access then throws "node does not exist".
     try {
       if (n.type !== 'INSTANCE') return false;
       return predicate(n as InstanceNode);
@@ -199,20 +119,10 @@ function findFirstInstance(
   return found;
 }
 
-/** CopyWrap: INSTANCE met name 'CopyWrap' (exact match). */
 export function findCopyWrap(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, (n) => n.name === 'CopyWrap');
 }
 
-/**
- * Retourneert true wanneer `node` en al zijn ancestors binnen `slide`
- * visible zijn. Stopt bij de slide zelf (die altijd visible is op dit
- * pad, anders zou hij niet in findSlidesOnPage verschijnen).
- *
- * Bounded op 10 hops — een wrapper-instance zit typisch 1-3 niveaus diep
- * onder de Slide; 10 is ruim genoeg met een harde safety-break tegen
- * onverwachte parent-ketens.
- */
 export function isEffectivelyVisible(node: SceneNode, slide: InstanceNode): boolean {
   let current: BaseNode | null = node;
   for (let i = 0; i < 10; i++) {
@@ -229,22 +139,10 @@ export function isEffectivelyVisible(node: SceneNode, slide: InstanceNode): bool
 }
 
 /**
- * Badge: INSTANCE waarvan name start met 'Badge'.
- *
- * Two visibility gates:
- *
- *  1. `isEffectivelyVisible` — parent-chain visible-flag walk. Catches
- *     legacy CopyWraps that toggle the badge by directly setting
- *     `visible=false` on the Badge node or an ancestor.
- *  2. CopyWrap's `showBadge` boolean component property. Slide Machine's
- *     CopyWrap (verified 2026-05-07 via Figma MCP, file
- *     `RgTXIrUpihBauydjMZbUGX` node `28:3079`) toggles the Badge sub-tree
- *     via this property; the underlying Badge node may keep `visible=true`
- *     even when the variant render hides it. Without gate (2) the plugin
- *     would surface a Badge editor for content the designer has hidden.
- *
- * Read-only — the plugin never writes `showBadge` (designers control
- * which surfaces are visible per the two-audience product model).
+ * Two hide paths must both be checked: visible=false somewhere up the parent
+ * chain (legacy CopyWraps), and CopyWrap's `showBadge` component property —
+ * the variant render can hide the badge while the Badge node itself keeps
+ * visible=true. showBadge is designer-owned; the plugin only reads it.
  */
 export function findBadge(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, (n) => {
@@ -259,14 +157,10 @@ export function findBadge(slide: InstanceNode): InstanceNode | null {
 }
 
 /**
- * ConfidentalBadge: het genestte badge-INSTANCE (binnen ConfidentalBadgeWrap)
- * dat de `Variant`-property draagt (Vertrouwelijk / Intern). Naam exact
- * 'ConfidentalBadge' — NIET prefix-match, anders vangt hij ook 'ConfidentalBadgeWrap'.
- * De correcte spelling 'ConfidentialBadge' is een fallback voor een toekomstige
- * master-rename (spiegelt de 'Show Confidental'/'Show Confidential'-fallback).
- * Geen visibility-gate: het instance bestaat óók wanneer de wrap verborgen is
- * (Show Confidental=false) — MCP-bevestigd — zodat de variant leesbaar/zetbaar
- * blijft ongeacht show-state.
+ * Exact name on purpose — a prefix match would also catch 'ConfidentalBadgeWrap'.
+ * 'ConfidentialBadge' (correct spelling) is a fallback for a future master rename.
+ * No visibility gate: the instance exists even while its wrap is hidden, so the
+ * variant stays readable and settable regardless of show-state.
  */
 export function findConfidentalBadge(slide: InstanceNode): InstanceNode | null {
   const exact = findFirstInstance(slide, (n) => n.name === 'ConfidentalBadge');
@@ -275,15 +169,8 @@ export function findConfidentalBadge(slide: InstanceNode): InstanceNode | null {
 }
 
 /**
- * ImageWrap: INSTANCE met name 'ImageWrap' (exact match), MAAR alleen
- * de slide-level wrap — niet ImageWraps die binnen een Card of CardWrap
- * leven (die zijn eigendom van die card en verschijnen in de Content-
- * panel via de card-eigen visual). Een card-interne ImageWrap retourneren
- * zou hetzelfde plaatje in twee plekken in de plugin-UI tonen.
- *
- * Verified via Figma MCP voor slide 19907:56235: 3 cards waarvan 2 Type=Image
- * met elk een eigen ImageWrap; geen slide-OWN ImageWrap. Voorheen pickte
- * findOne de eerste card-interne ImageWrap als "slide-level" Image.
+ * Slide-level ImageWrap only: ImageWraps inside a Card/CardWrap belong to that
+ * card, and returning one here would surface the same image twice in the UI.
  */
 export function findImageWrap(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, (n) => {
@@ -299,72 +186,36 @@ export function findImageWrap(slide: InstanceNode): InstanceNode | null {
   });
 }
 
-/** CardWrap: INSTANCE met name 'CardWrap' (exact match). */
 export function findCardWrap(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, (n) => n.name === 'CardWrap');
 }
 
-/**
- * ALLE CardWrap-instances (whitepapers/slides kunnen er meerdere
- * dragen, bv. naast een ChartWrap in een SlotWrapGroup). findCardWrap gaf
- * alleen de eerste, waardoor cards in een 2e+ CardWrap onzichtbaar bleven.
- */
 export function findAllCardWraps(slide: InstanceNode): InstanceNode[] {
   return findAllInstances(slide, (n) => n.name === 'CardWrap');
 }
 
 /**
- * TableWrap: instances die een tabel representeren (NIET timeline).
- * Matcht:
- *   - legacy exacte naam `TableWrap`
- *   - Slide Machine variant-namen `Tabel=Table Default`, `Tabel=small`
- *     (beginnen met `Tabel=`) en `Table=`-varianten — zolang ze geen
- *     `Timeline` bevatten (dat wordt door `findTimelineWrap` gepakt).
- *   - Slide Machine variant-property-naam `Property 1=Table Default`,
- *     `Property 1=small`, etc. — on-slide instance-name wanneer het
- *     variant-component `Property 1` als enige property heeft. Filter
- *     op afwezigheid van `Timeline`/`Chart` om ChartWrap- en
- *     TimelineWrap-variants niet per ongeluk te matchen.
- *
- * Voor legacy-compat kan de instance óók `pluginData.kind === 'welder-table'`
- * dragen — die detectie blijft in editors/table/*.
- *
- * TimelineWrap is bewust uitgesloten (door `findTimelineWrap` gepakt);
- * variant-namen matchen via `Tabel=`/`Table=`/`Property 1=`-prefix.
- * ES2017-compat: indexOf i.p.v. startsWith/includes.
+ * Slide Machine names on-slide instances after their variant properties:
+ * 'Tabel='/'Table=', or 'Property 1=' when that is the component's only
+ * property — hence the prefix matching in isTableWrapName. Names containing
+ * 'Timeline' or 'Chart' are excluded; those belong to the other finders.
  */
 export function findTableWrap(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, isTableWrapName);
 }
 
-/**
- * ChartWrap: instances die een chart representeren.
- * Matcht:
- *   - legacy exacte naam `ChartWrap`
- *   - Slide Machine variant-namen met `Chart` erin (`Chart=`,
- *     `Property 1=... Chart ...`) — spiegel van findTableWrap, maar dan
- *     mét Chart-vereiste i.p.v. Chart-uitsluiting.
- * ES2017-compat: indexOf i.p.v. startsWith/includes.
- */
 export function findChartWrap(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, isChartWrapName);
 }
 
-/**
- * Alle TableWrap-instances op een slide/whitepaper (zelfde
- * matcher als findTableWrap). Slides kunnen meerdere wrappers dragen;
- * de Graphs-tab toont ze via de instance-selector.
- */
 export function findAllTableWraps(slide: InstanceNode): InstanceNode[] {
   return findAllInstances(slide, isTableWrapName);
 }
 
-/** Alle ChartWrap-instances (zelfde matcher als findChartWrap). */
 export function findAllChartWraps(slide: InstanceNode): InstanceNode[] {
   return findAllInstances(slide, isChartWrapName);
 }
 
-/** SlotNode binnen een specifieke wrap-instance. */
 export function findSlotInWrap(wrap: InstanceNode): SlotNode | null {
   const slot = wrap.findOne((n: SceneNode) => n.type === 'SLOT');
   if (slot === null) return null;
@@ -406,7 +257,7 @@ function findAllInstances(
   const out: InstanceNode[] = [];
   try {
     const found = slide.findAll((n: SceneNode) => {
-      // Zelfde stale-node-guard als findFirstInstance.
+      // Same stale-node guard as in findFirstInstance.
       try {
         if (n.type !== 'INSTANCE') return false;
         return predicate(n as InstanceNode);
@@ -424,18 +275,8 @@ function findAllInstances(
 }
 
 /**
- * TimelineWrap: instances die een timeline representeren.
- * Matcht:
- *   - legacy exacte naam `TimelineWrap`
- *   - Slide Machine variant-naam `Tabel=Alt Timeline` (en variaties daarop)
- *     — elke instance met `Timeline` in de naam.
- * Namen die `Timeline` bevatten zijn specifiek genoeg dat false-positives
- * onwaarschijnlijk zijn binnen de Slide Machine component-library.
- *
- * Children bevatten editable CopyWrap-items (Heading + Paragraph)
- * en decoratieve Stepper Items. De scan in `scanContent` filtert op CopyWrap.
- *
- * ES2017-compat: indexOf i.p.v. includes.
+ * Any instance with 'Timeline' in its name matches — specific enough within
+ * the Slide Machine library that false positives are unlikely.
  */
 export function findTimelineWrap(slide: InstanceNode): InstanceNode | null {
   return findFirstInstance(slide, (n) => {
@@ -443,29 +284,16 @@ export function findTimelineWrap(slide: InstanceNode): InstanceNode | null {
   });
 }
 
-// ============================================================
-// Component-properties helpers
-//
-// Slide Machine-instances dragen varianten als keys met een hash-suffix
-// (`Style#12345:0` ipv `Style`). We moeten de logische naam opzoeken
-// via `componentPropertyDefinitions` en de volle hash-key teruggeven.
-// ============================================================
-
 /**
- * Zoekt de volledige component-property-key (inclusief `#hash`-suffix)
- * die hoort bij een logische naam (bv. 'Style' → 'Style#1234:0').
- *
- * InstanceNode.componentProperties is een map van hashed keys naar
- * hun huidige waarde; die gebruiken we om de key-naam af te leiden.
- * `setProperties` verwacht diezelfde hashed keys.
- *
- * Retourneert null wanneer de instance geen matching property heeft
- * (detached instance, legacy master, of onbekende logicalName).
+ * Component-property keys carry a hash suffix ('Style#1234:0' rather than
+ * 'Style'), and setProperties expects those same hashed keys — so logical
+ * names must be resolved to the full key. Null when the property is absent
+ * (detached instance, legacy master, unknown name).
  */
 export function getPropertyKey(instance: InstanceNode, logicalName: string): string | null {
   const props = instance.componentProperties;
   if (props === null || props === undefined) return null;
-  // Direct-hit wanneer de property géén hash-suffix heeft.
+  // Some properties carry no hash suffix — check the plain name first.
   if (Object.prototype.hasOwnProperty.call(props, logicalName)) {
     return logicalName;
   }
@@ -477,14 +305,6 @@ export function getPropertyKey(instance: InstanceNode, logicalName: string): str
   }
   return null;
 }
-/**
- * Zet een instance-property op een logische naam.
- * Retourneert true bij succes, false wanneer de key niet bestond (caller
- * kan dan beslissen of dat een hard error is of een silent skip).
- *
- * Wrapper rond `instance.setProperties`; verbergt de hash-suffix-logica
- * zodat editors/**  alleen met logische namen ('Style', 'Type', etc.) werken.
- */
 export function setInstanceProperty(
   instance: InstanceNode,
   logicalName: string,
@@ -498,15 +318,6 @@ export function setInstanceProperty(
   return true;
 }
 
-/**
- * Read-only sibling of `setInstanceProperty` for BOOLEAN properties — looks
- * up the hashed key for `logicalName`, returns the current boolean value or
- * `null` when the property is absent / not a boolean.
- *
- * Used to detect designer-set component-property toggles like the Slide
- * Machine's CopyWrap `showBadge` / `showParagraph`. Plugin reads these to
- * decide whether to surface the matching editor; it never writes them.
- */
 export function readBooleanProperty(
   instance: InstanceNode,
   logicalName: string,
@@ -521,11 +332,6 @@ export function readBooleanProperty(
   return entry.value;
 }
 
-/**
- * Walk up from `node` looking for an ancestor INSTANCE with the given name,
- * stopping at `slide`. Bounded at 10 hops as a safety break — wrapper-instances
- * within a Slide Machine slide are rarely more than 3 levels deep.
- */
 export function findEnclosingInstanceByName(
   node: BaseNode,
   name: string,

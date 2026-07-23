@@ -1,23 +1,6 @@
-// ============================================================
-// editors/chart/line.ts
-//
-// Line-chart-builder: per serie een VECTOR-polyline + punt-dots
-// in een layout-NONE plotvlak, met subtiele horizontale gridlines en
-// categorie-labels op de x-as. Waarden schalen tegen de hoogste waarde
-// over alle series; punten verdelen de breedte gelijkmatig.
-// Delta-badges (showDelta): boven elk serie-0-punt de verandering
-// t.o.v. de vorige categorie, gestapeld onder het waarde-label.
-//
-// Hard overflow-budget: de top-headroom (padTop) reserveert de
-// GEMETEN stapel boven het hoogste punt (waarde-label + delta-badge,
-// de oude reservering vergat de badge), de legenda wrapt binnen
-// contentW en telt met zijn echte hoogte mee. Past het niet, dan
-// degradeert de chart (waarde-labels → delta-badges → legenda)
-// i.p.v. de kaart uit te lopen; labels/badges breder dan hun punt-
-// step vervallen per stuk (auto-hide on overlap).
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// Overflow budget: padTop reserves the MEASURED stack above the highest
+// point (value label + delta badge); when the plot cannot fit, the chart
+// degrades (value labels → delta badges → legend) instead of overflowing.
 
 import type { ChartWrapModel } from '../../../shared/types';
 import {
@@ -33,7 +16,7 @@ import { probeTextHeight } from '../_shared/fonts';
 
 const DOT_SIZE = 12;
 const STROKE_W = 4;
-/** Minimaal leesbare lijn-zone; daaronder degraderen i.p.v. clippen. */
+/** Minimum readable line zone; below this, degrade instead of clipping. */
 const MIN_INNER_H = 24;
 
 export function buildLine(
@@ -59,7 +42,6 @@ export function buildLine(
   root.resize(contentW, contentH);
   const rootGap = root.itemSpacing;
 
-  // ---- Meten: legenda (gewrapt), tekst-probes, echte delta-nodes.
   let legend: FrameNode | null = null;
   if (model.showLegend && model.series.length > 1) {
     const entries: LegendEntry[] = [];
@@ -69,8 +51,7 @@ export function buildLine(
         color: ramp[s % ramp.length],
       });
     }
-    // Gewrapte horizontale rij met hoogte-budget: buildLegend
-    // degradeert zelf (korps → delta's → '+N meer') tot het past.
+    // buildLegend degrades itself (font size → deltas → '+N meer') to fit the height budget.
     legend = buildLegend(
       entries,
       theme,
@@ -93,18 +74,15 @@ export function buildLine(
       )
     : 0;
 
-  const pad = DOT_SIZE; // marge zodat dots niet clippen op de plot-rand
+  const pad = DOT_SIZE; // margin so dots don't clip at the plot edge
   const innerW = contentW - pad * 2;
-  // Horizontaal budget per punt: labels/badges breder dan hun step
-  // overlappen hun buren onleesbaar → per stuk laten vallen (research:
-  // auto-hide on overlap, geen vaste px-drempel).
+  // Labels/badges wider than their point step overlap their neighbours;
+  // drop each such item individually rather than using a fixed px threshold.
   const slotStep = pointCount > 1 ? innerW / (pointCount - 1) : contentW;
   const deltaMaxW = pointCount > 1 ? Math.max(8, Math.floor(slotStep)) : contentW;
 
-  // Delta-nodes vooraf bouwen mét punt-step-cap: het verticale
-  // budget rekent met de ECHTE node-hoogte (badge-clone vs. tekst-
-  // fallback) i.p.v. een aanname, en de engine degradeert te brede
-  // badges zelf naar een afgekapte tekst-variant.
+  // Build delta nodes upfront so the vertical budget uses the REAL node
+  // height (badge clone vs. truncated-text fallback) instead of a guess.
   const deltaNodes: (SceneNode | null)[] = [];
   let deltaH = 0;
   if (model.showDelta === true) {
@@ -116,8 +94,7 @@ export function buildLine(
     deltaH = Math.ceil(deltaH);
   }
 
-  // Fit-voorcheck via één herbruikbare probe: past er ÜBERHAUPT
-  // een waarde-label/badge, anders vervalt de verticale reservering.
+  // If no value label/badge fits at all, drop its vertical reservation.
   let anyValueFits = false;
   if (model.showValues) {
     const wProbe = figma.createText();
@@ -139,8 +116,6 @@ export function buildLine(
     if (n !== null && n.width <= slotStep) anyDeltaFits = true;
   }
 
-  // ---- Verticaal budget: plot = contentH minus gemeten legenda,
-  // x-as-rij en gaps; padTop = dot-marge + GEMETEN waarde/delta-stapel.
   let valuesOn = model.showValues && valueH > 0 && anyValueFits;
   let deltaOn = model.showDelta === true && deltaH > 0 && anyDeltaFits;
   let legendOn = legend !== null;
@@ -160,8 +135,7 @@ export function buildLine(
     return availPlotH() - padTopFor() - pad >= MIN_INNER_H;
   };
 
-  // Disproportioneel hoge (gewrapte) legenda eerst weg — eet anders de
-  // hele plot op smalle kaarten op (Highcharts responsive rule 1).
+  // Drop a disproportionately tall wrapped legend first — it eats the whole plot on narrow cards.
   if (legendOn && legend !== null && legend.height + rootGap > contentH * 0.4) {
     legend.remove();
     legend = null;
@@ -181,15 +155,15 @@ export function buildLine(
         try {
           n.remove();
         } catch (_e) {
-          /* al verwijderd */
+          /* already removed */
         }
         deltaNodes[i] = null;
       }
     }
   }
 
-  // Exact de rest van het budget — geen vloer die het budget overschrijdt
-  // (de oude max(80, ...) duwde de x-as-rij de kaart uit op lage slots).
+  // Exactly the remaining budget — a higher floor (like max(80, ...)) would
+  // push the x-axis row off the card on short slots.
   const plotH = Math.max(10, availPlotH());
   const padTop = padTopFor();
   const innerH = Math.max(4, plotH - padTop - pad);
@@ -200,7 +174,6 @@ export function buildLine(
   plot.fills = [];
   plot.clipsContent = false;
 
-  // Gridlines: 4 subtiele horizontale lijnen (0/33/66/100%).
   for (let g = 0; g <= 3; g++) {
     const line = figma.createRectangle();
     line.name = 'Gridline';
@@ -215,15 +188,15 @@ export function buildLine(
     if (pointCount <= 1) return pad + innerW / 2;
     return pad + (innerW * i) / (pointCount - 1);
   };
-  // 6% top-headroom binnen het plotvlak zodat de hoogste lijn/dot
-  // niet de bovenrand raakt; de waarde-labels zitten in padTop daarboven.
+  // 6% top headroom inside the plot so the highest line/dot does not touch
+  // the top edge; value labels live in padTop above it.
   const plotTop = padTop + Math.round(innerH * 0.06);
   const plotSpan = innerH - Math.round(innerH * 0.06);
   const yFor = function (value: number): number {
     return plotTop + plotSpan - (value / max) * plotSpan;
   };
-  // Een punt onderin (waarde ≈ 0) krijgt z'n waarde-label ONDER de dot,
-  // anders botst het met de x-as-labels.
+  // A point near the bottom (value ≈ 0) gets its value label BELOW the dot,
+  // otherwise it collides with the x-axis labels.
   const labelBelow = function (value: number): boolean {
     return value / max < 0.12;
   };
@@ -249,11 +222,9 @@ export function buildLine(
     vector.strokeJoin = 'ROUND';
     vector.fills = [];
     plot.appendChild(vector);
-    // MCP-geverifieerd: na het zetten van vectorPaths her-origint
-    // Figma de vector naar de bounding-box van het pad (vector.x/y → 0).
-    // Het pad is in absolute plot-coördinaten gerekend, dus plaats de
-    // vector op de minX/minY van het pad zodat de lijn op de dots valt
-    // i.p.v. naar de plot-top te klappen.
+    // Setting vectorPaths re-origins the vector to the path's bounding box
+    // (x/y → 0); the path is in absolute plot coords, so restore minX/minY
+    // or the line snaps to the plot top instead of landing on the dots.
     vector.x = minX === Infinity ? 0 : minX;
     vector.y = minY === Infinity ? 0 : minY;
 
@@ -266,21 +237,18 @@ export function buildLine(
       dot.fills = [{ type: 'SOLID', color: color }];
       plot.appendChild(dot);
 
-      // Label-stapel boven het punt: waarde bovenaan, delta-badge
-      // (alleen serie 0) eronder, dichtst bij de dot. padTop
-      // reserveert exact DOT_SIZE + valueH + deltaH, dus de stapel
-      // van het hoogste punt blijft binnen het plot-frame.
+      // padTop reserves exactly DOT_SIZE + valueH + deltaH, so the label
+      // stack above the highest point stays inside the plot frame.
       const lowPoint = labelBelow(model.series[s].values[i]);
       let stackY = yFor(model.series[s].values[i]) - DOT_SIZE;
       if (deltaOn && s === 0 && !lowPoint) {
         const deltaNode = deltaNodes[i];
         if (deltaNode !== null) {
           if (deltaNode.width > contentW || (pointCount > 1 && deltaNode.width > slotStep)) {
-            // Breder dan de punt-step: vervalt per stuk.
             try {
               deltaNode.remove();
             } catch (_e) {
-              /* al verwijderd */
+              /* already removed */
             }
             deltaNodes[i] = null;
           } else {
@@ -304,12 +272,9 @@ export function buildLine(
         valueText.textAutoResize = 'WIDTH_AND_HEIGHT';
         valueText.fills = [{ type: 'SOLID', color: color }];
         if (valueText.width > contentW || (pointCount > 1 && valueText.width > slotStep)) {
-          // Breder dan de punt-step: vervalt per stuk.
           valueText.remove();
         } else {
           plot.appendChild(valueText);
-          // Clamp binnen het plot-frame (zelfde patroon als de x-as-
-          // labels): randpunten zouden anders w/2 - pad uitsteken.
           valueText.x = Math.min(
             contentW - valueText.width,
             Math.max(0, xFor(i) - valueText.width / 2),
@@ -326,9 +291,6 @@ export function buildLine(
 
   root.appendChild(plot);
 
-  // X-as-labels: zelfde x-posities als de datapunten (layout NONE).
-  // Labels breder dan hun punt-step worden getruncate (ECharts
-  // axisLabel.overflow 'truncate'); x is geclampt binnen contentW.
   const maxXLabelW = pointCount > 1 ? Math.max(24, Math.floor(contentW / pointCount)) : contentW;
   const labels = figma.createFrame();
   labels.name = 'XLabels';
@@ -349,8 +311,7 @@ export function buildLine(
         theme.textVar,
       ),
     ];
-    // Single-line ellipsen (maxLines 1): zonder maxLines zou een
-    // lang label wikkelen en de vaste labelRowH-rij uitlopen.
+    // Truncate to one line: a wrapping label would overflow the fixed labelRowH row.
     if (t.width > maxXLabelW) {
       truncateToWidth(t, maxXLabelW);
     }

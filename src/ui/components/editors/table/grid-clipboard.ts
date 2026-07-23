@@ -1,5 +1,3 @@
-// grid-clipboard — paste-matrix parsing (shared CSV tokenizer) + the TableGrid paste handler.
-
 import { tokenize } from '../../../../shared/csv';
 
 interface GridClipboardProps {
@@ -48,10 +46,8 @@ export function createPasteHandler(
     const text = event.clipboardData !== null ? event.clipboardData.getData('text/plain') : '';
     if (text === '') return;
 
-    // Only spread a paste across cells when it carries TAB separators — i.e.
-    // real tabular data copied from a spreadsheet. A paste with only newlines
-    // (a pasted paragraph) stays in the one cell as multi-line content: fall
-    // through to the default textarea paste instead of building a matrix.
+    // Only spread across cells when the paste carries TABs (real spreadsheet data);
+    // a newline-only paste is a paragraph and falls through to the default single-cell paste.
     if (text.indexOf('\t') === -1) return;
 
     const matrix = trimTrailingEmptyRows(tokenize(text).rows);

@@ -1,13 +1,3 @@
-// ============================================================
-// sandbox/handlers/image.ts
-//
-// Image-upload: routeert bytes naar de card-visual-slot (CardWrap-
-// child) of de slide-level ImageWrap, en pusht direct een thumbnail-
-// preview naar de iframe.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { markSelfWrite, postToUI } from '../bridge';
 import { findSlideAncestor, summaryForSlide } from '../slides';
 import { scanSlide } from '../scan/slide-scan';
@@ -21,9 +11,7 @@ import type { UIToPluginMessage } from '../../shared/types';
 export async function handleUploadImage(
   msg: Extract<UIToPluginMessage, { type: 'upload-image' }>,
 ): Promise<void> {
-  // Target-node lookup — `documentAccess: "dynamic-page"` vereist de
-  // async-variant. Bytes komen als Uint8Array via structured-cloning
-  // binnen en hoeven niet geconverteerd te worden.
+  // `documentAccess: "dynamic-page"` requires the async node lookup.
   const target = await figma.getNodeByIdAsync(msg.targetNodeId);
   if (target === null) {
     postToUI({
@@ -43,19 +31,14 @@ export async function handleUploadImage(
     return;
   }
 
-  // Routing: wanneer de target een directe child is van CardWrap gaan
-  // de bytes naar de card-slot; anders naar de slide-level ImageWrap.
   const cardWrap = findCardWrap(slide);
   const targetParent = 'parent' in target ? (target as SceneNode).parent : null;
   const isCardChild =
     cardWrap !== null && targetParent !== null && targetParent.id === cardWrap.id;
 
   figma.commitUndo();
-  // Mark vóór én na de mutatie (patroon: handleUpdateGeneral in
-  // general.ts): de fill-write triggert documentchange → 200ms-debounce
-  // van postSlideContent → volledige re-scan + store-replace in de
-  // iframe. Die route is hier overbodig — de expliciete scan+post
-  // onderaan dekt wat de store van de re-scan nodig heeft.
+  // Mark before AND after the mutation: the fill write fires documentchange, whose
+  // debounced full re-scan is redundant — the explicit scan+post below re-syncs the store.
   markSelfWrite();
 
   if (isCardChild) {
@@ -69,10 +52,8 @@ export async function handleUploadImage(
       return;
     }
     markSelfWrite();
-    // Refresh thumbnail in iframe immediately — bytes are already in
-    // scope (the user just uploaded them), so no getBytesAsync round-
-    // trip. fillW/fillH come from the card's visual slot for aspect-
-    // ratio matching in the thumbnail box.
+    // Reuse the just-uploaded bytes for the preview — no getBytesAsync round-trip.
+    // fillW/fillH come from the visual slot so the thumbnail keeps its aspect ratio.
     let cardFillW = 0;
     let cardFillH = 0;
     if (target.type === 'INSTANCE') {
@@ -113,9 +94,7 @@ export async function handleUploadImage(
   }
   markSelfWrite();
 
-  // Refresh thumbnail in UI immediately — no need for getBytesAsync, we
-  // already have the bytes that were just uploaded (FIG-ASYNC-01 compliant:
-  // no fire-and-forget; this is synchronous within the async handler).
+  // Same as the card branch: reuse the uploaded bytes, no getBytesAsync round-trip.
   var previewFillW = 0;
   var previewFillH = 0;
   try {
@@ -131,7 +110,7 @@ export async function handleUploadImage(
       }
     }
   } catch (_e) {
-    // Fallback: laat dims op 0 staan; UI toont h-36 fallback.
+    // Dims stay 0; the UI renders its fixed-height thumbnail fallback.
   }
   postToUI({
     type: 'image-preview',
@@ -140,8 +119,8 @@ export async function handleUploadImage(
     fillW: previewFillW,
     fillH: previewFillH,
   });
-  // Update dedup-cache so that een documentchange-triggered pick-slide
-  // de preview niet opnieuw verstuurt met de verouderde hash.
+  // Update the dedup cache so a documentchange-triggered pick-slide
+  // does not resend the preview with the stale hash.
   lastSentPreviewHash.set(msg.targetNodeId, newHash);
 
   postToUI({
@@ -154,15 +133,9 @@ export async function handleUploadImage(
 }
 
 /**
- * Re-sync de iframe-store na een upload. De documentchange-route is
- * onderdrukt door markSelfWrite(), maar de preview-posts hierboven
- * dekken alleen de thumbnail-bytes — de store-velden imageHash
- * (General → Image: statuslabel + "Uploaden"/"Vervangen"-knop) en
- * visualHash (CardItemEditor, idem) komen uitsluitend via slide-loaded
- * binnen. Zonder deze post blijft een eerste upload in een leeg slot
- * op "Nog geen afbeelding" staan. Eén expliciete scan i.p.v. de
- * ongecontroleerde debounced re-scan — zelfde patroon als
- * handleImportCsv in handlers/table.ts.
+ * markSelfWrite() suppressed the documentchange re-scan and the preview posts carry
+ * only thumbnail bytes — the store's imageHash/visualHash arrive solely via slide-loaded,
+ * so without this post a first upload into an empty slot never updates its status label.
  */
 async function postSlideLoadedAfterUpload(slide: InstanceNode): Promise<void> {
   try {

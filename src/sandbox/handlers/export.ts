@@ -1,12 +1,3 @@
-// ============================================================
-// sandbox/handlers/export.ts
-//
-// Export-messages: één slide (PNG/PDF) of de hele presentatie als
-// per-slide PDF-parts die de iframe met pdf-lib samenvoegt.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { postToUI } from '../bridge';
 import { findSlideById, getSlidesOnCurrentPage, summaryForSlide } from '../slides';
 import type { UIToPluginMessage } from '../../shared/types';
@@ -14,10 +5,8 @@ import type { UIToPluginMessage } from '../../shared/types';
 export async function handleExportDocument(
   msg: Extract<UIToPluginMessage, { type: 'export-document' }>,
 ): Promise<void> {
-  // Single slide → walk up to the SLIDE parent (1920×1080) when one
-  // exists; that's what Figma's native present/export targets, not
-  // the Welder INSTANCE inside it. In Figma Design (no SLIDE parent)
-  // we fall back to the INSTANCE itself.
+  // Export the SLIDE parent when present — that's what Figma's native export
+  // targets, not the Welder instance inside it. Figma Design has no SLIDE parent.
   if (msg.target === 'slide') {
     if (typeof msg.slideId !== 'string' || msg.slideId.length === 0) {
       postToUI({
@@ -41,11 +30,8 @@ export async function handleExportDocument(
         ? (welderSlide.parent as SlideNode)
         : welderSlide;
 
-    // Match the picker name exactly: heading text within CopyWrap,
-    // fallback to "Slide N" where N is the slide's 1-based index on
-    // the current page. Same logic as `slideSummary` (used by the
-    // SlideSelector dropdown), so the file the user downloads is
-    // labelled with the same name they see in the picker.
+    // Same naming logic as the SlideSelector picker, so the downloaded file
+    // carries the name the user saw when picking the slide.
     const summary = summaryForSlide(welderSlide);
     const baseName = summary.name;
 
@@ -74,12 +60,10 @@ export async function handleExportDocument(
     return;
   }
 
-  // Presentation export.
   const baseName = figma.currentPage.name || 'presentation';
   if (msg.format === 'PNG') {
-    // PNG of an entire presentation is ambiguous (giant single image
-    // vs. a zip of per-slide PNGs). Not supported in v1; UI gates
-    // this combo, so this branch is a defensive guard.
+    // Whole-presentation PNG is ambiguous (one giant image vs. a zip of
+    // per-slide PNGs); the UI gates this combo, so this is a defensive guard.
     postToUI({
       type: 'target-updated',
       ok: false,
@@ -88,11 +72,8 @@ export async function handleExportDocument(
     return;
   }
 
-  // Presentation PDF — iterate non-skipped SLIDE nodes (or the
-  // Welder INSTANCE when there's no SLIDE parent), exportAsync
-  // each as a single-page PDF, ship the parts to the iframe; the
-  // iframe merges with pdf-lib. Page-level exportAsync would just
-  // produce one giant single-page PDF spanning the canvas grid.
+  // Export each slide as its own single-page PDF and merge in the iframe with
+  // pdf-lib — page-level exportAsync yields one giant page spanning the canvas.
   const welderSlides = getSlidesOnCurrentPage();
   const targets: SceneNode[] = [];
   for (let i = 0; i < welderSlides.length; i++) {
@@ -140,13 +121,8 @@ export async function handleExportDocument(
   return;
 }
 
-/**
- * Strip filesystem-unfriendly characters from a string so it's safe
- * as a download filename across macOS / Windows / Linux. Collapses
- * runs of spaces / underscores into a single hyphen, drops leading
- * and trailing hyphens, caps length at 80 chars. Caller appends the
- * format extension.
- */
+// Strips the Windows-reserved filename chars (strictest download-target OS);
+// caller appends the extension.
 function sanitizeBaseFilename(raw: string): string {
   const trimmed = raw.replace(/[\\/:*?"<>|]/g, '').trim();
   const collapsed = trimmed.replace(/[\s_]+/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');

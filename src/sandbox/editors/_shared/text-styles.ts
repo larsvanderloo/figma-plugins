@@ -1,20 +1,7 @@
-// ============================================================
-// editors/_shared/text-styles.ts
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { debugLog } from '../../../shared/debug';
 
-// Library-subscribed styles can't be enumerated by name — only local
-// styles can. To resolve one we have to read its id off a TextNode that
-// already references it. We walk every TEXT node on the current page,
-// fetch each distinct textStyleId via getStyleByIdAsync, and cache the
-// resulting name → id map per session. Subsequent lookups are O(1).
-//
-// Returns null when no node in the file uses a style matching `name`
-// (exact match or `<path>/<name>` suffix to allow folder-grouped styles).
-// ============================================================
+// Library-subscribed styles can't be enumerated by name (only local ones can),
+// so harvest textStyleIds off TEXT nodes across all pages into a session cache.
 const textStyleByName: { [name: string]: string } = {};
 let textStyleMapBuilt = false;
 
@@ -23,8 +10,7 @@ async function buildTextStyleMap(): Promise<void> {
   const pages = figma.root.children.filter(function (p) {
     return p.type === 'PAGE';
   }) as PageNode[];
-  // Load every page in parallel rather than sequentially — 5 pages
-  // serialized was ~5× the cost of a single loadAsync.
+  // Parallel loadAsync — serialized page loads were ~5× slower.
   await Promise.all(
     pages.map(function (page) {
       return page.loadAsync().catch(function (e: unknown) {
@@ -32,9 +18,8 @@ async function buildTextStyleMap(): Promise<void> {
       });
     }),
   );
-  // Collect every distinct textStyleId across all pages first, THEN
-  // batch the getStyleByIdAsync fetches in parallel. Was a sequential
-  // await per text node — N styles × ~10ms each on every plugin open.
+  // Collect distinct ids first, then batch getStyleByIdAsync in parallel —
+  // a sequential await per text node cost ~10ms per style on every plugin open.
   const distinctIds: string[] = [];
   const seenIds: { [id: string]: true } = {};
   for (let p = 0; p < pages.length; p++) {

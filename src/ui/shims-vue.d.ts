@@ -4,12 +4,8 @@ declare module '*.vue' {
   export default component;
 }
 
-/**
- * Debug flag injected by Vite. Production builds replace this with false.
- */
+/** Injected by Vite `define`; production builds replace it with false. */
 declare const __PLUGIN_DEBUG__: boolean;
 
-/**
- * App version injected by Vite at bundle-time from package.json.
- */
+/** Injected by Vite `define` from package.json at build time. */
 declare const __APP_VERSION__: string;

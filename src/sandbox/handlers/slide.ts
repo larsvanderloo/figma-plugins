@@ -1,13 +1,3 @@
-// ============================================================
-// sandbox/handlers/slide.ts
-//
-// Slide-level messages: theme-mode pinnen (set-slide-theme), skip-
-// toggle (set-slide-skipped), confidential-toggle (set-slide-confidential)
-// en plugin-driven undo (trigger-undo).
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { markSelfWrite, postToUI } from '../bridge';
 import { refreshChartsOnSlide } from '../scan/graphs';
 import { findSlideById, summaryForSlide } from '../slides';
@@ -38,11 +28,8 @@ export async function handleSetSlideTheme(
     });
     return;
   }
-  // Resolve the chosen mode to its NAME on the source (first) collection,
-  // then apply the equivalent mode (matched by name) on every other
-  // Theme collection in scope. Welder Templates carries a local Theme
-  // mirror of the library Theme; both must move together so the body
-  // theme AND the accent text colour follow the picker.
+  // Match modes by NAME across collections: Welder Templates keeps a local
+  // mirror of the library Theme, and both must move together with the picker.
   const foundMode =
     msg.modeId === null
       ? undefined
@@ -51,16 +38,14 @@ export async function handleSetSlideTheme(
   const targetName = sourceMode === null ? null : sourceMode.name;
 
   figma.commitUndo();
-  // Suppress the documentchange-driven full re-scan window. Without
-  // this, every theme tap would trigger `postSlideContent` →
-  // `scanSlide` → `slide-loaded` round-trip after the apply, which
-  // perceptibly lagged the picker swatch.
+  // Suppress the documentchange-driven re-scan window; without it every theme
+  // tap triggers a full scanSlide round-trip that lags the picker swatch.
   markSelfWrite();
   try {
     for (let i = 0; i < collections.length; i++) {
       const c = collections[i];
       if (msg.modeId === null) {
-        // Clear: slide inherits the page-level mode for this collection.
+        // null modeId = clear: the slide inherits the page-level mode.
         themeSlide.clearExplicitVariableModeForCollection(c);
         continue;
       }
@@ -88,16 +73,12 @@ export async function handleSetSlideTheme(
     });
     return;
   }
-  // Gebonden paints volgen de nieuwe mode vanzelf, maar de chart-
-  // ramp (segment/lijn-tinten) is rendertime-resolved RGB — re-render de
-  // ChartWrap zodat de tinten de nieuwe theme-mode pakken.
+  // Bound paints follow the new mode by themselves, but the chart ramp is
+  // render-time-resolved RGB — re-render ChartWrap so tints pick up the mode.
   await refreshChartsOnSlide(themeSlide, true);
   markSelfWrite();
-  // No slide re-scan: a theme change doesn't affect any other content
-  // (text, icons, structure all stay the same). The iframe applies the
-  // new mode optimistically before posting; this confirmation just
-  // closes the round-trip. Saves a 100-500ms scanSlide + slide-loaded
-  // round-trip on every theme click.
+  // No re-scan: the iframe applies the mode optimistically; skipping
+  // scanSlide saves a 100-500ms round-trip on every theme click.
   postToUI({
     type: 'target-updated',
     ok: true,
@@ -136,15 +117,8 @@ export async function handleSetSlideSkipped(
   setLastSentSummarySignature(
     skipSummary.id + '|' + skipSummary.name + '|' + String(skipSummary.isSkipped),
   );
-  // No slide-summary re-emit: the iframe flips its visibility pill
-  // optimistically before posting, so a sandbox echo just forces a
-  // wasted round-trip and can clobber a rapid second click. Same
-  // pattern as set-slide-theme.
-  //
-  // `markSelfWrite()` above suppresses the documentchange-driven
-  // re-scan window — without it, every toggle would trigger a full
-  // `postSlideContent` → `scanSlide` round-trip, making the toggle
-  // perceptibly lag.
+  // No summary re-emit: the iframe flips its pill optimistically; a sandbox
+  // echo would waste a round-trip and can clobber a rapid second click.
   postToUI({
     type: 'target-updated',
     ok: true,
@@ -169,9 +143,8 @@ export async function handleSetSlideConfidential(
   }
   figma.commitUndo();
   markSelfWrite();
-  // Visibility: "Show Confidental" BOOLEAN on the Slide instance (controls the
-  // ConfidentalBadgeWrap). Try the library spelling first, then the corrected
-  // one. setInstanceProperty returns false when the property is absent.
+  // "Confidental" is the library's own misspelling — try it first, then the
+  // corrected spelling. setInstanceProperty returns false when absent.
   let applied = setInstanceProperty(slide, 'Show Confidental', msg.show);
   if (!applied) {
     applied = setInstanceProperty(slide, 'Show Confidential', msg.show);
@@ -185,11 +158,8 @@ export async function handleSetSlideConfidential(
     });
     return;
   }
-  // Variant lives on the nested ConfidentalBadge instance (not exposed on the
-  // Slide). Only touched when the UI sends one (variant picker); a plain
-  // show/hide toggle leaves it alone. Non-fatal on failure: visibility is the
-  // primary gate, and setProperties throws on an unknown variant value — a
-  // stale option from the UI must not blow up the whole toggle.
+  // Variant lives on the nested badge, not the Slide. setProperties throws on
+  // an unknown variant value — a stale UI option must not break the toggle.
   if (typeof msg.variant === 'string' && msg.variant !== '') {
     const badge = findConfidentalBadge(slide);
     if (badge !== null) {
@@ -200,9 +170,7 @@ export async function handleSetSlideConfidential(
       }
     }
   }
-  // No re-scan: the iframe flips its dropdown optimistically before posting;
-  // markSelfWrite() suppresses the documentchange re-scan window. Same
-  // pattern as set-slide-skipped / set-slide-theme.
+  // No re-scan: iframe updates optimistically, same as the other slide toggles.
   postToUI({
     type: 'target-updated',
     ok: true,
@@ -215,16 +183,11 @@ export async function handleSetSlideConfidential(
 export async function handleTriggerUndo(
   msg: Extract<UIToPluginMessage, { type: 'trigger-undo' }>,
 ): Promise<void> {
-  // Figma's plugin API exposes triggerUndo but no triggerRedo, so
-  // the iframe's redo button is disabled with a tooltip pointing
-  // at the native shortcut. Undo here reverts to the last
-  // commitUndo() checkpoint.
+  // Figma exposes triggerUndo but no triggerRedo, so the iframe's redo button
+  // is disabled; undo reverts to the last commitUndo() checkpoint.
   figma.triggerUndo();
-  // Re-sync the iframe's view of the currently-displayed slide.
-  // Without this, optimistic store updates (e.g. picker's
-  // view.state.general.badge.icon = newIcon written before the
-  // bridge.post) survive the undo and the picker keeps showing
-  // the pre-undo value while the canvas correctly reverts.
+  // Re-scan so optimistic iframe store updates don't survive the undo —
+  // otherwise pickers keep showing pre-undo values while the canvas reverts.
   if (typeof msg.slideId === 'string' && msg.slideId.length > 0) {
     const undoSlide = await findSlideById(msg.slideId);
     if (undoSlide !== null) {

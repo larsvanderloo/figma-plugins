@@ -1,21 +1,13 @@
-// ============================================================
-// editors/table/column-autofit.ts
-//
-// Pure column-width distribution for the Slot-based table renderer.
-// The renderer passes an optional text-measure function; when measurement
-// is unavailable the function intentionally returns an equal split so the
-// render remains visually identical to the previous FILL behavior.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// When no text-measure function is available this intentionally returns an
+// equal split, keeping the render identical to the previous FILL behavior.
 
 export interface CellSpec {
   text: string;
   font: FontName;
   fontSize: number;
-  /** Vaste extra breedte in px vóór de tekst (vinkje-icoon + gap). */
+  /** Fixed extra width in px before the text (check icon + gap). */
   leadWidth?: number;
-  /** Badge-chip label — wordt gemeten + chip-padding, achter de tekst. */
+  /** Badge-chip label; its measured width plus chip padding is added after the text. */
   badgeText?: string;
 }
 
@@ -29,12 +21,9 @@ export interface ColumnFitOptions {
 
 const MEASURED_CELL_PADDING = 24;
 
-// A single long-pasted value used to drive the whole column to its intrinsic
-// (single-line) width, ballooning it to maxColFraction and starving the other
-// columns. The autofit measurer reports the un-wrapped width, so we clamp each
-// cell's contribution: above this many characters the cell is assumed to wrap,
-// and its measured width is capped so the column lands at a wrap-friendly size
-// instead of one giant line. Body text wraps freely inside (no truncation).
+// The measurer reports un-wrapped width, so above this many characters a cell
+// is assumed to wrap and its measured width is capped — otherwise one long
+// value balloons its column to maxColFraction and starves the others.
 const WRAP_MEASURE_CHAR_CAP = 24;
 
 function equalWidths(count: number, totalWidth: number): number[] {
@@ -49,10 +38,6 @@ function normalizeForMeasure(text: string): string {
   return text.replace(/[\r\n]+/g, ' ');
 }
 
-// Width a cell contributes to its column's intrinsic size. Long values are
-// measured only up to the wrap cap (proportionally scaled) so they request a
-// column wide enough to read comfortably, not wide enough to hold the whole
-// string on one line.
 function cellContribution(cell: CellSpec, measure: MeasureTextWidth): number {
   const clean = normalizeForMeasure(cell.text);
   let width;
@@ -61,10 +46,8 @@ function cellContribution(cell: CellSpec, measure: MeasureTextWidth): number {
   } else {
     width = measure(clean.slice(0, WRAP_MEASURE_CHAR_CAP), cell.font, cell.fontSize);
   }
-  // Vinkje en badge-chip tellen mee in de intrinsieke breedte. Zonder dit
-  // valt een kolom met alleen een vinkje/chip terug op tekst-intrinsiek 0
-  // en krijgt hij de (veel bredere) tekst-minimumbreedte — het icoon en de
-  // chip zweven dan in een lege kolom.
+  // Check icon and badge chip count toward intrinsic width; without this an
+  // extras-only column measures 0 and gets the much wider text minimum.
   if (typeof cell.leadWidth === 'number' && cell.leadWidth > 0) width += cell.leadWidth;
   if (typeof cell.badgeText === 'string' && cell.badgeText !== '') {
     const chipLabel = measure(
@@ -72,7 +55,7 @@ function cellContribution(cell: CellSpec, measure: MeasureTextWidth): number {
       { family: 'Inter', style: 'Regular' },
       cell.fontSize,
     );
-    // ~1.6em chip-padding + gap naar de tekst (alleen als er tekst staat).
+    // ~1.6em chip padding, plus a gap to the text only when there is text.
     width +=
       chipLabel +
       Math.round(cell.fontSize * 1.6) +
@@ -81,8 +64,6 @@ function cellContribution(cell: CellSpec, measure: MeasureTextWidth): number {
   return width;
 }
 
-// Kolommen zonder tekst (alleen vinkjes/chips) mogen onder de tekst-
-// minimumbreedte huggen: dat minimum bestaat voor léésbare tekstkolommen.
 function columnHasText(cells: CellSpec[]): boolean {
   for (let i = 0; i < cells.length; i++) {
     if (normalizeForMeasure(cells[i].text).trim() !== '') return true;
@@ -90,10 +71,8 @@ function columnHasText(cells: CellSpec[]): boolean {
   return false;
 }
 
-// Een kolom "wil wrappen" zodra één cel boven de meet-cap uitkomt: de
-// gemeten intrinsieke breedte is dan een afgekapte benadering en de kolom
-// kan élke extra ruimte nuttig gebruiken. Kolommen zonder zulke cellen
-// passen per definitie op één regel binnen hun intrinsieke breedte.
+// A column "wants wrap" once any cell exceeds the measure cap: its intrinsic
+// width is then a truncated approximation, so any extra space is useful to it.
 function columnWantsWrap(cells: CellSpec[]): boolean {
   for (let i = 0; i < cells.length; i++) {
     if (normalizeForMeasure(cells[i].text).length > WRAP_MEASURE_CHAR_CAP) return true;
@@ -148,24 +127,17 @@ export function computeColumnWidths(
   }
   if (intrinsicTotal <= 0) return equalWidths(count, totalWidth);
 
-  // ── Surplus-pad: hug + groei ────────────────────────────────────────
-  // Proportioneel verdelen over ALLE kolommen verspilt ruimte: een korte
-  // label-kolom (intrinsiek ~20 tekens) en een lange wrap-kolom (gemeten
-  // op de wrap-cap van 24 tekens) krijgen bijna gelijke gewichten, dus een
-  // ~50/50-split met de label-kolom grotendeels leeg. In plaats daarvan:
-  // kolommen waarvan álle cellen op één regel passen huggen hun intrinsieke
-  // breedte; alleen kolommen met wrappende content verdelen het overschot
-  // (naar gewicht). De maxColFraction-cap geldt hier bewust niet — de
-  // overige kolommen hebben al wat ze nodig hebben, dus een cap zou de
-  // lege ruimte alleen maar terugbrengen. Zonder wrap-kolommen (alles
-  // kort) valt de verdeling door naar het bestaande proportionele pad,
-  // zodat de tabel de volle breedte blijft vullen.
+  // Hug + grow: single-line columns hug their intrinsic width and only
+  // wrapping columns share the surplus by weight — a plain proportional split
+  // leaves short columns mostly empty. maxColFraction deliberately does not
+  // apply here; with no wrapping columns, fall through to the proportional
+  // path below so the table still fills the full width.
   const hugged: number[] = [];
   let huggedTotal = 0;
   for (let i = 0; i < count; i++) {
-    // Tekstkolommen huggen op minimaal minColWidth; extras-only kolommen
-    // (alleen vinkje/chip, geen tekst) huggen hun eigen intrinsiek met een
-    // kleine ondergrens — 160px voor een icoon-kolom is verspilde ruimte.
+    // Text columns floor at minColWidth (it exists for readable text);
+    // extras-only columns (check/chip, no text) get a small 48px floor —
+    // the full text minimum is wasted space on an icon column.
     const floor = hasText[i]
       ? minWidth
       : intrinsic[i] > 0

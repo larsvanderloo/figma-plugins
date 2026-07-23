@@ -1,8 +1,5 @@
-// useChartEditor — binds the Graphs → Chart instance(s) to the store + bridge.
-//
-// Geen selectie-state meer: de Graphs-tab toont ALLE chart-
-// instances als eigen editor-cards; updates routeren op het slotId in
-// het ge-emitte model.
+// No chart-selection state: the Graphs tab renders every chart instance as its
+// own editor card, and updates route by the slotId in the emitted model.
 
 import { computed, reactive } from 'vue';
 import { debugLog } from '../../shared/debug';
@@ -20,19 +17,14 @@ export function useChartEditor() {
     () => (view.state.graphs?.instances ?? []).filter((i) => i.chartModel != null),
   );
 
-  // update() schrijft de store optimistisch vóór het posten. Faalt de apply,
-  // dan draagt de store al het nieuwe model terwijl de canvas het oude toont —
-  // en de duplicate-guard zou een identieke hertyp dan tot de volgende rescan
-  // wegslikken. Onthoud daarom per slot dat de laatste apply faalde en sla de
-  // guard daar eenmalig over (zelfde luister-patroon als de overflow-listener
-  // in useTableEditor). De store NIET terugrollen: dat vecht met de inputs
-  // waar de gebruiker nog in typt.
+  // update() writes the store optimistically before posting; after a failed
+  // apply the duplicate guard would swallow an identical retype until the next
+  // rescan, so flag the failed slot and skip the guard there once. Never roll
+  // the store back — that fights the inputs the user is still typing in.
   const guardBypass = new Set<string>();
-  // Failure-acks dragen meestal géén targetId (zie handlers/chart.ts en de
-  // catch in main.ts), dus we volgen zelf welke slots een update in-flight
-  // hebben. Komt een failure zonder adres binnen, dan vlaggen we ze allemaal;
-  // een failure uit een ander domein kan zo meeliften, maar dat kost hooguit
-  // één overbodige re-apply.
+  // Failure acks usually carry no targetId (handlers/chart.ts, the catch in
+  // main.ts), so track in-flight slots ourselves; an unaddressed failure flags
+  // them all — a foreign-domain failure costs at most one redundant re-apply.
   const inFlight: string[] = [];
   bridge.onMessage((msg) => {
     if (msg.type !== 'target-updated') return;

@@ -1,11 +1,5 @@
-// useLiveText — debounce voor live-getypte tekst richting de sandbox.
-//
-// Zelfde patroon als de tabel-grid (200ms trailing): de editor schedule()t
-// per keystroke (via het `live`-event van WInput/WTextarea), de post gaat
-// één keer per typ-pauze. flush() bij commit (blur/Enter) en bij unmount
-// zodat de laatste aanslagen nooit verloren gaan. Pending werk wordt
-// geannuleerd bij slide-wissel: de post zou anders ná de wissel met het
-// NIEUWE currentSlideId vuren en oude tekst op de verkeerde slide schrijven.
+// Pending posts are cancelled on slide switch: a trailing debounce would
+// otherwise fire with the NEW currentSlideId and write stale text to the wrong slide.
 
 import { onUnmounted, watch } from 'vue';
 import { usePluginView } from '../stores/usePluginView';

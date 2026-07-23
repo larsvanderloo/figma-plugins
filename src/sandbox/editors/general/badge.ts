@@ -1,24 +1,3 @@
-// ============================================================
-// editors/general/badge.ts
-//
-// Main-thread mutator voor de General → Badge-sectie.
-// Zoekt binnen de slide de Badge-instance en muteert:
-//   1. Het label — descendant text-node met name 'Label'
-//      (fallback: eerste text-node binnen de badge).
-//   2. Het icon — drie strategieën in prioriteitsvolgorde:
-//
-//        (a) PRIMARY — INSTANCE_SWAP-property op badge-level
-//            (preferredValues + setProperties).
-//        (b) FALLBACK — INSTANCE_SWAP-property op een nested icon-child
-//            (bv. via een icon_wrapper frame).
-//        (c) LAST RESORT — Text-node met name 'Icon' (icon-font-pattern).
-//
-// FIG-FONT-01: text-mutaties gaan door loadFontAsync.
-// FIG-GUARD-01: alle node-type-checks vóór type-specifieke properties.
-// FIG-TRAVERSE-01: traversal bounded via findChild / findOne.
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
-
 import { findBadge } from '../../slide-machine';
 import {
   normalizeIconKey,
@@ -33,10 +12,6 @@ import { debugLog } from '../../../shared/debug';
 
 import type { BadgePayload } from '../../../shared/types';
 
-// ============================================================
-// Text helpers  (label + icon-font fallback)
-// ============================================================
-
 function findFirstText(scope: SceneNode): TextNode | null {
   if (!('findOne' in scope)) return null;
   const found = scope.findOne((n: SceneNode) => n.type === 'TEXT');
@@ -45,38 +20,20 @@ function findFirstText(scope: SceneNode): TextNode | null {
   return found as TextNode;
 }
 
-// ============================================================
-// applyIconSwap — orchestratie
-// ============================================================
-
-/**
- * Best-effort icon-swap. Probeert in volgorde:
- *   1. INSTANCE_SWAP-property op badge-level (primary).
- *   2. INSTANCE_SWAP-property op de nested icon-child (fallback
- *      wanneer de badge zelf geen icon-property heeft maar wél een
- *      icon_wrapper met een geneste icon-instance).
- *   3. Text-node met name 'Icon' (icon-font-pattern, last resort).
- *
- * Retourneert true als een van de strategieën slaagde.
- */
 async function applyIconSwap(badge: InstanceNode, iconName: string): Promise<boolean> {
-  // --- Strategy 1: INSTANCE_SWAP property on badge itself ---
   if (await trySwapViaInstanceProperty(badge, iconName)) return true;
 
-  // --- Strategy 2: INSTANCE_SWAP property on nested icon-child ---
   const nestedIcon = findNestedIconInstance(badge);
   if (nestedIcon !== null) {
     if (await trySwapViaInstanceProperty(nestedIcon, iconName)) return true;
   }
 
-  // --- Strategy 2.5: swapComponent via prefValueCache on nested icon ---
-  // For badges whose icon_wrapper child is a plain Lucide INSTANCE (no
-  // INSTANCE_SWAP property), we swap the component directly.
+  // Some badges nest a plain Lucide instance without an INSTANCE_SWAP property;
+  // those need a direct component swap.
   if (nestedIcon !== null) {
     if (await swapComponentByName(nestedIcon, iconName)) return true;
   }
 
-  // --- Strategy 3: Text-node icon-font pattern ---
   const iconTextNode = findTextByName(badge, 'Icon');
   if (iconTextNode !== null) {
     await setTextCharactersSafe(iconTextNode, iconName);
@@ -94,21 +51,13 @@ async function applyIconSwap(badge: InstanceNode, iconName: string): Promise<boo
   return false;
 }
 
-// ============================================================
-// Public API
-// ============================================================
-
-/**
- * Past een Badge-payload toe op de Badge-instance van `slide`.
- * Resolveert zonder error wanneer de Badge of target-nodes ontbreken
- * (silent skip, FIG-GUARD-01). Icon-swap is best-effort.
- */
+// Missing Badge or target nodes are a deliberate silent no-op; icon swap is best-effort.
 export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Promise<void> {
   const badge = findBadge(slide);
   if (badge === null) return;
 
   if (typeof payload.label === 'string') {
-    // Primary: try component TEXT property (most reliable for library components).
+    // A component TEXT property is the most reliable path for library components.
     var labelSet = false;
     var badgeProps = badge.componentProperties;
     if (badgeProps !== null && badgeProps !== undefined) {
@@ -132,7 +81,6 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
         }
       }
     }
-    // Fallback: direct text node mutation.
     if (!labelSet) {
       var labelNode = findTextByName(badge, 'Label');
       if (labelNode === null) {
@@ -147,16 +95,11 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
 
   if (typeof payload.icon === 'string' && payload.icon.length > 0) {
     const desiredIconKey = normalizeIconKey(payload.icon);
-    // No-op-pre-check (zelfde motivatie als card.ts): de iframe stuurt
-    // bij elke label-commit de VOLLEDIGE payload mee, inclusief icon +
-    // iconSvg — zonder guard betekent elke label-wijziging een volledige
-    // slot-teardown + createNodeFromSvg-rebuild. We vergelijken tegen de
-    // gepersisteerde plugin-data-key ÉN de daadwerkelijke slot-inhoud
-    // (readBadgeIcon, dezelfde reader als de scan): na een library-
-    // republish wist Figma de slot-override terwijl de plugin-data blijft
-    // staan, en dan stuurt de reconcile exact dezelfde key opnieuw — die
-    // re-apply moet WEL doorgaan. Eerste toepassing (nog geen persisted
-    // key) applyt altijd.
+    // The iframe resends the full payload (icon + iconSvg) on every label commit;
+    // without this guard each label edit triggers a full slot teardown + SVG rebuild.
+    // Compare the persisted plugin-data key AND the live slot content: a library
+    // republish wipes the slot override but keeps plugin data, and the reconcile then
+    // resends the same key — that re-apply must go through. First apply always runs.
     let appliedIconKey = '';
     try {
       appliedIconKey = badge.getSharedPluginData('welder', 'icon');
@@ -178,10 +121,8 @@ export async function applyBadge(slide: InstanceNode, payload: BadgePayload): Pr
       if (!handled) {
         await applyIconSwap(badge, payload.icon);
       }
-      // Persist the picked icon as plugin data on the Badge instance —
-      // mirrors the Card-side fix. Slot-child overrides do NOT survive
-      // a library-master republish; plugin data does. Scan side reads it
-      // and the iframe auto-reconciles if slot.child.name diverges.
+      // Slot-child overrides do not survive a library-master republish; plugin data
+      // does. The scan reads it and the iframe reconciles when the slot child diverges.
       try {
         badge.setSharedPluginData('welder', 'icon', desiredIconKey);
         debugLog(

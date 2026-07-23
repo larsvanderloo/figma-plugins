@@ -1,12 +1,4 @@
-// ============================================================
-// components/editors/table/useCsvImport.ts
-//
-// CSV file-upload flow for the table editor: read the dropped/
-// picked file, validate it against TABLE_MAX_ROWS/TABLE_MAX_COLS
-// using the shared tokenizer, then emit `import-csv` (the sandbox
-// does the actual parse + apply). Tracks a transient "last import"
-// summary for the success line under the upload zone.
-// ============================================================
+// UI-side tokenize is validation/summary only — the sandbox re-parses the raw CSV and applies it.
 
 import { ref, watch, onBeforeUnmount } from 'vue';
 import { TABLE_MAX_ROWS, TABLE_MAX_COLS } from '../../../../shared/constants';

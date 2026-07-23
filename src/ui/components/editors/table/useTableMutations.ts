@@ -1,13 +1,3 @@
-// ============================================================
-// components/editors/table/useTableMutations.ts
-//
-// All table mutations driven from the grid UI: cell edits and
-// emphasis, row/column insert/remove/move, column-calculation
-// toggles and clipboard paste. Every mutation announces itself to
-// the aria-live region (gridStatus) and schedules a debounced emit
-// through the shared editor state.
-// ============================================================
-
 import { ref } from 'vue';
 import type {
   TableRowModel,
@@ -211,9 +201,9 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     const next = calculation === 'sum' ? 'sum' : null;
     if (localColumnCalculations.value[j] === next) return;
     localColumnCalculations.value[j] = next;
-    // Nadruk staat standaard aan voor een nieuwe som; bij verwijderen reset.
+    // Deliberately overwrites any prior emphasis: a new sum starts emphasized, removal resets.
     localColumnCalculationEmphasis.value[j] = next === 'sum';
-    // Een som-kolom toont de berekende waarde, geen vrije label-tekst.
+    // A sum column shows the computed value, so free label text is cleared.
     if (next === 'sum') localColumnCalculationLabel.value[j] = '';
     if (next !== 'sum') {
       localColumnCalculationCurrency.value[j] = false;
@@ -237,7 +227,6 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     normalizeLocalColumnCalculations();
     if (localColumnCalculationCurrency.value[j] === currency) return;
     localColumnCalculationCurrency.value[j] = currency;
-    // Euro- en procentteken sluiten elkaar uit.
     if (currency) localColumnCalculationPercent.value[j] = false;
     announce(currency ? 'Euroteken tonen' : 'Euroteken verbergen');
     scheduleEmit('column-calculation-currency');
@@ -248,7 +237,6 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     normalizeLocalColumnCalculations();
     if (localColumnCalculationPercent.value[j] === percent) return;
     localColumnCalculationPercent.value[j] = percent;
-    // Euro- en procentteken sluiten elkaar uit.
     if (percent) localColumnCalculationCurrency.value[j] = false;
     announce(percent ? 'Procentteken tonen' : 'Procentteken verbergen');
     scheduleEmit('column-calculation-percent');
@@ -299,7 +287,6 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
   function setCellDelta(i: number, j: number, value: string): void {
     if (i < 0 || i >= localRows.value.length) return;
     if (j >= currentCols.value) return;
-    // Koprij draagt geen delta-badge (alleen body-cellen).
     if (localHasColumnHeader.value && i === 0) return;
     const cell = localRows.value[i]?.cells[j];
     if (cell === undefined) return;
@@ -319,7 +306,6 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
   function setCellCheck(i: number, j: number, state: boolean | null): void {
     if (i < 0 || i >= localRows.value.length) return;
     if (j >= currentCols.value) return;
-    // Koprij draagt geen vinkje (alleen body-cellen), net als delta/emphasis.
     if (localHasColumnHeader.value && i === 0) return;
     const cell = localRows.value[i]?.cells[j];
     if (cell === undefined) return;
@@ -354,10 +340,8 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     scheduleEmit('cell-badge');
   }
 
-  // ── Bulk-varianten per rij/kolom ──────────────────────────────────────
-  // Zelfde per-cel model als de losse setters: bulk schrijft gewoon elke
-  // body-cel in scope. Geen rij/kolom-niveau in het model — dat houdt de
-  // render/scan/fast-path round-trip één-dimensionaal (per cel).
+  // Bulk row/column ops write each body cell individually — the model has no
+  // row/column-level state, keeping the render/scan/fast-path round-trip per cell.
 
   function bodyCellsInRow(i: number): TableCellModel[] {
     if (i < 0 || i >= localRows.value.length) return [];
@@ -400,9 +384,8 @@ export function useTableMutations(state: ReturnType<typeof useTableEditorState>)
     return changed;
   }
 
-  // Bulk-badge zet alleen PRESENCE: aan = seed '0' waar er nog geen badge
-  // staat (bestaande waarden blijven), uit = alle badges weg. De waarde
-  // zelf is per cel en wordt in de badge-input van de cel getypt.
+  // Bulk badge toggles presence only: on seeds '0' where no badge exists (existing
+  // values are kept), off removes all; the value itself is typed per cell.
   function applyBadge(cells: TableCellModel[], on: boolean): boolean {
     let changed = false;
     for (const cell of cells) {

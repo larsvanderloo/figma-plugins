@@ -1,22 +1,6 @@
-// ============================================================
-// useOnboarding — anchored, contextual first-run tour.
-//
-// Each step has an optional `target` (a `data-tour` attribute on
-// the relevant UI element) so the floating banner can re-position
-// itself near the element being explained. Steps with a
-// `precondition` are filtered out when the slide doesn't have
-// that surface — e.g. the "Kaarten" step only shows when the
-// current slide actually has a CardWrap.
-//
-// Action steps (`passive: false`) gate the "Volgende" button on a
-// reactive predicate (currentSlideId, activeTab, etc.). Passive
-// steps just explain.
-//
-// Persistence mirrors `useIconRecents`: sandbox reads
-// `welder-onboarding-seen-v1` from `figma.clientStorage` on
-// `ui-ready`, posts `onboarding-seen`. First-run users see the
-// tour; the help button replays it anytime.
-// ============================================================
+// Seen-state persists sandbox-side (same pattern as useIconRecents): the sandbox
+// reads `welder-onboarding-seen-v1` from figma.clientStorage on `ui-ready` and
+// posts `onboarding-seen`; this store only mirrors it.
 
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
@@ -49,9 +33,9 @@ export interface OnboardingStep {
   icon: string;
   title: string;
   body: string;
-  /** Passive = no action needed; Volgende always enabled. */
+  /** Passive steps need no user action; the "Volgende" button stays enabled. */
   passive: boolean;
-  /** `data-tour="<value>"` selector on a target UI element. `null` = centered banner. */
+  /** Matches a `data-tour="<value>"` attribute the banner anchors to; `null` = centered banner. */
   target: string | null;
 }
 
@@ -68,9 +52,7 @@ export const useOnboarding = defineStore('onboarding', () => {
   const stepIndex = ref<number>(0);
   const activeTab = ref<string | null>(null);
 
-  /** All possible steps with their preconditions. Filtered into `steps` reactively. */
   const ALL_STEPS: StepConfig[] = [
-    // ── Welcome ───────────────────────────────────────────────
     {
       step: {
         id: 'welcome',
@@ -81,7 +63,6 @@ export const useOnboarding = defineStore('onboarding', () => {
         target: null,
       },
     },
-    // ── Slide selecteren ───────────────────────────────────────
     {
       step: {
         id: 'select-slide',
@@ -91,10 +72,8 @@ export const useOnboarding = defineStore('onboarding', () => {
         passive: false,
         target: null,
       },
-      // Skip if a slide is already loaded.
       precondition: () => view.state.currentSlideId === null,
     },
-    // ── Slide-instellingen ────────────────────────────────────
     {
       step: {
         id: 'kleurthema',
@@ -117,7 +96,6 @@ export const useOnboarding = defineStore('onboarding', () => {
       },
       precondition: () => view.currentSummary !== null && view.currentSummary.isSkipped !== null,
     },
-    // ── Tekst ─────────────────────────────────────────────────
     {
       step: {
         id: 'titel',
@@ -201,7 +179,6 @@ export const useOnboarding = defineStore('onboarding', () => {
       },
       precondition: () => view.state.general?.image !== null && view.state.general?.image !== undefined,
     },
-    // ── Onderdelen ────────────────────────────────────────────
     {
       step: {
         id: 'switch-to-content',
@@ -266,7 +243,6 @@ export const useOnboarding = defineStore('onboarding', () => {
       },
       precondition: () => view.hasGraphs,
     },
-    // ── Afsluiting ────────────────────────────────────────────
     {
       step: {
         id: 'export',
@@ -299,7 +275,6 @@ export const useOnboarding = defineStore('onboarding', () => {
     },
   ];
 
-  /** Filtered list of steps applicable to the current slide. Reactive. */
   const steps = computed<OnboardingStep[]>(() => {
     return ALL_STEPS.filter((entry) => {
       if (entry.precondition === undefined) return true;
@@ -316,7 +291,6 @@ export const useOnboarding = defineStore('onboarding', () => {
 
   const isLast = computed<boolean>(() => stepIndex.value >= steps.value.length - 1);
 
-  /** Reactive gate on the "Volgende" button for action steps. */
   const canAdvance = computed<boolean>(() => {
     const step = currentStep.value;
     if (step.passive) return true;

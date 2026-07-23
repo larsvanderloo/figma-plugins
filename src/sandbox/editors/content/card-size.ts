@@ -1,27 +1,15 @@
-// ============================================================
-// editors/content/card-size.ts
-//
-// Main-thread mutator voor de Kaartweergave-picker (NO_ICON/SM/LG):
-// rebind't de gap-gebonden spacing-variabelen op elke Card, togglet de
-// icon-zichtbaarheid en zet de heading-text-style. Geëxtraheerd uit de
-// set-card-size handler in code.ts; de handler houdt slide-lookup,
-// style-resolutie, commitUndo-discipline en de target-updated ack.
-//
-// FIG-GUARD-01: type-checks vóór property-access.
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// ============================================================
+// The set-card-size handler owns slide lookup, style resolution, commitUndo
+// discipline, and the target-updated ack — this module only mutates the slide.
 
 import { readCardTypeVariant } from '../../scan/readers';
 import { markSelfWrite } from '../../bridge';
 import { debugLog } from '../../../shared/debug';
 
 export interface CardSizeOptions {
-  /** Opgeloste text-style-id voor de card-heading (zie text-styles.ts). */
   styleId: string;
   iconSize: number;
-  /** Mode-naam op de spacing-collection (bv. "4", "5", "6"). */
+  /** Spacing step, matched by variable name in the Spacing collection (e.g. "4", "5", "6"). */
   gapModeName: string;
-  /** false → icon-node binnen elke card-icon-slot wordt verborgen. */
   iconVisible: boolean;
 }
 

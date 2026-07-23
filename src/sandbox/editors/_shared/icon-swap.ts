@@ -1,105 +1,34 @@
-// ============================================================
-// editors/_shared/icon-swap.ts
-//
-// Gedeeld hulpmodule voor icon-swapping via INSTANCE_SWAP
-// component-properties (preferredValues + setProperties).
-//
-// Rationale: Slide Machine's Card en Badge componenten hebben een
-// `icon`-property van type INSTANCE_SWAP met `preferredValues`
-// gevuld voor de volledige Lucide-set. De juiste Figma API is:
-//
-//   defs    = main.componentPropertyDefinitions[propKey]
-//   for entry in defs.preferredValues:
-//     comp  = await figma.importComponentByKeyAsync(entry.key)
-//     match = normalizeIconKey(comp.name) === normalizeIconKey(iconName)
-//     if match: instance.setProperties({ [propKey]: comp.id })
-//
-// De eerdere remote-key-cache + swapComponent-aanpak werd gedropt —
-// INSTANCE_SWAP is de gedocumenteerde route voor library-driven
-// icon-variants en is session-onafhankelijk.
-//
-// Publieke API:
-//   normalizeIconKey(raw)                   — strip prefix/pad-ruis, lowercase.
-//   LUCIDE_SLUG_RE                          — patroon voor geldige Lucide-slugs.
-//   trySwapViaInstanceProperty(inst, name)  — swap via INSTANCE_SWAP prop.
-//
-// Performance:
-//   prefValueCache  — module-level Map<normalizedName, componentKey>.
-//                     Gebouwd in de achtergrond bij eerste swap-aanroep.
-//                     Volgende swaps voor gecachede icons kosten slechts
-//                     één importComponentByKeyAsync-call in plaats van N.
-//
-// ES2017-compat: geen optional chaining, geen nullish coalescing.
-// FIG-GUARD-01: type-checks vóór property-access.
-// ============================================================
+// Icon swapping via INSTANCE_SWAP props: Card's `icon` prop lists the full Lucide
+// set in preferredValues, seeding a shared name→key cache. An earlier remote-key
+// cache + swapComponent-only approach was dropped: INSTANCE_SWAP is session-independent.
 
 import { expandLucideNameVariants } from '../../lucide-aliases';
 import { debugLog } from '../../../shared/debug';
 
-// ============================================================
-// Name normalisation
-// ============================================================
-
-/**
- * Normaliseert een icon-naam naar lowercase zonder prefix/pad-ruis.
- * Accepteert 'i-lucide-arrow-down', 'Icon/arrow-down', 'Arrow Down'
- * en geeft 'arrow-down' terug.
- */
+/** Normalizes an icon name: 'i-lucide-arrow-down' or 'Icon/arrow-down' → 'arrow-down'. */
 export function normalizeIconKey(raw: string): string {
   let k = raw.toLowerCase().trim();
-  // Strip 'i-lucide-' prefix
   if (k.indexOf('i-lucide-') === 0) k = k.substring('i-lucide-'.length);
-  // Strip pad-prefix ('icon/heart' → 'heart')
   const slash = k.lastIndexOf('/');
   if (slash >= 0) k = k.substring(slash + 1);
-  // Strip leading non-alphanumeric characters
   k = k.replace(/^[^a-z0-9]+/, '');
   return k;
 }
 
-/**
- * Lucide-component pattern: starts with a lowercase letter, then any
- * mix of letters, digits, and hyphens. Subsequent segments after a
- * hyphen are allowed to be digit-only — required because:
- *   - Canonical Lucide names include digit-only segments (e.g.
- *     `arrow-down-0-1`, `bar-chart-3`) — the previous regex rejected
- *     these and the icon picker missed them.
- *   - Welder libraries sometimes name an icon component with a
- *     numeric uniqueness suffix (e.g. `align-horizontal-space-around-68`).
- *     The previous regex rejected those too, so Stack Icon cards
- *     showed an empty picker.
- *
- * Single-token names (e.g. `imagewrap`) still match — but the card
- * scan now uses the `Type` VARIANT to scope which picker is relevant,
- * so an `ImageWrap` instance never reaches readCardIcon on an Image
- * card.
- */
+/** Digit-only segments must match — canonical Lucide names contain them
+ * (`arrow-down-0-1`) and Welder libraries append numeric uniqueness suffixes.
+ * Loose single-token matches are safe: the card scan scopes by `Type` VARIANT. */
 export const LUCIDE_SLUG_RE = /^[a-z][a-z0-9]*(-[a-z0-9]+)*$/;
-
-// ============================================================
-// Module-level name→key cache
-// ============================================================
 
 /** Maps normalized icon name → component key from preferredValues. */
 const prefValueCache: Map<string, string> = new Map();
 
-/** Background build promise — started on first trySwapViaInstanceProperty call. */
 let prefValueBuildPromise: Promise<void> | null = null;
 
-/**
- * clientStorage-key for persisting the cache across plugin opens. Without
- * this, decks that have ONLY a Badge (no Card on the page) can never prime
- * the cache live — the Badge's INSTANCE_SWAP prop has no preferredValues
- * to seed from. Persisting keeps the cache populated as long as the user
- * has opened ANY deck with cards in their session history.
- */
+/** Persisted across plugin opens: badge-only decks have no preferredValues to
+ * seed the cache from live, so a hydrate from an earlier session is their only source. */
 const PREF_VALUE_STORAGE_KEY = 'welder-icon-pref-cache-v1';
 
-/**
- * One-shot hydrate from clientStorage. Started lazily by `primeIconCache`
- * and `swapComponentByName` / `trySwapViaInstanceProperty` so a swap on a
- * card-less page can still find a cached lucide key.
- */
 let hydratePromise: Promise<void> | null = null;
 
 function startHydrateFromStorage(): Promise<void> {
@@ -158,11 +87,6 @@ function startHydrateFromStorage(): Promise<void> {
   return hydratePromise;
 }
 
-/**
- * Persist the current cache to clientStorage. Fire-and-forget; failures
- * are logged but don't block. Called at the end of `buildPrefValueCache`
- * so the next open of a card-less deck has something to load.
- */
 function persistPrefValueCacheToStorage(): void {
   void (async () => {
     const startedAt = Date.now();
@@ -194,11 +118,6 @@ function persistPrefValueCacheToStorage(): void {
   })();
 }
 
-/**
- * Bouwt `prefValueCache` door alle COMPONENT-entries in `entries` te
- * importeren en hun genormaliseerde naam als cache-sleutel op te slaan.
- * Runt in de achtergrond; errors per entry worden geskipt (continue).
- */
 async function buildPrefValueCache(
   entries: ReadonlyArray<{ type: string; key: string }>,
 ): Promise<void> {
@@ -221,12 +140,9 @@ async function buildPrefValueCache(
   for (let i = 0; i < results.length; i++) {
     const r = results[i];
     if (r === null) continue;
-    // Register the component under its own normalized name AND under
-    // every Lucide alias variant. Welder libraries built against an
-    // older Lucide version may name their components after old aliases
-    // (e.g. `badge-help`); the picker emits the current canonical name
-    // (`badge-question-mark`). Without alias expansion the lookup
-    // would silently miss. See lucide-aliases.ts for the source data.
+    // Register under every Lucide alias variant too: libraries built against an
+    // older Lucide may use old alias names (`badge-help`) while the picker emits
+    // the canonical name (`badge-question-mark`) — without expansion the lookup misses.
     const variants = expandLucideNameVariants(r.name);
     for (let j = 0; j < variants.length; j++) {
       const variant = variants[j];
@@ -242,24 +158,13 @@ async function buildPrefValueCache(
     total: prefValueCache.size,
     totalMs: Date.now() - startedAt,
   });
-  // Persist to clientStorage so future plugin opens — even on decks
-  // without a Card to prime from — can hydrate the cache.
   persistPrefValueCacheToStorage();
 }
 
-// ============================================================
-// swapComponentByName — direct swapComponent via prefValueCache
-// ============================================================
-
 /**
- * Vervangt het component van `instance` met het Lucide-component dat
- * overeenkomt met `iconName`, via de module-level `prefValueCache`.
- * Retourneert true bij succes.
- *
- * Bedoeld voor badge-icons: de badge heeft geen INSTANCE_SWAP-property
- * op zichzelf, maar WEL een genest Lucide-icon-INSTANCE (in icon_wrapper)
- * dat direct geswapt kan worden via swapComponent(). De cache wordt
- * gevuld door primeIconCache() die al vanuit Card-instances loopt.
+ * For badge icons: a Badge has no INSTANCE_SWAP prop of its own, but its nested
+ * Lucide icon instance (in icon_wrapper) can be swapped directly via
+ * swapComponent(). Relies on the shared cache primed from Card instances.
  */
 export async function swapComponentByName(
   instance: InstanceNode,
@@ -270,9 +175,8 @@ export async function swapComponentByName(
   var waitedForBuild = false;
   var waitedForHydrate = false;
 
-  // Wacht op lopende cache-build (van eerder gestart Card-prime) of
-  // op clientStorage-hydrate zodat ook decks zonder Card op de page
-  // de Lucide-keys uit een eerdere sessie kunnen vinden.
+  // Await an in-flight build, or the clientStorage hydrate, so card-less decks
+  // can still resolve keys cached in an earlier session.
   if (prefValueBuildPromise !== null) {
     waitedForBuild = true;
     try {
@@ -351,25 +255,14 @@ export async function swapComponentByName(
   }
 }
 
-// ============================================================
-// Pre-warming — start cache-build zonder een swap te doen
-// ============================================================
-
-/**
- * Start de `prefValueCache`-build in de achtergrond zonder een swap te doen.
- * Bedoeld voor pre-warming direct na slide-load. Retourneert de build-promise
- * (of een direct-resolved promise als de build al loopt/klaar is).
- *
- * @param instance — een InstanceNode met een INSTANCE_SWAP-property (bv. een Card).
- */
+/** Pre-warm the cache right after slide-load, without swapping. `instance` must
+ * expose an INSTANCE_SWAP prop with preferredValues (e.g. a Card). */
 export async function primeIconCache(instance: InstanceNode): Promise<void> {
   const startedAt = Date.now();
-  // Always kick off the clientStorage hydrate in parallel — covers the
-  // "deck has only badges, no card to prime from" path. Hydrate is a
-  // no-op when storage is empty (first-ever open).
+  // Hydrate in parallel — covers badge-only decks with no Card to prime from;
+  // a no-op when storage is empty.
   void startHydrateFromStorage();
 
-  // Already building or done — nothing to do.
   if (prefValueBuildPromise !== null) {
     debugLog('perf', 'icon-cache-prime', {
       instanceId: instance.id,
@@ -381,7 +274,6 @@ export async function primeIconCache(instance: InstanceNode): Promise<void> {
     return prefValueBuildPromise;
   }
 
-  // Resolve the owner's componentPropertyDefinitions.
   let main: ComponentNode | null;
   try {
     main = await instance.getMainComponentAsync();
@@ -443,7 +335,6 @@ export async function primeIconCache(instance: InstanceNode): Promise<void> {
     const preferred = def.preferredValues;
     if (preferred === null || preferred === undefined || preferred.length === 0) continue;
 
-    // Start the background build and return the promise.
     debugLog(
       'icon-swap',
       'primeIconCache: starting background build (' +
@@ -469,27 +360,6 @@ export async function primeIconCache(instance: InstanceNode): Promise<void> {
   });
 }
 
-// ============================================================
-// INSTANCE_SWAP-property swap
-// ============================================================
-
-/**
- * Probeert een INSTANCE_SWAP-property op `instance` te swappen naar
- * het component dat matcht met `iconName` via `preferredValues`.
- * Retourneert true bij succes, false bij miss/fout.
- *
- * Strategie:
- *   1. getMainComponentAsync → main
- *   2. owner = main.parent (COMPONENT_SET) OR main zelf
- *   3. defs = owner.componentPropertyDefinitions
- *   4. Zoek eerste key met def.type === 'INSTANCE_SWAP'
- *   5. Start cache-build in achtergrond op eerste aanroep
- *   6. Cache-lookup: hit → directe import; miss → wacht op build, dan opnieuw
- *   7. Bij match: instance.setProperties({ [propKey]: comp.id })
- *
- * @param instance  — de INSTANCE-node met de INSTANCE_SWAP-property.
- * @param iconName  — de gewenste icon-naam (wordt genormaliseerd).
- */
 export async function trySwapViaInstanceProperty(
   instance: InstanceNode,
   iconName: string,
@@ -498,7 +368,6 @@ export async function trySwapViaInstanceProperty(
   const target = normalizeIconKey(iconName);
   let waitedForBuild = false;
   let waitedForHydrate = false;
-  // Stap 1: haal mainComponent op.
   let main: ComponentNode | null;
   try {
     main = await instance.getMainComponentAsync();
@@ -539,15 +408,12 @@ export async function trySwapViaInstanceProperty(
       String(main.remote),
   );
 
-  // Stap 2: bepaal de owner (COMPONENT_SET als parent een variant-set is).
-  // In dynamic-page mode kan main.parent null zijn; we proberen dan het
-  // component opnieuw te importeren via importComponentByKeyAsync om een
-  // locale instantie te krijgen met eventueel een ingevulde parent.
+  // In dynamic-page mode main.parent can be null; a fresh
+  // importComponentByKeyAsync can return the component with its parent populated.
   let owner: ComponentNode | ComponentSetNode;
   if (main.parent !== null && main.parent.type === 'COMPONENT_SET') {
     owner = main.parent as ComponentSetNode;
   } else {
-    // main.parent is null of geen COMPONENT_SET — probeer fresh import.
     let freshMain: ComponentNode | null = null;
     try {
       freshMain = await figma.importComponentByKeyAsync(main.key);
@@ -562,7 +428,6 @@ export async function trySwapViaInstanceProperty(
       owner = freshMain.parent as ComponentSetNode;
       debugLog('icon-swap', 'owner resolved via fresh import: ' + owner.name);
     } else {
-      // Laatste fallback: gebruik main zelf als owner.
       owner = main;
     }
   }
@@ -580,7 +445,6 @@ export async function trySwapViaInstanceProperty(
       ']',
   );
 
-  // Stap 3: property-definitions uitlezen.
   const defs = ownerDefs;
   if (defs === null || defs === undefined) {
     debugLog('perf', 'icon-swap-instance-property', {
@@ -594,7 +458,6 @@ export async function trySwapViaInstanceProperty(
     return false;
   }
 
-  // Stap 4: zoek de eerste INSTANCE_SWAP-property.
   const keys = Object.keys(defs);
   let foundInstanceSwap = false;
   for (let i = 0; i < keys.length; i++) {
@@ -616,11 +479,8 @@ export async function trySwapViaInstanceProperty(
         (hasPreferred ? String(preferred!.length) + ' preferredValues' : 'no preferredValues — will reuse shared cache'),
     );
 
-    // Stap 5: start cache-build in achtergrond op eerste aanroep — ALLEEN
-    // wanneer deze prop eigen preferredValues heeft. Props met 0 entries
-    // (bv. Slide Machine's Badge.Instance — gebruiker swapt via Figma UI
-    // picker) kunnen de cache niet zelf zaaien; ze leunen op een eerdere
-    // Card-swap die de gedeelde prefValueCache al populated heeft.
+    // Only a prop with its own preferredValues can seed the cache; empty props
+    // (e.g. Badge.Instance) rely on the shared cache from an earlier Card swap.
     if (hasPreferred && prefValueBuildPromise === null) {
       debugLog(
         'icon-swap',
@@ -629,14 +489,11 @@ export async function trySwapViaInstanceProperty(
           ' entries)',
       );
       prefValueBuildPromise = buildPrefValueCache(preferred!);
-      // Don't await — runs in background while we do the lookup below.
+      // Deliberately not awaited — the lookup below runs during the build.
     }
 
-    // Stap 6: cache-lookup. Als er een build loopt (van eerdere swap of
-    // van deze call), await hem voordat we opgeven. Voor decks zonder
-    // Card op de page is er geen live build maar mogelijk wel een
-    // clientStorage-hydrate met keys uit eerdere sessies — die awaiten
-    // we hier als de cache leeg is.
+    // On a miss, await any in-flight build before giving up; if the cache is
+    // still empty (card-less deck, no live build) await the storage hydrate.
     let cachedKey = prefValueCache.get(target);
     if (cachedKey === undefined && prefValueBuildPromise !== null) {
       debugLog('icon-swap', 'cache miss for "' + target + '" — awaiting in-flight build');
@@ -644,7 +501,7 @@ export async function trySwapViaInstanceProperty(
       try {
         await prefValueBuildPromise;
       } catch (_e) {
-        /* silent — build error already logged */
+        /* build error already logged */
       }
       cachedKey = prefValueCache.get(target);
     }
@@ -656,11 +513,8 @@ export async function trySwapViaInstanceProperty(
     }
 
     if (cachedKey === undefined) {
-      // Cache miss na await. Als deze prop eigen preferredValues had,
-      // is dit een echte miss — andere INSTANCE_SWAP-props zouden dezelfde
-      // cache gebruiken, dus geen reden om door te lopen. Als deze prop
-      // geen eigen preferredValues had, zou een latere prop met wél een
-      // gevulde lijst alsnog kunnen werken — `continue` naar volgende.
+      // With own preferredValues this is a definitive miss — all props share one
+      // cache. Without them, a later prop that carries a list may still seed it.
       if (hasPreferred) {
         debugLog(
           'icon-swap',
@@ -700,7 +554,6 @@ export async function trySwapViaInstanceProperty(
 
     debugLog('icon-swap', 'cache hit for "' + target + '" → key: ' + cachedKey);
 
-    // Stap 7: import via gecachede key en swap.
     let imported: ComponentNode;
     let importMs = 0;
     try {
@@ -734,7 +587,6 @@ export async function trySwapViaInstanceProperty(
       return false;
     }
 
-    // Match — setProperties.
     const patch: { [k: string]: string } = {};
     patch[propKey] = imported.id;
     try {
@@ -785,7 +637,6 @@ export async function trySwapViaInstanceProperty(
     debugLog('icon-swap', "no INSTANCE_SWAP prop found on instance '" + instance.name + "'");
   }
 
-  // Geen INSTANCE_SWAP-property gevonden.
   debugLog('perf', 'icon-swap-instance-property', {
     icon: target,
     instanceId: instance.id,
